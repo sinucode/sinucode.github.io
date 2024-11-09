@@ -16,3 +16,14 @@
   .body { grid-area: body; }
   .rightSide { grid-area: rightSide; }
   .footer { grid-area: footer; }
+
+  #n11{
+    color: blue;
+  }
+
+  #prueba{
+    color: blue;
+  }
+  #prueba2{
+    color: brown;
+  }
