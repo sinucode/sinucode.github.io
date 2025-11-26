@@ -1,0 +1,286 @@
+// Prisma Schema para Gestióncredifacil
+// Modelo de base de datos completo
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// USUARIOS Y AUTENTICACIÓN
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  role         UserRole
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  businessesCreated Business[]      @relation("BusinessCreator")
+  userBusinesses    UserBusiness[]
+  creditsCreated    Credit[]        @relation("CreditCreator")
+  paymentsCreated   Payment[]       @relation("PaymentCreator")
+  cashMovements     CashMovement[]  @relation("CashMovementCreator")
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  super_admin
+  admin
+  user
+
+  @@map("user_role")
+}
+
+// NEGOCIOS
+model Business {
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  initialCapital Decimal  @default(0) @map("initial_capital") @db.Decimal(15, 2)
+  currentBalance Decimal  @default(0) @map("current_balance") @db.Decimal(15, 2)
+  createdById    String   @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  createdBy      User             @relation("BusinessCreator", fields: [createdById], references: [id])
+  userBusinesses UserBusiness[]
+  clients        Client[]
+  credits        Credit[]
+  cashMovements  CashMovement[]
+  auditLogs      AuditLog[]
+
+  @@map("businesses")
+}
+
+// RELACIÓN USUARIOS-NEGOCIOS
+model UserBusiness {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  businessId String   @map("business_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@map("user_business")
+}
+
+// CLIENTES
+model Client {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  phone        String
+  cedula       String
+  fullName     String   @map("full_name")
+  nationality  String   @default("Colombiana")
+  address      String?
+  referredById String?  @map("referred_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  referredBy     Client?         @relation("ClientReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals      Client[]        @relation("ClientReferrals")
+  credits        Credit[]
+  emailReminders EmailReminder[]
+
+  @@index([phone])
+  @@index([fullName])
+  @@index([businessId])
+  @@unique([businessId, phone])
+  @@map("clients")
+}
+
+// CRÉDITOS
+model Credit {
+  id                 String           @id @default(uuid())
+  businessId         String           @map("business_id")
+  clientId           String           @map("client_id")
+  amount             Decimal          @db.Decimal(15, 2)
+  interestRate       Decimal          @map("interest_rate") @db.Decimal(5, 2)
+  totalWithInterest  Decimal          @map("total_with_interest") @db.Decimal(15, 2)
+  paymentFrequency   PaymentFrequency @map("payment_frequency")
+  startDate          DateTime         @map("start_date") @db.Date
+  endDate            DateTime         @map("end_date") @db.Date
+  termDays           Int              @map("term_days")
+  remainingBalance   Decimal          @map("remaining_balance") @db.Decimal(15, 2)
+  status             CreditStatus     @default(active)
+  createdById        String           @map("created_by")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  // Relaciones
+  business         Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  client           Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy        User              @relation("CreditCreator", fields: [createdById], references: [id])
+  paymentSchedule  PaymentSchedule[]
+  payments         Payment[]
+  cashMovements    CashMovement[]
+  emailReminders   EmailReminder[]
+
+  @@map("credits")
+}
+
+enum PaymentFrequency {
+  daily
+  weekly
+  biweekly
+  monthly
+
+  @@map("payment_frequency")
+}
+
+enum CreditStatus {
+  active
+  paid
+  overdue
+  cancelled
+
+  @@map("credit_status")
+}
+
+// PLAN DE PAGOS (CUOTAS PROGRAMADAS)
+model PaymentSchedule {
+  id                String              @id @default(uuid())
+  creditId          String              @map("credit_id")
+  installmentNumber Int                 @map("installment_number")
+  dueDate           DateTime            @map("due_date") @db.Date
+  scheduledAmount   Decimal             @map("scheduled_amount") @db.Decimal(15, 2)
+  paidAmount        Decimal             @default(0) @map("paid_amount") @db.Decimal(15, 2)
+  status            PaymentScheduleStatus @default(pending)
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  // Relaciones
+  credit Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@map("payment_schedule")
+}
+
+enum PaymentScheduleStatus {
+  pending
+  partial
+  paid
+  overdue
+
+  @@map("payment_schedule_status")
+}
+
+// PAGOS REALIZADOS
+model Payment {
+  id                    String   @id @default(uuid())
+  creditId              String   @map("credit_id")
+  amount                Decimal  @db.Decimal(15, 2)
+  paymentDate           DateTime @map("payment_date") @db.Date
+  amountToPrincipal     Decimal  @map("amount_to_principal") @db.Decimal(15, 2)
+  amountToInterest      Decimal  @map("amount_to_interest") @db.Decimal(15, 2)
+  remainingBalanceAfter Decimal  @map("remaining_balance_after") @db.Decimal(15, 2)
+  paymentMethod         String?  @map("payment_method")
+  notes                 String?
+  createdById           String   @map("created_by")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  credit        Credit         @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  createdBy     User           @relation("PaymentCreator", fields: [createdById], references: [id])
+  cashMovements CashMovement[]
+
+  @@map("payments")
+}
+
+// MOVIMIENTOS DE CAJA
+model CashMovement {
+  id              String           @id @default(uuid())
+  businessId      String           @map("business_id")
+  type            CashMovementType
+  amount          Decimal          @db.Decimal(15, 2)
+  balanceAfter    Decimal          @map("balance_after") @db.Decimal(15, 2)
+  description     String?
+  relatedCreditId String?          @map("related_credit_id")
+  relatedPaymentId String?         @map("related_payment_id")
+  createdById     String           @map("created_by")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  // Relaciones
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  relatedCredit  Credit?  @relation(fields: [relatedCreditId], references: [id], onDelete: SetNull)
+  relatedPayment Payment? @relation(fields: [relatedPaymentId], references: [id], onDelete: SetNull)
+  createdBy      User     @relation("CashMovementCreator", fields: [createdById], references: [id])
+
+  @@map("cash_movements")
+}
+
+enum CashMovementType {
+  initial_capital
+  capital_injection
+  withdrawal
+  loan_disbursement
+  payment_received
+  interest_earned
+
+  @@map("cash_movement_type")
+}
+
+// LOG DE AUDITORÍA
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  businessId String?  @map("business_id")
+  action     String
+  description String?
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_log")
+}
+
+// RECORDATORIOS POR EMAIL
+model EmailReminder {
+  id        String              @id @default(uuid())
+  creditId  String              @map("credit_id")
+  clientId  String              @map("client_id")
+  dueDate   DateTime            @map("due_date") @db.Date
+  sentAt    DateTime?           @map("sent_at")
+  status    EmailReminderStatus @default(pending)
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  // Relaciones
+  credit Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("email_reminders")
+}
+
+enum EmailReminderStatus {
+  pending
+  sent
+  failed
+
+  @@map("email_reminder_status")
+}
