@@ -13,45 +13,83 @@ interface UpdateBusinessData {
 }
 
 /**
- * Servicio de gestión de negocios
- */
+     * Servicio de gestión de negocios
+     */
 export class BusinessService {
     /**
      * Obtener todos los negocios
+     * Implementa filtrado por rol para Defense-in-Depth
+     * 
+     * @param userId - ID del usuario (opcional para backward compatibility)
+     * @param userRole - Rol del usuario (opcional para backward compatibility)
+     * @returns Lista de negocios accesibles para el usuario
      */
-    async getAllBusinesses() {
-        const businesses = await prisma.business.findMany({
-            select: {
-                id: true,
-                name: true,
-                description: true,
-                initialCapital: true,
-                currentBalance: true,
-                createdById: true,
-                createdAt: true,
-                updatedAt: true,
-                createdBy: {
-                    select: {
-                        fullName: true,
-                        email: true,
+    async getAllBusinesses(userId?: string, userRole?: 'user' | 'admin' | 'super_admin') {
+        // Si no se proporciona userId/role, asumir llamada de admin (backward compatibility)
+        // O si es admin/super_admin, retornar todos los negocios
+        if (!userId || !userRole || userRole === 'admin' || userRole === 'super_admin') {
+            const businesses = await prisma.business.findMany({
+                select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    initialCapital: true,
+                    currentBalance: true,
+                    createdById: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    createdBy: {
+                        select: {
+                            fullName: true,
+                            email: true,
+                        },
+                    },
+                },
+                orderBy: {
+                    createdAt: 'desc',
+                },
+            });
+
+            return businesses.map(business => ({
+                id: business.id,
+                name: business.name,
+                description: business.description,
+                initialCapital: Number(business.initialCapital),
+                currentBalance: Number(business.currentBalance),
+                createdById: business.createdById,
+                createdAt: business.createdAt,
+                updatedAt: business.updatedAt,
+                createdBy: business.createdBy,
+            }));
+        }
+
+        // Usuario regular: solo retornar negocios a los que está asignado
+        const userBusinesses = await prisma.userBusiness.findMany({
+            where: { userId },
+            include: {
+                business: {
+                    include: {
+                        createdBy: {
+                            select: {
+                                fullName: true,
+                                email: true,
+                            },
+                        },
                     },
                 },
             },
-            orderBy: {
-                createdAt: 'desc',
-            },
         });
 
-        return businesses.map(business => ({
-            id: business.id,
-            name: business.name,
-            description: business.description,
-            initialCapital: Number(business.initialCapital),
-            currentBalance: Number(business.currentBalance),
-            createdById: business.createdById,
-            createdAt: business.createdAt,
-            updatedAt: business.updatedAt,
-            createdBy: business.createdBy,
+        return userBusinesses.map(ub => ({
+            id: ub.business.id,
+            name: ub.business.name,
+            description: ub.business.description,
+            initialCapital: Number(ub.business.initialCapital),
+            currentBalance: Number(ub.business.currentBalance),
+            createdById: ub.business.createdById,
+            createdAt: ub.business.createdAt,
+            updatedAt: ub.business.updatedAt,
+            createdBy: ub.business.createdBy,
         }));
     }
 

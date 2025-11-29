@@ -17,9 +17,56 @@ interface CashFlowFilters {
 }
 
 export class CashService {
-    // Acceso libre por rol, sin validación de negocio (ajustar si se quiere restringir)
-    private async validateAccess(_businessId: string, _userId: string, _role: UserRole) {
-        return;
+    /**
+     * Valida que el usuario tenga acceso al negocio solicitado
+     * Implementa Defense-in-Depth: validación a nivel de servicio
+     * OWASP: A01:2021 – Broken Access Control
+     * 
+     * @param businessId - ID del negocio a validar
+     * @param userId - ID del usuario que solicita acceso
+     * @param role - Rol del usuario (super_admin, admin, user)
+     * @throws Error si el usuario no tiene permisos
+     */
+    private async validateAccess(businessId: string, userId: string, role: UserRole): Promise<void> {
+        // Super admin tiene acceso irrestricto a todos los negocios
+        if (role === 'super_admin') {
+            return;
+        }
+
+        // Admin tiene acceso a todos los negocios (política definida)
+        // Si se desea restringir admins a negocios específicos, modificar aquí
+        if (role === 'admin') {
+            return;
+        }
+
+        // Usuario regular: DEBE estar asignado al negocio
+        const userBusiness = await prisma.userBusiness.findFirst({
+            where: {
+                userId,
+                businessId,
+            },
+            select: {
+                businessId: true,
+            },
+        });
+
+        // Si no hay relación usuario-negocio, denegar acceso
+        if (!userBusiness) {
+            // Log de intento de acceso no autorizado (para auditoría de seguridad)
+            await prisma.auditLog.create({
+                data: {
+                    userId,
+                    action: 'UNAUTHORIZED_ACCESS_ATTEMPT',
+                    description: `Intento de acceso no autorizado al negocio ${businessId}`,
+                    entityType: 'Business',
+                    entityId: businessId,
+                },
+            }).catch(() => {
+                // Silenciar errores de auditoría para no revelar información
+            });
+
+            throw new Error('No tiene permisos para acceder a los datos de este negocio');
+        }
     }
 
     private isIncome(type: CashMovementType) {

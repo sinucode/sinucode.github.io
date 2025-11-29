@@ -9,10 +9,14 @@ export class BusinessController {
     /**
      * GET /api/businesses
      * Obtener todos los negocios
+     * Implementa filtrado basado en rol
      */
-    async getBusinesses(_req: Request, res: Response) {
+    async getBusinesses(req: Request, res: Response) {
         try {
-            const businesses = await businessService.getAllBusinesses();
+            const userId = req.user?.userId;
+            const role = req.user?.role as 'user' | 'admin' | 'super_admin' | undefined;
+
+            const businesses = await businessService.getAllBusinesses(userId, role);
             return res.json(businesses);
         } catch (error: any) {
             console.error('Error getting businesses:', error);
