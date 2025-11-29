@@ -68,3 +68,11 @@ export const searchClients = async (query: string, businessId?: string) => {
     const response = await api.get<Client[]>('/clients/search', { params });
     return response.data;
 };
+
+export const copyClientToBusiness = async (clientId: string, targetBusinessId: string) => {
+    const response = await api.post<{ success: true; message: string; data: Client }>(
+        `/clients/${clientId}/copy`,
+        { targetBusinessId }
+    );
+    return response.data;
+};

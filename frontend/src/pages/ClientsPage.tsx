@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Edit2, Trash2, UserCheck } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, UserCheck, Copy } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { getClients, deleteClient, Client } from '../api/clients.api';
 import { getBusinesses } from '../api/business.api';
 import ClientForm from '../components/clients/ClientForm';
+import { CopyClientDialog } from '../components/clients/CopyClientDialog';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 
 const ClientsPage = () => {
@@ -18,7 +19,11 @@ const ClientsPage = () => {
     // Estado para el diálogo de confirmación
     const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
+    // Estado para el diálogo de copiar cliente
+    const [clientToCopy, setClientToCopy] = useState<Client | null>(null);
+
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const isSuperAdmin = user?.role === 'super_admin';
 
     // Cargar negocios para el filtro (solo admin)
     const { data: businesses } = useQuery({
@@ -188,6 +193,15 @@ const ClientsPage = () => {
                                                     >
                                                         <Edit2 size={18} />
                                                     </button>
+                                                    {isSuperAdmin && (
+                                                        <button
+                                                            onClick={() => setClientToCopy(client)}
+                                                            className="text-purple-600 hover:text-purple-900 p-1 hover:bg-purple-50 rounded"
+                                                            title="Copiar a otro negocio"
+                                                        >
+                                                            <Copy size={18} />
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => handleDeleteClick(client)}
                                                         className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded"
@@ -212,6 +226,17 @@ const ClientsPage = () => {
                     onClose={() => setIsFormOpen(false)}
                     onSuccess={() => setIsFormOpen(false)}
                     selectedBusinessId={selectedBusinessId}
+                />
+            )}
+
+            {clientToCopy && (
+                <CopyClientDialog
+                    client={clientToCopy}
+                    onClose={() => setClientToCopy(null)}
+                    onSuccess={() => {
+                        setClientToCopy(null);
+                        queryClient.invalidateQueries({ queryKey: ['clients'] });
+                    }}
                 />
             )}
 

@@ -447,4 +447,135 @@ export class ClientService {
 
         return clients;
     }
+
+    /**
+     * Copiar cliente a otro negocio
+     * Solo super_admin puede realizar esta operación
+     * Crea una copia del cliente en el negocio destino
+     */
+    async copyClientToBusiness(
+        clientId: string,
+        targetBusinessId: string,
+        requestingUserId: string,
+        userRole: UserRole,
+        ipAddress: string = ''
+    ) {
+        // Validación de permisos: solo super_admin
+        if (userRole !== 'super_admin') {
+            throw new Error('Solo super administradores pueden copiar clientes entre negocios');
+        }
+
+        // Obtener cliente origen
+        const sourceClient = await prisma.client.findUnique({
+            where: { id: clientId },
+            select: {
+                id: true,
+                fullName: true,
+                phone: true,
+                cedula: true,
+                nationality: true,
+                address: true,
+                businessId: true,
+                business: {
+                    select: {
+                        name: true,
+                    },
+                },
+            },
+        });
+
+        if (!sourceClient) {
+            throw new Error('Cliente no encontrado');
+        }
+
+        // Validar que el negocio destino existe
+        const targetBusiness = await prisma.business.findUnique({
+            where: { id: targetBusinessId },
+            select: {
+                id: true,
+                name: true,
+            },
+        });
+
+        if (!targetBusiness) {
+            throw new Error('Negocio destino no encontrado');
+        }
+
+        // Validar que el negocio destino es diferente al origen
+        if (sourceClient.businessId === targetBusinessId) {
+            throw new Error('El cliente ya pertenece a este negocio');
+        }
+
+        // Validar que no exista un cliente con el mismo teléfono en el negocio destino
+        const existingClient = await prisma.client.findFirst({
+            where: {
+                phone: sourceClient.phone,
+                businessId: targetBusinessId,
+            },
+        });
+
+        if (existingClient) {
+            throw new Error(
+                `Ya existe un cliente con el teléfono ${sourceClient.phone} en ${targetBusiness.name}`
+            );
+        }
+
+        // Copiar cliente (transacción atómica)
+        const newClient = await prisma.$transaction(async (tx) => {
+            // Crear copia del cliente en el negocio destino
+            const client = await tx.client.create({
+                data: {
+                    fullName: sourceClient.fullName,
+                    phone: sourceClient.phone,
+                    cedula: sourceClient.cedula,
+                    nationality: sourceClient.nationality,
+                    address: sourceClient.address,
+                    businessId: targetBusinessId,
+                    // NO copiamos referredById (relación específica del negocio original)
+                },
+                select: {
+                    id: true,
+                    fullName: true,
+                    phone: true,
+                    cedula: true,
+                    nationality: true,
+                    address: true,
+                    businessId: true,
+                    createdAt: true,
+                },
+            });
+
+            // Auditar operación de copia
+            await tx.auditLog.create({
+                data: {
+                    userId: requestingUserId,
+                    businessId: targetBusinessId,
+                    action: 'COPY_CLIENT',
+                    description: `Copió cliente '${sourceClient.fullName}' desde '${sourceClient.business.name}' a '${targetBusiness.name}'`,
+                    entityType: 'Client',
+                    entityId: client.id,
+                    oldValues: {
+                        sourceClientId: sourceClient.id,
+                        sourceBusinessId: sourceClient.businessId,
+                        sourceBusinessName: sourceClient.business.name,
+                    },
+                    newValues: {
+                        targetClientId: client.id,
+                        targetBusinessId: targetBusinessId,
+                        targetBusinessName: targetBusiness.name,
+                        copiedData: {
+                            fullName: client.fullName,
+                            phone: client.phone,
+                            cedula: client.cedula,
+                        },
+                    },
+                    ipAddress,
+                },
+            });
+
+            return client;
+        });
+
+        return newClient;
+    }
 }

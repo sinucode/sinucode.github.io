@@ -147,3 +147,61 @@ export const searchClients = async (req: Request, res: Response) => {
         return res.status(500).json({ error: error.message || 'Error al buscar clientes' });
     }
 };
+
+/**
+ * Copiar cliente a otro negocio
+ * Solo super_admin
+ */
+export const copyClient = async (req: Request, res: Response) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { id } = req.params;
+        const { targetBusinessId } = req.body;
+        const userId = req.user!.userId;
+        const userRole = req.user!.role as UserRole;
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
+
+        // Validación adicional
+        if (!targetBusinessId) {
+            return res.status(400).json({ error: 'targetBusinessId es requerido' });
+        }
+
+        const newClient = await clientService.copyClientToBusiness(
+            id,
+            targetBusinessId,
+            userId,
+            userRole,
+            ipAddress
+        );
+
+        return res.status(201).json({
+            success: true,
+            message: 'Cliente copiado exitosamente',
+            data: newClient,
+        });
+    } catch (error: any) {
+        console.error('Error copying client:', error);
+
+        if (error.message === 'Cliente no encontrado') {
+            return res.status(404).json({ error: error.message });
+        }
+        if (error.message === 'Negocio destino no encontrado') {
+            return res.status(404).json({ error: error.message });
+        }
+        if (error.message.includes('Solo super administradores')) {
+            return res.status(403).json({ error: error.message });
+        }
+        if (error.message.includes('Ya existe un cliente')) {
+            return res.status(409).json({ error: error.message });
+        }
+        if (error.message === 'El cliente ya pertenece a este negocio') {
+            return res.status(400).json({ error: error.message });
+        }
+
+        return res.status(500).json({ error: error.message || 'Error al copiar cliente' });
+    }
+};
