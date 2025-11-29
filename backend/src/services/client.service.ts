@@ -578,4 +578,118 @@ export class ClientService {
 
         return newClient;
     }
+
+    /**
+     * Importar múltiples clientes a otro negocio (batch)
+     * Solo super_admin puede realizar esta operación
+     */
+    async batchImportClients(
+        clientIds: string[],
+        targetBusinessId: string,
+        requestingUserId: string,
+        userRole: UserRole,
+        ipAddress: string = ''
+    ) {
+        // Validación de permisos: solo super_admin
+        if (userRole !== 'super_admin') {
+            throw new Error('Solo super administradores pueden importar clientes en lote');
+        }
+
+        // Validar que haya al menos un cliente
+        if (!clientIds || clientIds.length === 0) {
+            throw new Error('Debe seleccionar al menos un cliente para importar');
+        }
+
+        // Validar que el negocio destino existe
+        const targetBusiness = await prisma.business.findUnique({
+            where: { id: targetBusinessId },
+            select: {
+                id: true,
+                name: true,
+            },
+        });
+
+        if (!targetBusiness) {
+            throw new Error('Negocio destino no encontrado');
+        }
+
+        // Resultados del proceso
+        const results: Array<{
+            clientId: string;
+            success: boolean;
+            newClientId?: string;
+            error?: string;
+            clientName?: string;
+        }> = [];
+
+        let importedCount = 0;
+        let failedCount = 0;
+        const importedClients: string[] = [];
+
+        // Procesar cada cliente
+        for (const clientId of clientIds) {
+            try {
+                // Reutilizar la lógica de copyClientToBusiness
+                const newClient = await this.copyClientToBusiness(
+                    clientId,
+                    targetBusinessId,
+                    requestingUserId,
+                    userRole,
+                    ipAddress
+                );
+
+                results.push({
+                    clientId,
+                    success: true,
+                    newClientId: newClient.id,
+                    clientName: newClient.fullName,
+                });
+
+                importedCount++;
+                importedClients.push(newClient.fullName);
+            } catch (error: any) {
+                results.push({
+                    clientId,
+                    success: false,
+                    error: error.message || 'Error desconocido',
+                });
+
+                failedCount++;
+            }
+        }
+
+        // Audit log consolidado para toda la operación
+        if (importedCount > 0) {
+            await prisma.auditLog.create({
+                data: {
+                    userId: requestingUserId,
+                    businessId: targetBusinessId,
+                    action: 'BATCH_IMPORT_CLIENTS',
+                    description: `Importó ${importedCount} cliente(s) a '${targetBusiness.name}'${failedCount > 0 ? ` (${failedCount} fallaron)` : ''}`,
+                    entityType: 'Client',
+                    entityId: targetBusinessId,
+                    oldValues: {
+                        totalRequested: clientIds.length,
+                        clientIds,
+                    },
+                    newValues: {
+                        targetBusinessId: targetBusinessId,
+                        targetBusinessName: targetBusiness.name,
+                        importedCount,
+                        failedCount,
+                        importedClients,
+                    },
+                    ipAddress,
+                },
+            });
+        }
+
+        return {
+            success: importedCount > 0,
+            imported: importedCount,
+            failed: failedCount,
+            total: clientIds.length,
+            results,
+        };
+    }
 }

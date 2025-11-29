@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Edit2, Trash2, UserCheck, Copy } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, UserCheck, Download } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { getClients, deleteClient, Client } from '../api/clients.api';
 import { getBusinesses } from '../api/business.api';
 import ClientForm from '../components/clients/ClientForm';
-import { CopyClientDialog } from '../components/clients/CopyClientDialog';
+import { ImportClientsDialog } from '../components/clients/ImportClientsDialog';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 
 const ClientsPage = () => {
@@ -19,8 +19,8 @@ const ClientsPage = () => {
     // Estado para el diálogo de confirmación
     const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
 
-    // Estado para el diálogo de copiar cliente
-    const [clientToCopy, setClientToCopy] = useState<Client | null>(null);
+    // Estado para el diálogo de importar clientes
+    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
     const isSuperAdmin = user?.role === 'super_admin';
@@ -84,16 +84,29 @@ const ClientsPage = () => {
                     <h1 className="text-2xl font-bold text-gray-800">Clientes</h1>
                     <p className="text-gray-600">Gestión de clientes y referidos</p>
                 </div>
-                <button
-                    onClick={() => {
-                        setEditingClient(undefined);
-                        setIsFormOpen(true);
-                    }}
-                    className="bg-primary-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-primary-700 transition-colors w-full md:w-auto justify-center"
-                >
-                    <Plus size={20} />
-                    Nuevo Cliente
-                </button>
+                <div className="flex gap-2">
+                    {isSuperAdmin && (
+                        <button
+                            onClick={() => setIsImportDialogOpen(true)}
+                            disabled={!selectedBusinessId}
+                            className="bg-purple-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!selectedBusinessId ? 'Selecciona un negocio primero' : 'Importar clientes'}
+                        >
+                            <Download size={20} />
+                            Importar Clientes
+                        </button>
+                    )}
+                    <button
+                        onClick={() => {
+                            setEditingClient(undefined);
+                            setIsFormOpen(true);
+                        }}
+                        className="bg-primary-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-primary-700 transition-colors w-full md:w-auto justify-center"
+                    >
+                        <Plus size={20} />
+                        Nuevo Cliente
+                    </button>
+                </div>
             </div>
 
             {/* Filtros y Búsqueda */}
@@ -193,15 +206,6 @@ const ClientsPage = () => {
                                                     >
                                                         <Edit2 size={18} />
                                                     </button>
-                                                    {isSuperAdmin && (
-                                                        <button
-                                                            onClick={() => setClientToCopy(client)}
-                                                            className="text-purple-600 hover:text-purple-900 p-1 hover:bg-purple-50 rounded"
-                                                            title="Copiar a otro negocio"
-                                                        >
-                                                            <Copy size={18} />
-                                                        </button>
-                                                    )}
                                                     <button
                                                         onClick={() => handleDeleteClick(client)}
                                                         className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded"
@@ -229,12 +233,12 @@ const ClientsPage = () => {
                 />
             )}
 
-            {clientToCopy && (
-                <CopyClientDialog
-                    client={clientToCopy}
-                    onClose={() => setClientToCopy(null)}
+            {isImportDialogOpen && selectedBusinessId && (
+                <ImportClientsDialog
+                    currentBusinessId={selectedBusinessId}
+                    onClose={() => setIsImportDialogOpen(false)}
                     onSuccess={() => {
-                        setClientToCopy(null);
+                        setIsImportDialogOpen(false);
                         queryClient.invalidateQueries({ queryKey: ['clients'] });
                     }}
                 />

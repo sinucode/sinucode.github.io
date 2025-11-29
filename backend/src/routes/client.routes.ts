@@ -7,7 +7,7 @@ import {
     updateClient,
     deleteClient,
     searchClients,
-    copyClient
+    batchImportClients
 } from '../controllers/client.controller';
 import { createClientValidators, updateClientValidators } from '../validators/client.validators';
 
@@ -26,8 +26,8 @@ router.post('/', requireMinRole('user'), createClientValidators, createClient);
 router.put('/:id', requireMinRole('admin'), updateClientValidators, updateClient);
 router.delete('/:id', requireMinRole('admin'), deleteClient);
 
-// Ruta exclusiva para 'super_admin' - Copiar cliente
-router.post('/:id/copy', requireMinRole('super_admin'), copyClient);
+// Ruta exclusiva para 'super_admin' - Importar clientes en lote
+router.post('/batch-import', requireMinRole('super_admin'), batchImportClients);
 
 export default router;
 

@@ -69,10 +69,28 @@ export const searchClients = async (query: string, businessId?: string) => {
     return response.data;
 };
 
-export const copyClientToBusiness = async (clientId: string, targetBusinessId: string) => {
-    const response = await api.post<{ success: true; message: string; data: Client }>(
-        `/clients/${clientId}/copy`,
-        { targetBusinessId }
+export interface BatchImportResponse {
+    success: boolean;
+    message: string;
+    data: {
+        success: boolean;
+        imported: number;
+        failed: number;
+        total: number;
+        results: Array<{
+            clientId: string;
+            success: boolean;
+            newClientId?: string;
+            error?: string;
+            clientName?: string;
+        }>;
+    };
+}
+
+export const batchImportClients = async (clientIds: string[], targetBusinessId: string) => {
+    const response = await api.post<BatchImportResponse>(
+        '/clients/batch-import',
+        { clientIds, targetBusinessId }
     );
     return response.data;
 };

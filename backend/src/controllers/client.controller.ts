@@ -149,59 +149,56 @@ export const searchClients = async (req: Request, res: Response) => {
 };
 
 /**
- * Copiar cliente a otro negocio
+ * Importar múltiples clientes a otro negocio (batch)
  * Solo super_admin
  */
-export const copyClient = async (req: Request, res: Response) => {
+export const batchImportClients = async (req: Request, res: Response) => {
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const { id } = req.params;
-        const { targetBusinessId } = req.body;
+        const { clientIds, targetBusinessId } = req.body;
         const userId = req.user!.userId;
         const userRole = req.user!.role as UserRole;
         const ipAddress = req.ip || req.socket.remoteAddress || '';
 
-        // Validación adicional
+        // Validaciones
         if (!targetBusinessId) {
             return res.status(400).json({ error: 'targetBusinessId es requerido' });
         }
 
-        const newClient = await clientService.copyClientToBusiness(
-            id,
+        if (!clientIds || !Array.isArray(clientIds) || clientIds.length === 0) {
+            return res.status(400).json({ error: 'Debe seleccionar al menos un cliente' });
+        }
+
+        const result = await clientService.batchImportClients(
+            clientIds,
             targetBusinessId,
             userId,
             userRole,
             ipAddress
         );
 
-        return res.status(201).json({
-            success: true,
-            message: 'Cliente copiado exitosamente',
-            data: newClient,
+        return res.status(200).json({
+            success: result.success,
+            message: `${result.imported} cliente(s) importado(s) exitosamente${result.failed > 0 ? `, ${result.failed} fallaron` : ''}`,
+            data: result,
         });
     } catch (error: any) {
-        console.error('Error copying client:', error);
+        console.error('Error importing clients:', error);
 
-        if (error.message === 'Cliente no encontrado') {
-            return res.status(404).json({ error: error.message });
-        }
         if (error.message === 'Negocio destino no encontrado') {
             return res.status(404).json({ error: error.message });
         }
         if (error.message.includes('Solo super administradores')) {
             return res.status(403).json({ error: error.message });
         }
-        if (error.message.includes('Ya existe un cliente')) {
-            return res.status(409).json({ error: error.message });
-        }
-        if (error.message === 'El cliente ya pertenece a este negocio') {
+        if (error.message.includes('Debe seleccionar')) {
             return res.status(400).json({ error: error.message });
         }
 
-        return res.status(500).json({ error: error.message || 'Error al copiar cliente' });
+        return res.status(500).json({ error: error.message || 'Error al importar clientes' });
     }
 };
