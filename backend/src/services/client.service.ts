@@ -45,16 +45,16 @@ export class ClientService {
         let targetBusinessId: string | undefined;
 
         if (userRole === 'user') {
-            // Usuario regular: si hay businessId lo usa, de lo contrario toma el asignado
-            if (businessId) {
-                targetBusinessId = businessId;
-            } else {
-                const userBusinessId = await this.getUserBusiness(userId);
-                if (!userBusinessId) {
-                    throw new Error('Usuario no tiene negocio asignado');
-                }
-                targetBusinessId = userBusinessId;
+            const userBusinessId = await this.getUserBusiness(userId);
+            if (!userBusinessId) {
+                throw new Error('Usuario no tiene negocio asignado');
             }
+
+            if (businessId && businessId !== userBusinessId) {
+                throw new Error('No tiene permisos para ver clientes de otro negocio');
+            }
+
+            targetBusinessId = userBusinessId;
         } else {
             // Admin/super_admin: si viene businessId se filtra, si no se traen todos
             targetBusinessId = businessId || undefined;

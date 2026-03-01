@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { getCredits } from '../api/credits.api';
 import { getCashFlow } from '../api/cash.api';
 import { getBusinesses } from '../api/business.api';
+import { useBusinessStore } from '../store/businessStore';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
 
@@ -12,7 +13,7 @@ export default function DashboardHome() {
     const { user } = useAuthStore();
     const navigate = useNavigate();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
-    const [businessId, setBusinessId] = useState<string>('');
+    const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
 
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
@@ -22,9 +23,9 @@ export default function DashboardHome() {
 
     useEffect(() => {
         if (isAdmin && businesses && businesses.length > 0 && !businessId) {
-            setBusinessId(businesses[0].id);
+            setSelectedBusiness(businesses[0].id, businesses[0].name);
         }
-    }, [isAdmin, businesses, businessId]);
+    }, [isAdmin, businesses, businessId, setSelectedBusiness]);
 
     const { data: credits } = useQuery({
         queryKey: ['credits-dashboard'],
@@ -69,7 +70,11 @@ export default function DashboardHome() {
                     {isAdmin && (
                         <select
                             value={businessId}
-                            onChange={(e) => setBusinessId(e.target.value)}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Seleccione negocio';
+                                setSelectedBusiness(id, name);
+                            }}
                             className="px-3 py-2 rounded-md text-sm text-gray-900 bg-white"
                         >
                             <option value="">Seleccione negocio</option>

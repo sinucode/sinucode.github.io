@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { useBusinessStore } from '../../store/businessStore';
 import {
     LayoutDashboard,
     Users,
@@ -13,7 +14,9 @@ import {
 
 export default function Sidebar() {
     const { user, logout } = useAuthStore();
+    const { selectedBusinessName } = useBusinessStore();
     const navigate = useNavigate();
+    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
 
     const handleLogout = async () => {
         logout();
@@ -25,7 +28,10 @@ export default function Sidebar() {
             {/* Logo */}
             <div className="p-6 border-b border-gray-800">
                 <h1 className="text-xl font-bold">Gestióncredifacil</h1>
-                <p className="text-xs text-gray-400 mt-1">{user?.role === 'super_admin' ? 'Administrador' : 'Usuario'}</p>
+                <p className="text-xs text-gray-400 mt-1 capitalize">
+                    {user?.fullName || 'Usuario'}
+                    {isAdmin && ` • ${selectedBusinessName}`}
+                </p>
             </div>
 
             {/* Navigation */}

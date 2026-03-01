@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCashFlow, injectCapital, withdrawFunds, forecastCash } from '../api/cash.api';
 import { getBusinesses } from '../api/business.api';
 import { useAuthStore } from '../store/authStore';
+import { useBusinessStore } from '../store/businessStore';
 import { DollarSign, TrendingUp, TrendingDown, Activity, Filter, Plus, Minus } from 'lucide-react';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
@@ -10,7 +11,7 @@ const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString
 export default function CashPage() {
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
-    const [businessId, setBusinessId] = useState<string>('');
+    const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [activeTab, setActiveTab] = useState<'movements' | 'summary' | 'ops'>('movements');
@@ -34,12 +35,12 @@ export default function CashPage() {
     // Autoselect first business for admin
     useEffect(() => {
         if (isAdmin && businesses && businesses.length > 0 && !businessId) {
-            setBusinessId(businesses[0].id);
+            setSelectedBusiness(businesses[0].id, businesses[0].name);
         }
         if (!isAdmin && !businessId && businesses && businesses.length > 0) {
-            setBusinessId(businesses[0].id);
+            setSelectedBusiness(businesses[0].id, businesses[0].name);
         }
-    }, [isAdmin, businesses, businessId]);
+    }, [isAdmin, businesses, businessId, setSelectedBusiness]);
 
     const { data: forecast } = useQuery({
         queryKey: ['cashForecast', businessId, targetDate],
@@ -64,7 +65,11 @@ export default function CashPage() {
                     {isAdmin && (
                         <select
                             value={businessId}
-                            onChange={(e) => setBusinessId(e.target.value)}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Seleccione negocio';
+                                setSelectedBusiness(id, name);
+                            }}
                             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">Seleccione negocio</option>

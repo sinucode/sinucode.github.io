@@ -6,13 +6,14 @@ import CreditForm from '../components/credits/CreditForm';
 import { Plus } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { getBusinesses } from '../api/business.api';
+import { useBusinessStore } from '../store/businessStore';
 import { Credit } from '../types';
 
 export default function CreditsPage() {
     const navigate = useNavigate();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [filter, setFilter] = useState<'all' | 'dueToday' | 'overdue'>('all');
-    const [selectedBusinessId, setSelectedBusinessId] = useState<string>('');
+    const { selectedBusinessId, setSelectedBusiness } = useBusinessStore();
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
 
@@ -63,7 +64,11 @@ export default function CreditsPage() {
                     <div className="w-full md:w-1/3 min-w-[200px]">
                         <select
                             value={selectedBusinessId}
-                            onChange={(e) => setSelectedBusinessId(e.target.value)}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Todos los negocios';
+                                setSelectedBusiness(id, name);
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">Todos los negocios</option>

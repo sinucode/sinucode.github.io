@@ -4,6 +4,7 @@ import { Plus, Search, Edit2, Trash2, UserCheck, Download } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { getClients, deleteClient, Client } from '../api/clients.api';
 import { getBusinesses } from '../api/business.api';
+import { useBusinessStore } from '../store/businessStore';
 import ClientForm from '../components/clients/ClientForm';
 import { ImportClientsDialog } from '../components/clients/ImportClientsDialog';
 import ConfirmDialog from '../components/common/ConfirmDialog';
@@ -14,7 +15,7 @@ const ClientsPage = () => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingClient, setEditingClient] = useState<Client | undefined>(undefined);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedBusinessId, setSelectedBusinessId] = useState<string>('');
+    const { selectedBusinessId, setSelectedBusiness } = useBusinessStore();
 
     // Estado para el diálogo de confirmación
     const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
@@ -105,7 +106,11 @@ const ClientsPage = () => {
                     <div className="w-full md:w-1/3">
                         <select
                             value={selectedBusinessId}
-                            onChange={(e) => setSelectedBusinessId(e.target.value)}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Todos los negocios';
+                                setSelectedBusiness(id, name);
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">Todos los negocios</option>

@@ -5,13 +5,14 @@ import { Payment } from '../types';
 import { getPayments } from '../api/payments.api';
 import { useAuthStore } from '../store/authStore';
 import { getBusinesses } from '../api/business.api';
+import { useBusinessStore } from '../store/businessStore';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
 
 export default function PaymentsPage() {
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
-    const [businessId, setBusinessId] = useState('');
+    const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
     const [methodFilter, setMethodFilter] = useState<string>('all');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -71,7 +72,11 @@ export default function PaymentsPage() {
                     {isAdmin && (
                         <select
                             value={businessId}
-                            onChange={(e) => setBusinessId(e.target.value)}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Todos los negocios';
+                                setSelectedBusiness(id, name);
+                            }}
                             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">Todos los negocios</option>
