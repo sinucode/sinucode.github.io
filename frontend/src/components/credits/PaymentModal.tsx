@@ -100,161 +100,166 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b shrink-0">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+            <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-lg flex flex-col" style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-bottom, 0px) - 56px)' }}>
+                {/* Header fijo */}
+                <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
                     <h3 className="text-lg font-semibold text-gray-800">Registrar Pago</h3>
-                    <button onClick={onClose} className="text-primary-600 hover:text-primary-900">
+                    <button onClick={onClose} className="p-2 text-primary-600 hover:text-primary-900 hover:bg-primary-50 rounded-lg">
                         <X size={22} />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
-                    {error && <div className="bg-red-50 text-red-700 border border-red-200 p-3 rounded-md text-sm">{error}</div>}
+                {/* Contenido scrollable */}
+                <div className="flex-1 overflow-y-auto overscroll-contain">
+                    <form onSubmit={handleSubmit} className="px-5 pt-4 pb-2 space-y-4">
+                        {error && <div className="bg-red-50 text-red-700 border border-red-200 p-3 rounded-md text-sm">{error}</div>}
 
-                    {/* Selección de cuotas */}
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="block text-sm font-medium text-primary-900">
-                                Cuotas a pagar <span className="text-primary-600 font-normal">({selectedIds.size} seleccionadas)</span>
-                            </label>
-                            <div className="flex gap-2 text-xs">
-                                <button type="button" onClick={selectAll} className="text-primary-600 underline hover:text-primary-800">
-                                    Todas
-                                </button>
-                                <span className="text-gray-300">|</span>
-                                <button type="button" onClick={clearAll} className="text-gray-500 underline hover:text-gray-700">
-                                    Limpiar
-                                </button>
+                        {/* Selección de cuotas */}
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="block text-sm font-medium text-primary-900">
+                                    Cuotas a pagar <span className="text-primary-600 font-normal">({selectedIds.size} seleccionadas)</span>
+                                </label>
+                                <div className="flex gap-2 text-xs">
+                                    <button type="button" onClick={selectAll} className="text-primary-600 underline hover:text-primary-800">
+                                        Todas
+                                    </button>
+                                    <span className="text-gray-300">|</span>
+                                    <button type="button" onClick={clearAll} className="text-gray-500 underline hover:text-gray-700">
+                                        Limpiar
+                                    </button>
+                                </div>
                             </div>
-                        </div>
 
-                        {pendingSchedules.length === 0 ? (
-                            <p className="text-sm text-gray-500 py-2 text-center border rounded-md bg-slate-50">
-                                No hay cuotas pendientes de pago.
-                            </p>
-                        ) : (
-                            <div className="border border-primary-200 rounded-md overflow-hidden max-h-52 overflow-y-auto">
-                                {pendingSchedules.map((s, idx) => {
-                                    const pending = Number(s.scheduledAmount) - Number(s.paidAmount || 0);
-                                    const isSelected = selectedIds.has(s.id);
-                                    const isOverdue = new Date(s.dueDate) < new Date();
-                                    return (
-                                        <label
-                                            key={s.id}
-                                            className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b last:border-0
+                            {pendingSchedules.length === 0 ? (
+                                <p className="text-sm text-gray-500 py-2 text-center border rounded-md bg-slate-50">
+                                    No hay cuotas pendientes de pago.
+                                </p>
+                            ) : (
+                                <div className="border border-primary-200 rounded-md overflow-hidden max-h-52 overflow-y-auto">
+                                    {pendingSchedules.map((s, idx) => {
+                                        const pending = Number(s.scheduledAmount) - Number(s.paidAmount || 0);
+                                        const isSelected = selectedIds.has(s.id);
+                                        const isOverdue = new Date(s.dueDate) < new Date();
+                                        return (
+                                            <label
+                                                key={s.id}
+                                                className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors border-b last:border-0
                                                 ${isSelected ? 'bg-primary-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
                                                 hover:bg-primary-50/70`}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => toggleSchedule(s.id)}
-                                                className="sr-only"
-                                            />
-                                            {isSelected
-                                                ? <CheckSquare size={18} className="text-primary-600 shrink-0" />
-                                                : <Square size={18} className="text-gray-300 shrink-0" />
-                                            }
-                                            <div className="flex-1 min-w-0">
-                                                <span className="text-sm font-medium text-gray-800">
-                                                    Cuota #{s.installmentNumber}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => toggleSchedule(s.id)}
+                                                    className="sr-only"
+                                                />
+                                                {isSelected
+                                                    ? <CheckSquare size={18} className="text-primary-600 shrink-0" />
+                                                    : <Square size={18} className="text-gray-300 shrink-0" />
+                                                }
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="text-sm font-medium text-gray-800">
+                                                        Cuota #{s.installmentNumber}
+                                                    </span>
+                                                    <span className={`ml-2 text-xs ${isOverdue ? 'text-danger-500 font-semibold' : 'text-gray-500'}`}>
+                                                        {new Date(s.dueDate).toLocaleDateString('es-CO')}
+                                                        {isOverdue && ' (Vencida)'}
+                                                    </span>
+                                                </div>
+                                                <span className="text-sm font-semibold text-gray-900 shrink-0">
+                                                    {formatMoney(pending)}
                                                 </span>
-                                                <span className={`ml-2 text-xs ${isOverdue ? 'text-danger-500 font-semibold' : 'text-gray-500'}`}>
-                                                    {new Date(s.dueDate).toLocaleDateString('es-CO')}
-                                                    {isOverdue && ' (Vencida)'}
-                                                </span>
-                                            </div>
-                                            <span className="text-sm font-semibold text-gray-900 shrink-0">
-                                                {formatMoney(pending)}
-                                            </span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        )}
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            )}
 
-                        {/* Total a pagar */}
-                        {selectedIds.size > 0 && (
-                            <div className="mt-2 flex justify-between items-center px-3 py-2 bg-primary-50 border border-primary-200 rounded-md">
-                                <span className="text-sm font-medium text-primary-900">Total a registrar:</span>
-                                <span className="text-base font-bold text-primary-700">{formatMoney(totalSelected)}</span>
-                            </div>
-                        )}
-                        <p className="text-xs text-primary-600 mt-1">
-                            Saldo pendiente total: <strong>{formatMoney(remainingBalance)}</strong>
-                        </p>
-                    </div>
-
-                    {/* Fecha */}
-                    <div>
-                        <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de pago</label>
-                        <input
-                            type="date"
-                            value={formData.paymentDate}
-                            onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                        />
-                    </div>
-
-                    {/* Método */}
-                    <div>
-                        <label className="block text-sm font-medium text-primary-900 mb-2">Método de pago</label>
-                        <div className="flex flex-wrap gap-3 text-sm text-primary-900">
-                            {['efectivo', 'transferencia', 'cheque', 'otro'].map((m) => (
-                                <label key={m} className="inline-flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        name="paymentMethod"
-                                        value={m}
-                                        checked={formData.paymentMethod === m}
-                                        onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                        className="rounded border-primary-300 text-primary-600"
-                                    />
-                                    <span className="capitalize">{m}</span>
-                                </label>
-                            ))}
+                            {/* Total a pagar */}
+                            {selectedIds.size > 0 && (
+                                <div className="mt-2 flex justify-between items-center px-3 py-2 bg-primary-50 border border-primary-200 rounded-md">
+                                    <span className="text-sm font-medium text-primary-900">Total a registrar:</span>
+                                    <span className="text-base font-bold text-primary-700">{formatMoney(totalSelected)}</span>
+                                </div>
+                            )}
+                            <p className="text-xs text-primary-600 mt-1">
+                                Saldo pendiente total: <strong>{formatMoney(remainingBalance)}</strong>
+                            </p>
                         </div>
-                    </div>
 
-                    {/* Notas */}
-                    <div>
-                        <label className="block text-sm font-medium text-primary-900 mb-1">Notas (opcional)</label>
-                        <input
-                            type="text"
-                            value={formData.notes}
-                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                            placeholder="Observaciones del pago..."
-                            maxLength={300}
-                        />
-                    </div>
+                        {/* Fecha */}
+                        <div>
+                            <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de pago</label>
+                            <input
+                                type="date"
+                                value={formData.paymentDate}
+                                onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                            />
+                        </div>
 
-                    {/* Acciones */}
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 text-primary-900 bg-slate-100 rounded-md hover:bg-gray-200 font-medium"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSubmitting || selectedIds.size === 0}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                        >
-                            <Save size={18} />
-                            {isSubmitting
-                                ? `Guardando ${selectedIds.size} pago(s)...`
-                                : `Guardar ${selectedIds.size > 1 ? `${selectedIds.size} Pagos` : 'Pago'}`}
-                        </button>
-                    </div>
-                </form>
+                        {/* Método */}
+                        <div>
+                            <label className="block text-sm font-medium text-primary-900 mb-2">Método de pago</label>
+                            <div className="flex flex-wrap gap-3 text-sm text-primary-900">
+                                {['efectivo', 'transferencia', 'cheque', 'otro'].map((m) => (
+                                    <label key={m} className="inline-flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="paymentMethod"
+                                            value={m}
+                                            checked={formData.paymentMethod === m}
+                                            onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                            className="rounded border-primary-300 text-primary-600"
+                                        />
+                                        <span className="capitalize">{m}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Notas */}
+                        <div>
+                            <label className="block text-sm font-medium text-primary-900 mb-1">Notas (opcional)</label>
+                            <input
+                                type="text"
+                                value={formData.notes}
+                                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                placeholder="Observaciones del pago..."
+                                maxLength={300}
+                            />
+                        </div>
+                    </form>
+                </div>{/* fin scrollable */}
+
+                {/* Botones fijos al fondo - siempre visibles */}
+                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-3 flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex-1 sm:flex-none px-4 py-3 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition font-medium text-sm"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        onClick={handleSubmit}
+                        disabled={isSubmitting || selectedIds.size === 0}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                    >
+                        <Save size={18} />
+                        {isSubmitting
+                            ? `Guardando ${selectedIds.size} pago(s)...`
+                            : `Guardar ${selectedIds.size > 1 ? `${selectedIds.size} Pagos` : 'Pago'}`}
+                    </button>
+                </div>
             </div>
         </div>
     );
 };
 
 export default PaymentModal;
+

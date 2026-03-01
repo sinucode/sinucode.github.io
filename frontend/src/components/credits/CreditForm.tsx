@@ -273,285 +273,302 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     }, [formData.frequency, formData.startDate, simulation]);
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between p-6 border-b">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+            <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-4xl flex flex-col" style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-bottom, 0px) - 56px)' }}>
+                {/* Header fijo */}
+                <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
                     <div>
-                        <h2 className="text-xl font-semibold text-gray-800">Nuevo Crédito</h2>
+                        <h2 className="text-lg font-semibold text-gray-800">Nuevo Crédito</h2>
                         <p className="text-sm text-primary-600">Crea el crédito y genera su plan de pagos</p>
                     </div>
-                    <button onClick={onClose} className="text-primary-600 hover:text-primary-900">
-                        <X size={24} />
+                    <button onClick={onClose} className="p-2 text-primary-600 hover:text-primary-900 hover:bg-primary-50 rounded-lg">
+                        <X size={22} />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {formError && (
-                        <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{formError}</div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Cliente */}
-                        <div className="md:col-span-2 space-y-2">
-                            <label className="block text-sm font-medium text-primary-900 mb-1">
-                                Cliente *
-                            </label>
-                            <select
-                                value={selectedClientId}
-                                onChange={(e) => {
-                                    const found = clientList?.find((c) => c.id === e.target.value);
-                                    if (found) handleSelectClient(found);
-                                    else setSelectedClientId(e.target.value);
-                                }}
-                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            >
-                                <option value="">Seleccione un cliente</option>
-                                {clientList?.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.fullName} ({c.phone})
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    value={clientSearch}
-                                    onChange={(e) => {
-                                        setClientSearch(e.target.value);
-                                        if (e.target.value === '') setSelectedClientId('');
-                                    }}
-                                    className="w-full px-3 py-2 pl-10 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Buscar por nombre o celular..."
-                                />
-                                <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                            </div>
-                            {clientSearch.length > 2 && clientResults && clientResults.length > 0 && (
-                                <div className="mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
-                                    {clientResults.map((c) => (
-                                        <button
-                                            key={c.id}
-                                            type="button"
-                                            onClick={() => {
-                                                handleSelectClient(c);
-                                            }}
-                                            className={`w-full text-left px-4 py-2 hover:bg-primary-50 ${selectedClientId === c.id ? 'bg-primary-50' : ''}`}
-                                        >
-                                            <div className="font-medium">{c.fullName}</div>
-                                            <div className="text-xs text-primary-600">{c.phone} - {c.cedula}</div>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Negocio */}
-                        {isSuperAdmin && (
-                            <div>
-                                <label className="block text-sm font-medium text-primary-900 mb-1">
-                                    Negocio *
-                                </label>
-                                <select
-                                    value={formData.businessId}
-                                    onChange={(e) => setFormData({ ...formData, businessId: e.target.value })}
-                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                >
-                                    <option value="">Seleccione negocio</option>
-                                    {businesses?.map((b) => (
-                                        <option key={b.id} value={b.id}>{b.name}</option>
-                                    ))}
-                                </select>
-                            </div>
+                {/* Contenido scrollable */}
+                <div className="flex-1 overflow-y-auto overscroll-contain">
+                    <form onSubmit={handleSubmit} className="px-5 pt-4 pb-2 space-y-5">
+                        {formError && (
+                            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{formError}</div>
                         )}
 
-                        {/* Monto */}
-                        <div>
-                            <label className="block text-sm font-medium text-primary-900 mb-1">Monto *</label>
-                            <input
-                                type="text"
-                                value={formData.amount}
-                                onChange={(e) => {
-                                    const raw = e.target.value.replace(/[^0-9]/g, '');
-                                    const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
-                                    setFormData({ ...formData, amount: formatted });
-                                }}
-                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            />
-                        </div>
-
-                        {/* Interés */}
-                        <div>
-                            <label className="block text-sm font-medium text-primary-900 mb-1">Interés (%) *</label>
-                            <input
-                                type="number"
-                                value={formData.interestRate}
-                                onChange={(e) => setFormData({ ...formData, interestRate: e.target.value })}
-                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                min="0"
-                                step="0.01"
-                            />
-                        </div>
-
-                        {/* Cuota deseada (opcional) */}
-                        <div className="md:col-span-2 bg-white border border-gray-200 rounded-md p-3 space-y-2">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={useFixedInstallment}
-                                    onChange={(e) => setUseFixedInstallment(e.target.checked)}
-                                    className="w-4 h-4 text-primary-600 border-primary-200 rounded"
-                                />
-                                <span className="text-sm text-gray-800">Usar cuota fija (ingresa la cuota deseada en COP)</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
-                                <div>
-                                    <label className="block text-sm font-medium text-primary-900 mb-1">Cuota deseada</label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Cliente */}
+                            <div className="md:col-span-2 space-y-2">
+                                <label className="block text-sm font-medium text-primary-900 mb-1">
+                                    Cliente *
+                                </label>
+                                <select
+                                    value={selectedClientId}
+                                    onChange={(e) => {
+                                        const found = clientList?.find((c) => c.id === e.target.value);
+                                        if (found) handleSelectClient(found);
+                                        else setSelectedClientId(e.target.value);
+                                    }}
+                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                >
+                                    <option value="">Seleccione un cliente</option>
+                                    {clientList?.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.fullName} ({c.phone})
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className="relative">
                                     <input
                                         type="text"
-                                        value={installmentAmount}
+                                        value={clientSearch}
                                         onChange={(e) => {
-                                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                                            const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
-                                            setInstallmentAmount(formatted);
+                                            setClientSearch(e.target.value);
+                                            if (e.target.value === '') setSelectedClientId('');
                                         }}
-                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                        placeholder="Ej: 100.000"
-                                        disabled={!useFixedInstallment}
+                                        className="w-full px-3 py-2 pl-10 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        placeholder="Buscar por nombre o celular..."
                                     />
-                                    <p className="text-xs text-primary-600 mt-1">Recalcularemos el plazo estimado según esta cuota.</p>
+                                    <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                                 </div>
-                                {derivedTermInfo && (
-                                    <div className="text-sm text-primary-900">
-                                        <p><strong>Plazo estimado:</strong> {derivedTermInfo.termMonths} meses ({derivedTermInfo.termDays} días)</p>
-                                        <p className="text-primary-600">Basado en la cuota deseada.</p>
+                                {clientSearch.length > 2 && clientResults && clientResults.length > 0 && (
+                                    <div className="mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                                        {clientResults.map((c) => (
+                                            <button
+                                                key={c.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    handleSelectClient(c);
+                                                }}
+                                                className={`w-full text-left px-4 py-2 hover:bg-primary-50 ${selectedClientId === c.id ? 'bg-primary-50' : ''}`}
+                                            >
+                                                <div className="font-medium">{c.fullName}</div>
+                                                <div className="text-xs text-primary-600">{c.phone} - {c.cedula}</div>
+                                            </button>
+                                        ))}
                                     </div>
                                 )}
                             </div>
-                        </div>
 
-                        {/* Plazo */}
-                        <div>
-                            <label className="block text-sm font-medium text-primary-900 mb-1">Plazo (meses) *</label>
-                            <input
-                                type="number"
-                                value={formData.termMonths}
-                                onChange={(e) => setFormData({ ...formData, termMonths: e.target.value })}
-                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                min="1"
-                            />
-                            <p className="text-xs text-primary-600 mt-1">Si usas cuota fija, el plazo se recalcula automáticamente.</p>
-                        </div>
-
-                        {/* Frecuencia */}
-                        <div>
-                            <label className="block text-sm font-medium text-primary-900 mb-1">Frecuencia *</label>
-                            <select
-                                value={formData.frequency}
-                                onChange={(e) => setFormData({ ...formData, frequency: e.target.value as PaymentFrequency })}
-                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            >
-                                {frequencies.map((f) => (
-                                    <option key={f.value} value={f.value}>{f.label}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Fecha inicio */}
-                        <div>
-                            <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de inicio</label>
-                            <input
-                                type="date"
-                                value={formData.startDate}
-                                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={handleSimulate}
-                            disabled={isLoading}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-gray-800 rounded-md hover:bg-gray-200 transition disabled:opacity-50"
-                        >
-                            <Calculator size={18} /> Simular
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition disabled:opacity-50"
-                        >
-                            <Save size={18} /> {isLoading ? 'Guardando...' : 'Guardar Crédito'}
-                        </button>
-                    </div>
-
-                    {simulation && (
-                        <div className="border rounded-lg p-4 bg-white space-y-4">
-                            <div className="flex flex-col gap-2 text-sm text-primary-900 md:flex-row md:items-center md:justify-between">
-                                <div className="flex flex-wrap gap-4">
-                                    <span><strong>Cliente:</strong> {selectedClient?.fullName || clientSearch}</span>
-                                    <span><strong>Documento:</strong> {selectedClient?.cedula || '-'}</span>
-                                    <span><strong>Tel:</strong> {selectedClient?.phone || '-'}</span>
+                            {/* Negocio */}
+                            {isSuperAdmin && (
+                                <div>
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">
+                                        Negocio *
+                                    </label>
+                                    <select
+                                        value={formData.businessId}
+                                        onChange={(e) => setFormData({ ...formData, businessId: e.target.value })}
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    >
+                                        <option value="">Seleccione negocio</option>
+                                        {businesses?.map((b) => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={handleDownloadPDF}
-                                    className="inline-flex items-center gap-2 px-3 py-2 border border-primary-600 text-primary-700 bg-white rounded-md text-sm font-medium hover:bg-primary-50 transition"
+                            )}
+
+                            {/* Monto */}
+                            <div>
+                                <label className="block text-sm font-medium text-primary-900 mb-1">Monto *</label>
+                                <input
+                                    type="text"
+                                    value={formData.amount}
+                                    onChange={(e) => {
+                                        const raw = e.target.value.replace(/[^0-9]/g, '');
+                                        const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
+                                        setFormData({ ...formData, amount: formatted });
+                                    }}
+                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
+                            </div>
+
+                            {/* Interés */}
+                            <div>
+                                <label className="block text-sm font-medium text-primary-900 mb-1">Interés (%) *</label>
+                                <input
+                                    type="number"
+                                    value={formData.interestRate}
+                                    onChange={(e) => setFormData({ ...formData, interestRate: e.target.value })}
+                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    min="0"
+                                    step="0.01"
+                                />
+                            </div>
+
+                            {/* Cuota deseada (opcional) */}
+                            <div className="md:col-span-2 bg-white border border-gray-200 rounded-md p-3 space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={useFixedInstallment}
+                                        onChange={(e) => setUseFixedInstallment(e.target.checked)}
+                                        className="w-4 h-4 text-primary-600 border-primary-200 rounded"
+                                    />
+                                    <span className="text-sm text-gray-800">Usar cuota fija (ingresa la cuota deseada en COP)</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                                    <div>
+                                        <label className="block text-sm font-medium text-primary-900 mb-1">Cuota deseada</label>
+                                        <input
+                                            type="text"
+                                            value={installmentAmount}
+                                            onChange={(e) => {
+                                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
+                                                setInstallmentAmount(formatted);
+                                            }}
+                                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            placeholder="Ej: 100.000"
+                                            disabled={!useFixedInstallment}
+                                        />
+                                        <p className="text-xs text-primary-600 mt-1">Recalcularemos el plazo estimado según esta cuota.</p>
+                                    </div>
+                                    {derivedTermInfo && (
+                                        <div className="text-sm text-primary-900">
+                                            <p><strong>Plazo estimado:</strong> {derivedTermInfo.termMonths} meses ({derivedTermInfo.termDays} días)</p>
+                                            <p className="text-primary-600">Basado en la cuota deseada.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Plazo */}
+                            <div>
+                                <label className="block text-sm font-medium text-primary-900 mb-1">Plazo (meses) *</label>
+                                <input
+                                    type="number"
+                                    value={formData.termMonths}
+                                    onChange={(e) => setFormData({ ...formData, termMonths: e.target.value })}
+                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    min="1"
+                                />
+                                <p className="text-xs text-primary-600 mt-1">Si usas cuota fija, el plazo se recalcula automáticamente.</p>
+                            </div>
+
+                            {/* Frecuencia */}
+                            <div>
+                                <label className="block text-sm font-medium text-primary-900 mb-1">Frecuencia *</label>
+                                <select
+                                    value={formData.frequency}
+                                    onChange={(e) => setFormData({ ...formData, frequency: e.target.value as PaymentFrequency })}
+                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 >
-                                    <Download size={16} /> Descargar PDF
-                                </button>
+                                    {frequencies.map((f) => (
+                                        <option key={f.value} value={f.value}>{f.label}</option>
+                                    ))}
+                                </select>
                             </div>
-                            <div className="flex flex-wrap gap-4 text-sm text-primary-900">
-                                <span><strong>Total con interés:</strong> ${formatMoney(simulation.totalWithInterest)}</span>
-                                <span><strong>Cuota estimada:</strong> ${formatMoney(simulation.paymentAmount)}</span>
-                                <span><strong>Cuotas:</strong> {simulation.numberOfPayments}</span>
-                                {derivedTermInfo && (
-                                    <span><strong>Plazo estimado:</strong> {derivedTermInfo.termMonths} meses</span>
-                                )}
-                                {useFixedInstallment && installmentAmount && (
-                                    <span><strong>Cuota deseada:</strong> ${installmentAmount}</span>
-                                )}
-                            </div>
-                            <div className="max-h-60 overflow-y-auto bg-white rounded-md border border-gray-200">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="bg-white text-gray-600">
-                                        <tr>
-                                            <th className="py-2 px-3 w-10">#</th>
-                                            <th className="py-2 px-3 w-32">Día</th>
-                                            <th className="py-2 px-3 w-32">Fecha</th>
-                                            <th className="py-2 px-3">Monto</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                        {paymentPlanView.map((p, idx) => {
-                                            const dueDate = p.dueDate ? new Date(p.dueDate) : null;
-                                            const due = dueDate ? dueDate.toLocaleDateString() : '-';
-                                            const day = dueDate
-                                                ? new Intl.DateTimeFormat('es-CO', { weekday: 'long' }).format(dueDate)
-                                                : '-';
-                                            const amount = p.scheduledAmount ? formatMoney(p.scheduledAmount) : '-';
-                                            return (
-                                                <tr key={p.installmentNumber || idx} className="text-gray-800">
-                                                    <td className="py-2 px-3">{p.installmentNumber ?? idx + 1}</td>
-                                                    <td className="py-2 px-3 capitalize">{day}</td>
-                                                    <td className="py-2 px-3">{due}</td>
-                                                    <td className="py-2 px-3">{amount === '-' ? '-' : `$${amount}`}</td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {paymentPlanView.length === 0 && (
-                                            <tr>
-                                                <td className="py-3 text-center text-primary-600" colSpan={4}>
-                                                    Sin cuotas generadas
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
+
+                            {/* Fecha inicio */}
+                            <div>
+                                <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de inicio</label>
+                                <input
+                                    type="date"
+                                    value={formData.startDate}
+                                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                />
                             </div>
                         </div>
-                    )}
-                </form>
+
+                        {/* Espacio inferior para que el contenido no quede tapado */}
+                        <div className="h-2" />
+
+                        {simulation && (
+                            <div className="border rounded-lg p-4 bg-white space-y-4">
+                                <div className="flex flex-col gap-2 text-sm text-primary-900 md:flex-row md:items-center md:justify-between">
+                                    <div className="flex flex-wrap gap-4">
+                                        <span><strong>Cliente:</strong> {selectedClient?.fullName || clientSearch}</span>
+                                        <span><strong>Documento:</strong> {selectedClient?.cedula || '-'}</span>
+                                        <span><strong>Tel:</strong> {selectedClient?.phone || '-'}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadPDF}
+                                        className="inline-flex items-center gap-2 px-3 py-2 border border-primary-600 text-primary-700 bg-white rounded-md text-sm font-medium hover:bg-primary-50 transition"
+                                    >
+                                        <Download size={16} /> Descargar PDF
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-4 text-sm text-primary-900">
+                                    <span><strong>Total con interés:</strong> ${formatMoney(simulation.totalWithInterest)}</span>
+                                    <span><strong>Cuota estimada:</strong> ${formatMoney(simulation.paymentAmount)}</span>
+                                    <span><strong>Cuotas:</strong> {simulation.numberOfPayments}</span>
+                                    {derivedTermInfo && (
+                                        <span><strong>Plazo estimado:</strong> {derivedTermInfo.termMonths} meses</span>
+                                    )}
+                                    {useFixedInstallment && installmentAmount && (
+                                        <span><strong>Cuota deseada:</strong> ${installmentAmount}</span>
+                                    )}
+                                </div>
+                                <div className="max-h-60 overflow-y-auto bg-white rounded-md border border-gray-200">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-white text-gray-600">
+                                            <tr>
+                                                <th className="py-2 px-3 w-10">#</th>
+                                                <th className="py-2 px-3 w-32">Día</th>
+                                                <th className="py-2 px-3 w-32">Fecha</th>
+                                                <th className="py-2 px-3">Monto</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {paymentPlanView.map((p, idx) => {
+                                                const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+                                                const due = dueDate ? dueDate.toLocaleDateString() : '-';
+                                                const day = dueDate
+                                                    ? new Intl.DateTimeFormat('es-CO', { weekday: 'long' }).format(dueDate)
+                                                    : '-';
+                                                const amount = p.scheduledAmount ? formatMoney(p.scheduledAmount) : '-';
+                                                return (
+                                                    <tr key={p.installmentNumber || idx} className="text-gray-800">
+                                                        <td className="py-2 px-3">{p.installmentNumber ?? idx + 1}</td>
+                                                        <td className="py-2 px-3 capitalize">{day}</td>
+                                                        <td className="py-2 px-3">{due}</td>
+                                                        <td className="py-2 px-3">{amount === '-' ? '-' : `$${amount}`}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {paymentPlanView.length === 0 && (
+                                                <tr>
+                                                    <td className="py-3 text-center text-primary-600" colSpan={4}>
+                                                        Sin cuotas generadas
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </form>
+                </div>{/* fin scrollable */}
+
+                {/* Botones FIJOS al fondo - siempre visibles */}
+                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-3 flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={handleSimulate}
+                        disabled={isLoading}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 text-gray-800 rounded-xl hover:bg-gray-200 transition disabled:opacity-50 font-medium text-sm"
+                    >
+                        <Calculator size={18} /> Simular
+                    </button>
+                    <button
+                        type="submit"
+                        form="credit-form"
+                        disabled={isLoading}
+                        onClick={handleSubmit}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition disabled:opacity-50 font-medium text-sm"
+                    >
+                        <Save size={18} /> {isLoading ? 'Guardando...' : 'Guardar Crédito'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="hidden sm:flex items-center gap-2 px-4 py-3 text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition font-medium text-sm"
+                    >
+                        Cancelar
+                    </button>
+                </div>
             </div>
         </div>
     );
