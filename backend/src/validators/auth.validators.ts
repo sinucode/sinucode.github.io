@@ -60,6 +60,40 @@ export const changePasswordValidation = [
         .notEmpty()
         .withMessage('New password is required')
         .isLength({ min: 8 })
+        .withMessage('New password must contain at least one uppercase letter, one lowercase letter, and one number'),
+];
+
+/**
+ * Validaciones para solicitar recuperación de contraseña
+ */
+export const forgotPasswordValidation = [
+    body('email')
+        .isEmail()
+        .withMessage('Must be a valid email')
+        .normalizeEmail()
+        .toLowerCase(),
+];
+
+/**
+ * Validaciones para restablecer contraseña
+ */
+export const resetPasswordValidation = [
+    body('email')
+        .isEmail()
+        .withMessage('Must be a valid email')
+        .normalizeEmail()
+        .toLowerCase(),
+    body('code')
+        .isString()
+        .notEmpty()
+        .withMessage('Code is required')
+        .isLength({ min: 6, max: 6 })
+        .withMessage('Code must be exactly 6 characters'),
+    body('newPassword')
+        .isString()
+        .notEmpty()
+        .withMessage('New password is required')
+        .isLength({ min: 8 })
         .withMessage('New password must be at least 8 characters')
         .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
         .withMessage('New password must contain at least one uppercase letter, one lowercase letter, and one number'),

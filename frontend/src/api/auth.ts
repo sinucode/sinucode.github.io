@@ -51,3 +51,25 @@ export const changePassword = async (
         newPassword,
     });
 };
+
+/**
+ * Solicitar recuperación de contraseña
+ */
+export const forgotPassword = async (email: string): Promise<void> => {
+    await api.post('/auth/forgot-password', { email });
+};
+
+/**
+ * Restablecer contraseña con código
+ */
+export const resetPassword = async (
+    email: string,
+    code: string,
+    newPassword: string
+): Promise<void> => {
+    await api.post('/auth/reset-password', {
+        email,
+        code,
+        newPassword,
+    });
+};
