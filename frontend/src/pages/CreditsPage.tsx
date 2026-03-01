@@ -140,6 +140,7 @@ export default function CreditsPage() {
                 <CreditForm
                     onClose={() => setIsFormOpen(false)}
                     onCreated={handleCreated}
+                    selectedBusinessId={selectedBusinessId}
                 />
             )}
         </div>

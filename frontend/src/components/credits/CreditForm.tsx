@@ -11,6 +11,7 @@ import jsPDF from 'jspdf';
 interface CreditFormProps {
     onClose: () => void;
     onCreated: (id: string) => void;
+    selectedBusinessId?: string;
 }
 
 const frequencies: { value: PaymentFrequency; label: string }[] = [
@@ -29,7 +30,7 @@ const gapDaysMap: Record<PaymentFrequency, number> = {
 };
 const DAYS_PER_MONTH = 28; // se considera 1 mes = 4 semanas
 
-const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
+const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBusinessId }) => {
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
 
@@ -44,7 +45,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
         termMonths: '',
         frequency: 'weekly' as PaymentFrequency,
         startDate: new Date().toISOString().slice(0, 10),
-        businessId: '',
+        businessId: selectedBusinessId || '',
     });
     const [useFixedInstallment, setUseFixedInstallment] = useState(false);
     const [installmentAmount, setInstallmentAmount] = useState('');
@@ -63,6 +64,17 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
             setFormData((prev) => ({ ...prev, businessId: businesses[0].id }));
         }
     }, [businesses, formData.businessId, isSuperAdmin]);
+
+    // Alinear con el negocio seleccionado si está definido en la vista de lista
+    useEffect(() => {
+        if (isSuperAdmin && selectedBusinessId) {
+            setFormData((prev) => ({ ...prev, businessId: selectedBusinessId }));
+            // Resetear búsqueda de cliente al cambiar de negocio
+            setClientSearch('');
+            setSelectedClientId('');
+            setSelectedClient(null);
+        }
+    }, [selectedBusinessId, isSuperAdmin]);
 
     const { data: clientResults } = useQuery({
         queryKey: ['clients', 'search', clientSearch, formData.businessId],
