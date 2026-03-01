@@ -43,13 +43,22 @@ export class UserService {
                 isActive: true,
                 createdAt: true,
                 updatedAt: true,
+                userBusinesses: {
+                    select: {
+                        businessId: true,
+                        business: {
+                            select: { id: true, name: true },
+                        },
+                    },
+                    take: 1,
+                },
             },
             orderBy: {
                 createdAt: 'desc',
             },
         });
 
-        // Map id to userId for frontend compatibility
+        // Map id to userId and include assigned business
         return users.map(user => ({
             userId: user.id,
             email: user.email,
@@ -58,6 +67,8 @@ export class UserService {
             isActive: user.isActive,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
+            businessId: user.userBusinesses[0]?.business?.id || null,
+            businessName: user.userBusinesses[0]?.business?.name || null,
         }));
     }
 
@@ -75,6 +86,12 @@ export class UserService {
                 isActive: true,
                 createdAt: true,
                 updatedAt: true,
+                userBusinesses: {
+                    select: {
+                        business: { select: { id: true, name: true } },
+                    },
+                    take: 1,
+                },
             },
         });
 
@@ -87,7 +104,17 @@ export class UserService {
             throw new Error('Insufficient permissions to view this user');
         }
 
-        return user;
+        return {
+            userId: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            isActive: user.isActive,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            businessId: user.userBusinesses[0]?.business?.id || null,
+            businessName: user.userBusinesses[0]?.business?.name || null,
+        };
     }
 
     /**
@@ -232,8 +259,8 @@ export class UserService {
             },
         });
 
-        // Reasignar negocio si rol user y viene businessId
-        if (updatedUser.role === 'user' && data.businessId) {
+        // Reasignar negocio si viene businessId (para admin y user)
+        if (data.businessId) {
             await prisma.userBusiness.deleteMany({
                 where: { userId },
             });
@@ -242,6 +269,12 @@ export class UserService {
                     userId,
                     businessId: data.businessId,
                 },
+            });
+        }
+        // Si se quita businessId explícitamente (cadena vacía), eliminar asignación
+        else if (data.businessId === '') {
+            await prisma.userBusiness.deleteMany({
+                where: { userId },
             });
         }
 

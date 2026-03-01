@@ -35,7 +35,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                 fullName: initialData.fullName,
                 password: '', // Password is empty for updates unless changed
                 role: initialData.role,
-                businessId: (initialData as any).businessId || '',
+                businessId: initialData.businessId || '',
             });
         }
     }, [initialData]);
@@ -117,8 +117,8 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
             }
         }
 
-        // Validar negocio si rol user
-        if (formData.role === 'user' && !formData.businessId) {
+        // Validar negocio si rol user o admin
+        if ((formData.role === 'user' || formData.role === 'admin') && !formData.businessId && !initialData) {
             setError('Selecciona un negocio para el usuario');
             return;
         }
@@ -128,7 +128,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                 email: formData.email,
                 fullName: formData.fullName,
                 role: formData.role,
-                businessId: formData.role === 'user' ? formData.businessId : undefined,
+                businessId: formData.businessId || '',
             };
             if (formData.password) {
                 updateData.password = formData.password;
@@ -223,17 +223,18 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                         </select>
                     </div>
 
-                    {formData.role === 'user' && (currentUserRole === 'super_admin' || currentUserRole === 'admin') && (
+                    {(formData.role === 'user' || formData.role === 'admin') && (currentUserRole === 'super_admin' || currentUserRole === 'admin') && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Negocio
+                                Negocio Asignado
+                                {formData.role === 'admin' && <span className="ml-1 text-xs text-gray-400">(opcional)</span>}
                             </label>
                             <select
                                 value={formData.businessId}
                                 onChange={(e) => setFormData({ ...formData, businessId: e.target.value })}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                             >
-                                <option value="">Seleccione negocio</option>
+                                <option value="">Sin asignar</option>
                                 {businesses?.map((b) => (
                                     <option key={b.id} value={b.id}>{b.name}</option>
                                 ))}

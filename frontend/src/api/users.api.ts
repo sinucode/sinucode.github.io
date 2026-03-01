@@ -8,6 +8,8 @@ export interface User {
     isActive: boolean;
     createdAt: string;
     updatedAt: string;
+    businessId?: string | null;
+    businessName?: string | null;
 }
 
 export interface CreateUserData {
