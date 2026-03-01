@@ -248,8 +248,8 @@ export default function CreditDetailPage() {
             };
         });
 
-        const sortedExisting = [...credit.paymentSchedule].sort((a, b) => (a.installmentNumber ?? 0) - (b.installmentNumber ?? 0));
-        const newRows = Array.from({ length: targetCount }).map((_, idx) => {
+        const sortedExisting = [...credit.paymentSchedule].sort((a: any, b: any) => (a.installmentNumber ?? 0) - (b.installmentNumber ?? 0));
+        const newRows = Array.from({ length: targetCount }).map((_, idx: number) => {
             const sim = plan[idx];
             const existing = sortedExisting[idx];
             const status = existing?.status || 'pending';
@@ -681,7 +681,7 @@ export default function CreditDetailPage() {
                                                         value={new Date(row.dueDate).toISOString().slice(0, 10)}
                                                         onChange={(e) =>
                                                             setEditRows((prev) =>
-                                                                prev.map((r, i) =>
+                                                                prev.map((r: any, i: number) =>
                                                                     i === idx ? { ...r, dueDate: e.target.value as any } : r
                                                                 )
                                                             )
@@ -697,7 +697,7 @@ export default function CreditDetailPage() {
                                                             const raw = e.target.value.replace(/[^0-9]/g, '');
                                                             const num = raw ? Number(raw) : 0;
                                                             setEditRows((prev) =>
-                                                                prev.map((r, i) =>
+                                                                prev.map((r: any, i: number) =>
                                                                     i === idx ? { ...r, scheduledAmount: num as any } : r
                                                                 )
                                                             );
@@ -713,14 +713,14 @@ export default function CreditDetailPage() {
                                         <tr>
                                             <td colSpan={2} className="px-3 py-3 text-right text-gray-700">Total de cuotas:</td>
                                             <td className="px-3 py-3 text-gray-900">
-                                                {formatMoney(editRows.reduce((sum, r) => sum + Number(r.scheduledAmount || 0), 0))}
+                                                {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.scheduledAmount || 0), 0))}
                                             </td>
                                             <td></td>
                                         </tr>
                                         <tr>
                                             <td colSpan={2} className="px-3 py-3 text-right text-gray-700">Total pagado:</td>
                                             <td className="px-3 py-3 text-gray-900">
-                                                {formatMoney(editRows.reduce((sum, r) => sum + Number(r.paidAmount || 0), 0))}
+                                                {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.paidAmount || 0), 0))}
                                             </td>
                                             <td></td>
                                         </tr>
@@ -737,7 +737,7 @@ export default function CreditDetailPage() {
                                 <button
                                     onClick={() => {
                                         setEditError('');
-                                        const payload = editRows.map((r, idx) => ({
+                                        const payload = editRows.map((r: any, idx: number) => ({
                                             id: r.id,
                                             dueDate: new Date(r.dueDate).toISOString(),
                                             scheduledAmount: Math.ceil(Number(r.scheduledAmount || 0)),
