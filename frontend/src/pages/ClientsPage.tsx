@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Edit2, Trash2, UserCheck, Download } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { getClients, deleteClient, bulkDeleteClients, Client } from '../api/clients.api';
+import { getClients, deleteClient, Client } from '../api/clients.api';
 import { getBusinesses } from '../api/business.api';
 import ClientForm from '../components/clients/ClientForm';
 import { ImportClientsDialog } from '../components/clients/ImportClientsDialog';
