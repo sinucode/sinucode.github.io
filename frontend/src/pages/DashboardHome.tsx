@@ -6,6 +6,7 @@ import { getCredits } from '../api/credits.api';
 import { getCashFlow } from '../api/cash.api';
 import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
+import ColombianCalendar from '../components/dashboard/ColombianCalendar';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
 
@@ -94,21 +95,46 @@ export default function DashboardHome() {
                 <StatCard title="Pagos hoy" value={String(stats.pagosHoy)} icon="📅" color="purple" />
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <QuickActionButton title="Nuevo Cliente" icon="➕" onClick={() => navigate('/clients')} />
-                    <QuickActionButton title="Nuevo Crédito" icon="💳" onClick={() => navigate('/credits')} />
-                    <QuickActionButton title="Registrar Pago" icon="💵" onClick={() => navigate('/credits')} />
+            {/* Calendario + Panel lateral */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Calendario ocupa 2/3 */}
+                <div className="lg:col-span-2">
+                    <ColombianCalendar credits={credits || []} />
                 </div>
-            </div>
 
-            {/* Resumen de cartera */}
-            <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Cartera</h3>
-                <p className="text-sm text-primary-900">Saldo pendiente total: <strong>{formatMoney(stats.saldoPendiente)}</strong></p>
-                <p className="text-sm text-gray-600 mt-2">Fuente: créditos cargados. Para métricas precisas conecta clientes y pagos reales.</p>
+                {/* Panel lateral */}
+                <div className="space-y-4">
+                    {/* Quick Actions */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3">Acciones Rápidas</h3>
+                        <div className="grid grid-cols-1 gap-3">
+                            <QuickActionButton title="Nuevo Cliente" icon="➕" onClick={() => navigate('/clients')} />
+                            <QuickActionButton title="Nuevo Crédito" icon="💳" onClick={() => navigate('/credits')} />
+                            <QuickActionButton title="Registrar Pago" icon="💵" onClick={() => navigate('/credits')} />
+                        </div>
+                    </div>
+
+                    {/* Resumen cartera */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-3">Resumen de Cartera</h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-sm text-gray-600">Saldo pendiente</span>
+                                <span className="text-sm font-bold text-primary-700">{formatMoney(stats.saldoPendiente)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-sm text-gray-600">Créditos activos</span>
+                                <span className="text-sm font-bold text-green-600">{stats.activeCredits}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2">
+                                <span className="text-sm text-gray-600">Pagos hoy</span>
+                                <span className={`text-sm font-bold ${stats.pagosHoy > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                    {stats.pagosHoy}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -139,10 +165,10 @@ function QuickActionButton({ title, icon, onClick }: { title: string; icon: stri
     return (
         <button
             onClick={onClick}
-            className="flex items-center gap-3 p-4 bg-white hover:bg-slate-50 rounded-lg transition border border-gray-200"
+            className="flex items-center gap-3 p-3 bg-white hover:bg-primary-50 rounded-lg transition border border-gray-200 hover:border-primary-200 text-left w-full"
         >
             <span className="text-2xl">{icon}</span>
-            <span className="font-medium text-gray-900">{title}</span>
+            <span className="font-medium text-gray-900 text-sm">{title}</span>
         </button>
     );
 }
