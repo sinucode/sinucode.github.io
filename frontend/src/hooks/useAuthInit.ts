@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { useBusinessStore } from '../store/businessStore';
 import { getCurrentUser } from '../api/auth';
 
 /**
@@ -23,6 +24,11 @@ export const useAuthInit = () => {
                 // Verificar si el token es válido obteniendo el usuario actual
                 const user = await getCurrentUser();
                 setUser(user);
+
+                if (user?.role === 'user' && user.assignedBusiness) {
+                    useBusinessStore.getState().setSelectedBusiness(user.assignedBusiness.id, user.assignedBusiness.name);
+                }
+
                 setLoading(false);
             } catch (error) {
                 // Token inválido o expirado, limpiar la sesión

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useBusinessStore } from '../store/businessStore';
 import { login as loginApi } from '../api/auth';
 import { Lock, Mail, LogIn } from 'lucide-react';
 import ForgotPasswordForm from '../components/auth/ForgotPasswordForm';
@@ -24,6 +25,11 @@ export default function LoginPage() {
         try {
             const response = await loginApi({ email, password });
             login(response.accessToken, response.refreshToken, response.user as any);
+
+            if (response.user.role === 'user' && response.user.assignedBusiness) {
+                useBusinessStore.getState().setSelectedBusiness(response.user.assignedBusiness.id, response.user.assignedBusiness.name);
+            }
+
             navigate('/dashboard');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Error al iniciar sesión');

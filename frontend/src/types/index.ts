@@ -9,6 +9,10 @@ export interface User {
     isActive: boolean;
     createdAt: string;
     updatedAt: string;
+    assignedBusiness?: {
+        id: string;
+        name: string;
+    };
 }
 
 // Tipos de negocio
@@ -173,6 +177,10 @@ export interface LoginResponse {
         isActive: boolean;
         createdAt: string;
         updatedAt: string;
+        assignedBusiness?: {
+            id: string;
+            name: string;
+        };
     };
 }
 

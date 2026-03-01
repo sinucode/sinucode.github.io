@@ -18,6 +18,10 @@ export interface LoginResult {
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
+        assignedBusiness?: {
+            id: string;
+            name: string;
+        };
     };
 }
 
@@ -32,9 +36,15 @@ export const login = async (
     userAgent?: string
 ): Promise<LoginResult> => {
     try {
-        // Buscar usuario por email
+        // Buscar usuario por email con su negocio asignado (si lo tiene)
         const user = await prisma.user.findUnique({
             where: { email: email.toLowerCase() },
+            include: {
+                userBusinesses: {
+                    include: { business: true },
+                    take: 1
+                }
+            }
         });
 
         if (!user) {
@@ -99,6 +109,10 @@ export const login = async (
                 isActive: user.isActive,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
+                assignedBusiness: user.userBusinesses && user.userBusinesses.length > 0 ? {
+                    id: user.userBusinesses[0].business.id,
+                    name: user.userBusinesses[0].business.name
+                } : undefined,
             },
         };
     } catch (error) {

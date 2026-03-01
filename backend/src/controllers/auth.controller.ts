@@ -115,6 +115,14 @@ export const me = async (req: Request, res: Response): Promise<void> => {
                 isActive: true,
                 createdAt: true,
                 updatedAt: true,
+                userBusinesses: {
+                    select: {
+                        business: {
+                            select: { id: true, name: true }
+                        }
+                    },
+                    take: 1
+                }
             },
         });
 
@@ -136,6 +144,10 @@ export const me = async (req: Request, res: Response): Promise<void> => {
                 isActive: user.isActive,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
+                assignedBusiness: user.userBusinesses && user.userBusinesses.length > 0 ? {
+                    id: user.userBusinesses[0].business.id,
+                    name: user.userBusinesses[0].business.name
+                } : undefined,
             },
         });
     } catch (error) {
