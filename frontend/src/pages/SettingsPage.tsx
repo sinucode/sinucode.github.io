@@ -102,14 +102,14 @@ export default function SettingsPage() {
                                 group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm
                                 ${activeTab === tab.id
                                     ? 'border-primary-500 text-primary-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    : 'border-transparent text-primary-600 hover:text-primary-900 hover:border-primary-200'
                                 }
                             `}
                         >
                             <span
                                 className={`mr-2 ${activeTab === tab.id
                                     ? 'text-primary-500'
-                                    : 'text-gray-400 group-hover:text-gray-500'
+                                    : 'text-gray-400 group-hover:text-primary-600'
                                     }`}
                             >
                                 {tab.icon}
@@ -130,29 +130,29 @@ export default function SettingsPage() {
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">
                                         Nombre Completo
                                     </label>
                                     <input
                                         type="text"
                                         value={user?.fullName || ''}
                                         disabled
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md bg-slate-50"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">
                                         Email
                                     </label>
                                     <input
                                         type="email"
                                         value={user?.email || ''}
                                         disabled
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md bg-slate-50"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">
                                         Rol
                                     </label>
                                     <input
@@ -165,7 +165,7 @@ export default function SettingsPage() {
                                                     : 'Usuario'
                                         }
                                         disabled
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md bg-slate-50"
                                     />
                                 </div>
                             </div>

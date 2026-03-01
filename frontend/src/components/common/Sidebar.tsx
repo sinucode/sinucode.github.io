@@ -79,7 +79,7 @@ function SidebarLink({ to, icon, label }: { to: string; icon: React.ReactNode; l
             to={to}
             className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${isActive
-                    ? 'bg-primary-600 text-white shadow-md shadow-primary-600/20'
+                    ? 'bg-primary-500 text-white shadow-md shadow-primary-600/20'
                     : 'text-primary-200 hover:bg-primary-800/50 hover:text-white'
                 }`
             }

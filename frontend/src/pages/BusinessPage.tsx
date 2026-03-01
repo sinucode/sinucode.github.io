@@ -79,7 +79,7 @@ export default function BusinessPage() {
                 {canManage && (
                     <button
                         onClick={() => setShowCreateForm(true)}
-                        className="w-full sm:w-auto bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 flex items-center justify-center gap-2"
+                        className="w-full sm:w-auto bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 flex items-center justify-center gap-2"
                     >
                         <Plus className="w-5 h-5" />
                         Crear Negocio
@@ -91,27 +91,27 @@ export default function BusinessPage() {
                 {/* Responsive table wrapper with horizontal scroll */}
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                        <thead className="bg-white">
                             <tr>
-                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                     Nombre
                                 </th>
                                 {/* Hide description on very small screens */}
-                                <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                     Descripción
                                 </th>
-                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                     Capital Inicial
                                 </th>
-                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                     Balance
                                 </th>
                                 {/* Hide created date on small screens */}
-                                <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                     Creado
                                 </th>
                                 {canManage && (
-                                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                         Acciones
                                     </th>
                                 )}
@@ -119,19 +119,19 @@ export default function BusinessPage() {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {businesses?.map((business) => (
-                                <tr key={business.id} className="hover:bg-gray-50">
+                                <tr key={business.id} className="hover:bg-primary-50">
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                                         <div className="text-sm font-medium text-gray-900">
                                             {business.name}
                                         </div>
                                         {/* Show description on mobile below name */}
-                                        <div className="md:hidden text-xs text-gray-500 mt-1 line-clamp-2">
+                                        <div className="md:hidden text-xs text-primary-600 mt-1 line-clamp-2">
                                             {business.description || '—'}
                                         </div>
                                     </td>
                                     {/* Description column for larger screens */}
                                     <td className="hidden md:table-cell px-3 sm:px-6 py-4">
-                                        <div className="text-sm text-gray-500 max-w-xs truncate">
+                                        <div className="text-sm text-primary-600 max-w-xs truncate">
                                             {business.description || '—'}
                                         </div>
                                     </td>
@@ -152,7 +152,7 @@ export default function BusinessPage() {
                                     </td>
                                     {/* Created date for larger screens */}
                                     <td className="hidden lg:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-gray-500">
+                                        <div className="text-sm text-primary-600">
                                             {formatDate(business.createdAt)}
                                         </div>
                                     </td>
@@ -188,7 +188,7 @@ export default function BusinessPage() {
                 </div>
 
                 {businesses?.length === 0 && (
-                    <div className="text-center py-8 sm:py-12 text-gray-500 px-4">
+                    <div className="text-center py-8 sm:py-12 text-primary-600 px-4">
                         {canManage
                             ? 'No hay negocios registrados. Crea uno para empezar.'
                             : 'No hay negocios disponibles.'}

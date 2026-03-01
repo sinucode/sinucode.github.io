@@ -108,13 +108,13 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                     <div className="p-6 space-y-6 overflow-y-auto flex-1">
                         {/* Business Selector */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-primary-900 mb-2">
                                 Negocio Origen
                             </label>
                             <select
                                 value={sourceBusinessId}
                                 onChange={(e) => setSourceBusinessId(e.target.value)}
-                                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-4 py-2.5 border border-primary-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 disabled={loadingBusinesses || importMutation.isPending}
                                 required
                             >
@@ -137,7 +137,7 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                         {sourceBusinessId && (
                             <div>
                                 <div className="flex items-center justify-between mb-3">
-                                    <label className="text-sm font-medium text-gray-700">
+                                    <label className="text-sm font-medium text-primary-900">
                                         Clientes Disponibles ({sourceClients?.length || 0})
                                     </label>
                                     {sourceClients && sourceClients.length > 0 && (
@@ -151,9 +151,9 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                                     )}
                                 </div>
 
-                                <div className="border border-gray-300 rounded-lg max-h-64 overflow-y-auto">
+                                <div className="border border-primary-200 rounded-lg max-h-64 overflow-y-auto">
                                     {loadingClients ? (
-                                        <div className="p-8 text-center text-gray-500">
+                                        <div className="p-8 text-center text-primary-600">
                                             Cargando clientes...
                                         </div>
                                     ) : sourceClients && sourceClients.length > 0 ? (
@@ -161,7 +161,7 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                                             {sourceClients.map((client) => (
                                                 <label
                                                     key={client.id}
-                                                    className="flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                                                    className="flex items-center gap-3 p-3 hover:bg-primary-50 cursor-pointer transition-colors"
                                                 >
                                                     <div className="flex-shrink-0">
                                                         {selectedClientIds.has(client.id) ? (
@@ -180,7 +180,7 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                                                         <p className="font-medium text-gray-900">
                                                             {client.fullName}
                                                         </p>
-                                                        <p className="text-sm text-gray-500">
+                                                        <p className="text-sm text-primary-600">
                                                             {client.phone} • {client.cedula}
                                                         </p>
                                                     </div>
@@ -188,7 +188,7 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="p-8 text-center text-gray-500">
+                                        <div className="p-8 text-center text-primary-600">
                                             No hay clientes en este negocio
                                         </div>
                                     )}
@@ -256,7 +256,7 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            className="flex-1 px-4 py-2.5 border border-primary-200 text-primary-900 rounded-lg hover:bg-primary-50 transition-colors font-medium"
                         >
                             {importResult ? 'Cerrar' : 'Cancelar'}
                         </button>

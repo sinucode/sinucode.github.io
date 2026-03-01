@@ -41,7 +41,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-primary-300 dark:bg-primary-600 rounded-full border border-primary-50 dark:border-gray-800;
+  @apply bg-primary-300 dark:bg-primary-500 rounded-full border border-primary-50 dark:border-gray-800;
 }
 
 ::-webkit-scrollbar-thumb:hover {

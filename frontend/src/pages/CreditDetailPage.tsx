@@ -13,7 +13,7 @@ const statusColors: Record<PaymentSchedule['status'], string> = {
     paid: 'text-green-600 bg-green-50',
     overdue: 'text-red-600 bg-red-50',
     partial: 'text-amber-600 bg-amber-50',
-    pending: 'text-gray-600 bg-gray-100',
+    pending: 'text-gray-600 bg-slate-50',
 };
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
@@ -292,7 +292,7 @@ export default function CreditDetailPage() {
                     )}
                     <button
                         onClick={() => setIsPaymentOpen(true)}
-                        className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+                        className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600"
                     >
                         Registrar Pago
                     </button>
@@ -306,7 +306,7 @@ export default function CreditDetailPage() {
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
-                <div className="flex flex-wrap gap-4 text-sm text-gray-700">
+                <div className="flex flex-wrap gap-4 text-sm text-primary-900">
                     <span><strong>Cliente:</strong> {credit.client?.fullName}</span>
                     <span><strong>Interés:</strong> {credit.interestRate}%</span>
                     <span><strong>Frecuencia:</strong> {credit.paymentFrequency}</span>
@@ -315,10 +315,10 @@ export default function CreditDetailPage() {
                 </div>
 
                 <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Plan de pagos</h3>
+                    <h3 className="text-sm font-semibold text-primary-900 mb-2">Plan de pagos</h3>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
-                            <thead className="bg-gray-50 text-gray-700">
+                            <thead className="bg-white text-primary-900">
                                 <tr>
                                     <th className="px-3 py-2">#</th>
                                     <th className="px-3 py-2">Fecha</th>
@@ -329,7 +329,7 @@ export default function CreditDetailPage() {
                             </thead>
                             <tbody className="divide-y">
                                 {credit.paymentSchedule.map((p: any, idx: number) => (
-                                    <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                    <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-white'}>
                                         <td className="px-3 py-2 text-gray-900">{p.installmentNumber}</td>
                                         <td className="px-3 py-2 text-gray-900">{new Date(p.dueDate).toLocaleDateString()}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatMoney(p.scheduledAmount)}</td>
@@ -340,7 +340,7 @@ export default function CreditDetailPage() {
                                                 disabled={p.status === 'paid'}
                                                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${p.status === 'paid'
                                                     ? statusColors.paid
-                                                    : 'text-gray-600 bg-gray-100'
+                                                    : 'text-gray-600 bg-slate-50'
                                                     } ${p.status !== 'paid' ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}
                                             >
                                                 {renderStatusIcon(p.status === 'paid' ? 'paid' : 'pending')}
@@ -351,7 +351,7 @@ export default function CreditDetailPage() {
                                 ))}
                                 {credit.paymentSchedule.length === 0 && (
                                     <tr>
-                                        <td className="px-3 py-3 text-gray-500" colSpan={5}>Sin cuotas registradas</td>
+                                        <td className="px-3 py-3 text-primary-600" colSpan={5}>Sin cuotas registradas</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -366,12 +366,12 @@ export default function CreditDetailPage() {
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
-                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Método</th>
-                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notas</th>
-                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recibo</th>
+                                <tr className="bg-white">
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Fecha</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Monto</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Método</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Notas</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Recibo</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -505,7 +505,7 @@ export default function CreditDetailPage() {
                                 })()}
                                 {(!credit.payments || credit.payments.filter((p: any) => p && p.id && p.paymentDate && p.amount).length === 0) && (
                                     <tr>
-                                        <td className="px-3 py-3 text-gray-500" colSpan={5}>Sin pagos registrados</td>
+                                        <td className="px-3 py-3 text-primary-600" colSpan={5}>Sin pagos registrados</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -549,7 +549,7 @@ export default function CreditDetailPage() {
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between p-5 border-b">
                             <h3 className="text-lg font-semibold text-gray-800">Editar plan de pagos</h3>
-                            <button onClick={() => setIsEditOpen(false)} className="text-gray-500 hover:text-gray-700">
+                            <button onClick={() => setIsEditOpen(false)} className="text-primary-600 hover:text-primary-900">
                                 <X size={20} />
                             </button>
                         </div>
@@ -557,7 +557,7 @@ export default function CreditDetailPage() {
                             {editError && <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{editError}</div>}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Monto *</label>
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">Monto *</label>
                                     <input
                                         type="text"
                                         value={editForm.amount}
@@ -566,38 +566,38 @@ export default function CreditDetailPage() {
                                             const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
                                             setEditForm((prev) => ({ ...prev, amount: formatted }));
                                         }}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Interés (%) *</label>
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">Interés (%) *</label>
                                     <input
                                         type="number"
                                         value={editForm.interestRate}
                                         onChange={(e) => setEditForm((prev) => ({ ...prev, interestRate: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                         min="0"
                                         step="0.01"
                                     />
                                 </div>
                                 <div className="grid grid-cols-12 gap-2">
                                     <div className="col-span-7">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Plazo</label>
+                                        <label className="block text-sm font-medium text-primary-900 mb-1">Plazo</label>
                                         <input
                                             type="number"
                                             value={editForm.termValue}
                                             onChange={(e) => setEditForm((prev) => ({ ...prev, termValue: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                             min="1"
                                             step="1"
                                         />
                                     </div>
                                     <div className="col-span-5">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Unidad</label>
+                                        <label className="block text-sm font-medium text-primary-900 mb-1">Unidad</label>
                                         <select
                                             value={editForm.termUnit}
                                             onChange={(e) => setEditForm((prev) => ({ ...prev, termUnit: e.target.value as any }))}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                         >
                                             <option value="daily">Días</option>
                                             <option value="weekly">Semanas</option>
@@ -606,11 +606,11 @@ export default function CreditDetailPage() {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Frecuencia</label>
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">Frecuencia</label>
                                     <select
                                         value={editForm.frequency}
                                         onChange={(e) => setEditForm((prev) => ({ ...prev, frequency: e.target.value as PaymentFrequency }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     >
                                         <option value="daily">Diario</option>
                                         <option value="weekly">Semanal</option>
@@ -619,12 +619,12 @@ export default function CreditDetailPage() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de inicio</label>
+                                    <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de inicio</label>
                                     <input
                                         type="date"
                                         value={editForm.startDate}
                                         onChange={(e) => setEditForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     />
                                 </div>
                                 <div className="md:col-span-1">
@@ -633,7 +633,7 @@ export default function CreditDetailPage() {
                                             type="checkbox"
                                             checked={editForm.useFixedInstallment}
                                             onChange={(e) => setEditForm((prev) => ({ ...prev, useFixedInstallment: e.target.checked }))}
-                                            className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                                            className="w-4 h-4 text-primary-600 border-primary-200 rounded"
                                         />
                                         Usar cuota fija
                                     </label>
@@ -645,7 +645,7 @@ export default function CreditDetailPage() {
                                             const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
                                             setEditForm((prev) => ({ ...prev, installmentAmount: formatted }));
                                         }}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                         placeholder="Ej: 100.000"
                                         disabled={!editForm.useFixedInstallment}
                                     />
@@ -654,7 +654,7 @@ export default function CreditDetailPage() {
                             <div className="flex justify-end">
                                 <button
                                     onClick={handleSimulateEdit}
-                                    className="px-4 py-2 bg-gray-100 text-gray-800 rounded-md hover:bg-gray-200 text-sm"
+                                    className="px-4 py-2 bg-slate-50 text-gray-800 rounded-md hover:bg-gray-200 text-sm"
                                     type="button"
                                 >
                                     Simular nuevo plan
@@ -662,7 +662,7 @@ export default function CreditDetailPage() {
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="bg-gray-50 text-gray-600">
+                                    <thead className="bg-white text-gray-600">
                                         <tr>
                                             <th className="px-3 py-2">#</th>
                                             <th className="px-3 py-2">Fecha</th>
@@ -686,7 +686,7 @@ export default function CreditDetailPage() {
                                                                 )
                                                             )
                                                         }
-                                                        className="px-2 py-1 border border-gray-300 rounded-md bg-white text-gray-900"
+                                                        className="px-2 py-1 border border-primary-200 rounded-md bg-white text-gray-900"
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2">
@@ -702,23 +702,23 @@ export default function CreditDetailPage() {
                                                                 )
                                                             );
                                                         }}
-                                                        className="px-2 py-1 border border-gray-300 rounded-md bg-white text-gray-900"
+                                                        className="px-2 py-1 border border-primary-200 rounded-md bg-white text-gray-900"
                                                     />
                                                 </td>
-                                                <td className="px-3 py-2 text-gray-700">{formatMoney(row.paidAmount)}</td>
+                                                <td className="px-3 py-2 text-primary-900">{formatMoney(row.paidAmount)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
-                                    <tfoot className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
+                                    <tfoot className="border-t-2 border-primary-200 bg-white font-semibold">
                                         <tr>
-                                            <td colSpan={2} className="px-3 py-3 text-right text-gray-700">Total de cuotas:</td>
+                                            <td colSpan={2} className="px-3 py-3 text-right text-primary-900">Total de cuotas:</td>
                                             <td className="px-3 py-3 text-gray-900">
                                                 {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.scheduledAmount || 0), 0))}
                                             </td>
                                             <td></td>
                                         </tr>
                                         <tr>
-                                            <td colSpan={2} className="px-3 py-3 text-right text-gray-700">Total pagado:</td>
+                                            <td colSpan={2} className="px-3 py-3 text-right text-primary-900">Total pagado:</td>
                                             <td className="px-3 py-3 text-gray-900">
                                                 {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.paidAmount || 0), 0))}
                                             </td>
@@ -730,7 +730,7 @@ export default function CreditDetailPage() {
                             <div className="flex justify-end gap-3 pt-2">
                                 <button
                                     onClick={() => setIsEditOpen(false)}
-                                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                                    className="px-4 py-2 bg-slate-50 text-primary-900 rounded-md hover:bg-gray-200"
                                 >
                                     Cancelar
                                 </button>
@@ -746,7 +746,7 @@ export default function CreditDetailPage() {
                                         updateMutation.mutate({ schedules: payload });
                                     }}
                                     disabled={updateMutation.isPending}
-                                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+                                    className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50"
                                 >
                                     {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
                                 </button>
@@ -762,7 +762,7 @@ export default function CreditDetailPage() {
 function SummaryCard({ title, value }: { title: string; value: string }) {
     return (
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-            <p className="text-sm text-gray-500">{title}</p>
+            <p className="text-sm text-primary-600">{title}</p>
             <p className="text-xl font-semibold text-gray-800">{value}</p>
         </div>
     );
@@ -807,7 +807,7 @@ function QuickPayDialog({
                 <button
                     onClick={onClose}
                     disabled={paymentMutation.isPending}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
+                    className="px-4 py-2 bg-slate-50 text-primary-900 rounded-md hover:bg-gray-200 disabled:opacity-50"
                 >
                     Cancelar
                 </button>
@@ -821,7 +821,7 @@ function QuickPayDialog({
                         })
                     }
                     disabled={paymentMutation.isPending}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                     {paymentMutation.isPending ? (
                         <>

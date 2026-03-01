@@ -48,7 +48,7 @@ export default function CreditsPage() {
                 </div>
                 <button
                     onClick={() => setIsFormOpen(true)}
-                    className="bg-primary-600 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-primary-700 transition-colors"
+                    className="bg-primary-500 text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-primary-600 transition-colors"
                 >
                     <Plus size={18} /> Nuevo Crédito
                 </button>
@@ -69,7 +69,7 @@ export default function CreditsPage() {
                                 const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Todos los negocios';
                                 setSelectedBusiness(id, name);
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">Todos los negocios</option>
                             {businesses?.map((b) => (
@@ -85,7 +85,7 @@ export default function CreditsPage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                        <thead className="bg-white text-xs uppercase text-primary-600">
                             <tr>
                                 <th className="px-4 py-3">Cliente</th>
                                 <th className="px-4 py-3">Monto</th>
@@ -97,14 +97,14 @@ export default function CreditsPage() {
                         <tbody className="divide-y">
                             {isLoading && (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                                    <td colSpan={5} className="px-4 py-6 text-center text-primary-600">
                                         Cargando...
                                     </td>
                                 </tr>
                             )}
                             {!isLoading && credits?.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                                    <td colSpan={5} className="px-4 py-6 text-center text-primary-600">
                                         No hay créditos registrados
                                     </td>
                                 </tr>
@@ -116,21 +116,21 @@ export default function CreditsPage() {
                                 return (
                                     <tr
                                         key={credit.id}
-                                        className="hover:bg-gray-50 cursor-pointer"
+                                        className="hover:bg-primary-50 cursor-pointer"
                                         onClick={() => navigate(`/credits/${credit.id}`)}
                                     >
                                         <td className="px-4 py-3">
                                             <div className="font-medium text-gray-900">{credit.client?.fullName || credit.clientId}</div>
-                                            <div className="text-xs text-gray-500">{credit.client?.phone}</div>
+                                            <div className="text-xs text-primary-600">{credit.client?.phone}</div>
                                         </td>
-                                        <td className="px-4 py-3 text-gray-700">${Number(credit.amount).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
-                                        <td className="px-4 py-3 text-gray-700">${Number(credit.remainingBalance).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
+                                        <td className="px-4 py-3 text-primary-900">${Number(credit.amount).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
+                                        <td className="px-4 py-3 text-primary-900">${Number(credit.remainingBalance).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
                                         <td className="px-4 py-3">
-                                            <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
+                                            <span className="px-2 py-1 rounded-full text-xs bg-slate-50 text-primary-900">
                                                 {credit.status}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-gray-700">
+                                        <td className="px-4 py-3 text-primary-900">
                                             {nextDue ? new Date((nextDue as any).dueDate).toLocaleDateString() : '-'}
                                         </td>
                                     </tr>
@@ -156,7 +156,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
     return (
         <button
             onClick={onClick}
-            className={`px-3 py-1 rounded-full text-sm border ${active ? 'bg-primary-600 text-white border-primary-600' : 'text-gray-700 border-gray-300 hover:bg-gray-100'
+            className={`px-3 py-1 rounded-full text-sm border ${active ? 'bg-primary-500 text-white border-primary-600' : 'text-primary-900 border-primary-200 hover:bg-slate-50'
                 }`}
         >
             {label}

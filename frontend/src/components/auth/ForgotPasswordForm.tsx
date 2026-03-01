@@ -106,7 +106,7 @@ export default function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) 
             {step === 'REQUEST_CODE' ? (
                 <form onSubmit={handleRequestCode} className="space-y-4">
                     <div>
-                        <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="reset-email" className="block text-sm font-medium text-primary-900 mb-2">
                             Correo Electrónico
                         </label>
                         <div className="relative">
@@ -119,7 +119,7 @@ export default function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) 
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
+                                className="block w-full pl-10 pr-3 py-2.5 border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
                                 placeholder="tu@email.com"
                             />
                         </div>
@@ -128,7 +128,7 @@ export default function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) 
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 transition"
+                        className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 transition"
                     >
                         {isLoading ? 'Enviando...' : 'Enviar código'}
                     </button>
@@ -136,7 +136,7 @@ export default function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) 
             ) : (
                 <form onSubmit={handleResetPassword} className="space-y-4">
                     <div>
-                        <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="code" className="block text-sm font-medium text-primary-900 mb-2">
                             Código de 6 dígitos
                         </label>
                         <div className="relative">
@@ -150,14 +150,14 @@ export default function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) 
                                 maxLength={6}
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-center tracking-widest font-mono text-lg"
+                                className="block w-full pl-10 pr-3 py-2.5 border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-center tracking-widest font-mono text-lg"
                                 placeholder="123456"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="new-password" className="block text-sm font-medium text-primary-900 mb-2">
                             Nueva Contraseña
                         </label>
                         <div className="relative">
@@ -171,14 +171,14 @@ export default function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) 
                                 minLength={8}
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
+                                className="block w-full pl-10 pr-3 py-2.5 border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
                                 placeholder="••••••••"
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor="confirm-password" className="block text-sm font-medium text-primary-900 mb-2">
                             Confirmar Contraseña
                         </label>
                         <div className="relative">
@@ -192,20 +192,20 @@ export default function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) 
                                 minLength={8}
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
+                                className="block w-full pl-10 pr-3 py-2.5 border border-primary-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
                                 placeholder="••••••••"
                             />
                         </div>
                     </div>
 
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-primary-600 mt-1">
                         La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.
                     </p>
 
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full mt-4 flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 transition"
+                        className="w-full mt-4 flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 transition"
                     >
                         {isLoading ? 'Restableciendo...' : 'Restablecer Contraseña'}
                     </button>

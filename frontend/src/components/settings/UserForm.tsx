@@ -174,7 +174,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-primary-900 mb-1">
                             Nombre Completo
                         </label>
                         <input
@@ -183,12 +183,12 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                             onChange={(e) =>
                                 setFormData({ ...formData, fullName: e.target.value })
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-primary-900 mb-1">
                             Email
                         </label>
                         <input
@@ -197,12 +197,12 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                             onChange={(e) =>
                                 setFormData({ ...formData, email: e.target.value })
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-primary-900 mb-1">
                             Rol
                         </label>
                         <select
@@ -213,7 +213,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                                     role: e.target.value as any,
                                 })
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             {getAvailableRoles().map((role) => (
                                 <option key={role.value} value={role.value}>
@@ -225,13 +225,13 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
 
                     {(formData.role === 'user' || formData.role === 'admin') && currentUserRole === 'super_admin' && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Negocio Asignado
                             </label>
                             <select
                                 value={formData.businessId}
                                 onChange={(e) => setFormData({ ...formData, businessId: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                             >
                                 <option value="">Sin asignar</option>
                                 {businesses?.map((b) => (
@@ -242,7 +242,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-primary-900 mb-1">
                             Contraseña {initialData && '(Opcional)'}
                         </label>
                         <input
@@ -251,24 +251,24 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                             onChange={(e) =>
                                 setFormData({ ...formData, password: e.target.value })
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                             placeholder={initialData ? 'Dejar en blanco para mantener actual' : ''}
                         />
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-primary-600 mt-1">
                             Mínimo 8 caracteres, incluir mayúsculas, minúsculas, números y
                             símbolos
                         </p>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-primary-900 mb-1">
                             Confirmar Contraseña
                         </label>
                         <input
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                     </div>
 
@@ -276,14 +276,14 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                            className="flex-1 px-4 py-2 border border-primary-200 rounded-md hover:bg-primary-50"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={isPending}
-                            className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 disabled:opacity-50"
+                            className="flex-1 bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 disabled:opacity-50"
                         >
                             {isPending ? 'Guardando...' : (initialData ? 'Guardar Cambios' : 'Crear Usuario')}
                         </button>

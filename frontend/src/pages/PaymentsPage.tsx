@@ -77,7 +77,7 @@ export default function PaymentsPage() {
                                 const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Todos los negocios';
                                 setSelectedBusiness(id, name);
                             }}
-                            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">Todos los negocios</option>
                             {businesses?.map((b) => (
@@ -88,7 +88,7 @@ export default function PaymentsPage() {
                     <select
                         value={methodFilter}
                         onChange={(e) => setMethodFilter(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                         <option value="all">Todos los métodos</option>
                         <option value="efectivo">Efectivo</option>
@@ -100,13 +100,13 @@ export default function PaymentsPage() {
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md"
+                        className="px-3 py-2 border border-primary-200 rounded-md"
                     />
                     <input
                         type="date"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md"
+                        className="px-3 py-2 border border-primary-200 rounded-md"
                     />
                 </div>
             </header>
@@ -119,12 +119,12 @@ export default function PaymentsPage() {
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="border border-gray-200 rounded-lg bg-white p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-gray-700 font-semibold">
+                    <div className="flex items-center gap-2 text-primary-900 font-semibold">
                         <BarChart2 size={18} /> Pagos recientes
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 text-gray-600">
+                            <thead className="bg-white text-gray-600">
                                 <tr>
                                     <th className="px-3 py-2">Fecha</th>
                                     <th className="px-3 py-2">Monto</th>
@@ -143,7 +143,7 @@ export default function PaymentsPage() {
                                 ))}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td className="px-3 py-3 text-center text-gray-500" colSpan={4}>
+                                        <td className="px-3 py-3 text-center text-primary-600" colSpan={4}>
                                             Sin pagos en el filtro seleccionado
                                         </td>
                                     </tr>
@@ -154,18 +154,18 @@ export default function PaymentsPage() {
                 </div>
 
                 <div className="border border-gray-200 rounded-lg bg-white p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-gray-700 font-semibold">
+                    <div className="flex items-center gap-2 text-primary-900 font-semibold">
                         <PieChart size={18} /> Métodos de pago
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         {Object.entries(totals.methodMap).map(([method, val]) => (
-                            <div key={method} className="p-3 rounded-md bg-gray-50 border border-gray-200 flex items-center justify-between">
-                                <span className="capitalize text-gray-700">{method}</span>
+                            <div key={method} className="p-3 rounded-md bg-white border border-gray-200 flex items-center justify-between">
+                                <span className="capitalize text-primary-900">{method}</span>
                                 <span className="font-semibold text-gray-900">{formatMoney(val)}</span>
                             </div>
                         ))}
                         {Object.keys(totals.methodMap).length === 0 && (
-                            <div className="text-gray-500 text-sm">Sin datos</div>
+                            <div className="text-primary-600 text-sm">Sin datos</div>
                         )}
                     </div>
                 </div>
@@ -179,12 +179,12 @@ export default function PaymentsPage() {
                     </div>
                     <button
                         onClick={() => window.location.assign('/credits')}
-                        className="inline-flex items-center gap-2 px-3 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+                        className="inline-flex items-center gap-2 px-3 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 text-sm"
                     >
                         Gestionar créditos <ArrowRight size={16} />
                     </button>
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-primary-600">
                     Esta sección se nutre del cronograma de cuotas. Integraremos la API de créditos para listar cuotas vencidas y del día.
                 </div>
             </section>
@@ -195,7 +195,7 @@ export default function PaymentsPage() {
 function KpiCard({ title, value }: { title: string; value: string }) {
     return (
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-            <p className="text-sm text-gray-500">{title}</p>
+            <p className="text-sm text-primary-600">{title}</p>
             <p className="text-xl font-semibold text-gray-800">{value}</p>
         </div>
     );

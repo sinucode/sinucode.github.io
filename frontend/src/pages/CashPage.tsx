@@ -60,7 +60,7 @@ export default function CashPage() {
                         <p className="text-gray-600">Flujo de efectivo y operaciones de caja</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3 text-sm text-gray-700">
+                <div className="flex items-center gap-3 text-sm text-primary-900">
                     <Filter size={16} />
                     {isAdmin && (
                         <select
@@ -70,7 +70,7 @@ export default function CashPage() {
                                 const name = id ? businesses?.find(b => b.id === id)?.name || '' : 'Seleccione negocio';
                                 setSelectedBusiness(id, name);
                             }}
-                            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">Seleccione negocio</option>
                             {businesses?.map((b) => (
@@ -82,13 +82,13 @@ export default function CashPage() {
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md"
+                        className="px-3 py-2 border border-primary-200 rounded-md"
                     />
                     <input
                         type="date"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md"
+                        className="px-3 py-2 border border-primary-200 rounded-md"
                     />
                 </div>
             </header>
@@ -120,7 +120,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
     return (
         <button
             onClick={onClick}
-            className={`px-3 py-2 rounded-md border text-sm ${active ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
+            className={`px-3 py-2 rounded-md border text-sm ${active ? 'bg-primary-500 text-white border-primary-600' : 'bg-white text-primary-900 border-primary-200'}`}
         >
             {label}
         </button>
@@ -137,7 +137,7 @@ function SummarySection({ summary, isLoading, forecast, targetDate, onTargetDate
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {cards.map((c) => (
                 <div key={c.title} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-gray-700">
+                    <div className="flex items-center gap-2 text-primary-900">
                         {c.icon}
                         <span className="text-sm">{c.title}</span>
                     </div>
@@ -147,7 +147,7 @@ function SummarySection({ summary, isLoading, forecast, targetDate, onTargetDate
             <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm col-span-1 md:col-span-3">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <p className="text-sm text-gray-500">Proyección de caja</p>
+                        <p className="text-sm text-primary-600">Proyección de caja</p>
                         <p className="text-lg font-semibold text-gray-800">
                             {forecast ? `Saldo proyectado: ${formatMoney(forecast.projectedBalance)}` : 'Seleccione fecha'}
                         </p>
@@ -161,7 +161,7 @@ function SummarySection({ summary, isLoading, forecast, targetDate, onTargetDate
                         type="date"
                         value={targetDate}
                         onChange={(e) => onTargetDateChange(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                 </div>
             </div>
@@ -176,10 +176,10 @@ function MovementsTable({ movements, isLoading }: { movements: any[]; isLoading:
     };
     return (
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Movimientos recientes</h3>
+            <h3 className="text-sm font-semibold text-primary-900 mb-3">Movimientos recientes</h3>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-gray-50 text-gray-600">
+                    <thead className="bg-white text-gray-600">
                         <tr>
                             <th className="px-3 py-2">Fecha</th>
                             <th className="px-3 py-2">Tipo</th>
@@ -191,10 +191,10 @@ function MovementsTable({ movements, isLoading }: { movements: any[]; isLoading:
                     </thead>
                     <tbody className="divide-y">
                         {isLoading && (
-                            <tr><td className="px-3 py-3 text-gray-500" colSpan={6}>Cargando...</td></tr>
+                            <tr><td className="px-3 py-3 text-primary-600" colSpan={6}>Cargando...</td></tr>
                         )}
                         {!isLoading && movements.length === 0 && (
-                            <tr><td className="px-3 py-3 text-gray-500" colSpan={6}>Sin movimientos en el período</td></tr>
+                            <tr><td className="px-3 py-3 text-primary-600" colSpan={6}>Sin movimientos en el período</td></tr>
                         )}
                         {movements.map((m) => (
                             <tr key={m.id} className="text-gray-800">
@@ -230,17 +230,17 @@ function Operations({ businessId }: { businessId: string }) {
 
     return (
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Operaciones de caja</h3>
+            <h3 className="text-sm font-semibold text-primary-900 mb-3">Operaciones de caja</h3>
             <div className="flex gap-3 mb-3">
                 <button
                     onClick={() => setType('capital_injection')}
-                    className={`px-3 py-2 rounded-md text-sm border ${type === 'capital_injection' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-white border-gray-300 text-gray-700'}`}
+                    className={`px-3 py-2 rounded-md text-sm border ${type === 'capital_injection' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-white border-primary-200 text-primary-900'}`}
                 >
                     <Plus size={14} className="inline mr-1" /> Inyectar capital
                 </button>
                 <button
                     onClick={() => setType('withdrawal')}
-                    className={`px-3 py-2 rounded-md text-sm border ${type === 'withdrawal' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-gray-300 text-gray-700'}`}
+                    className={`px-3 py-2 rounded-md text-sm border ${type === 'withdrawal' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-primary-200 text-primary-900'}`}
                 >
                     <Minus size={14} className="inline mr-1" /> Retirar fondos
                 </button>
@@ -258,7 +258,7 @@ function Operations({ businessId }: { businessId: string }) {
             >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label className="text-sm text-gray-700">Monto</label>
+                        <label className="text-sm text-primary-900">Monto</label>
                         <input
                             type="text"
                             value={amount}
@@ -267,17 +267,17 @@ function Operations({ businessId }: { businessId: string }) {
                                 const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
                                 setAmount(formatted);
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                             required
                         />
                     </div>
                     <div>
-                        <label className="text-sm text-gray-700">Descripción</label>
+                        <label className="text-sm text-primary-900">Descripción</label>
                         <input
                             type="text"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                             required
                             minLength={5}
                         />
@@ -285,7 +285,7 @@ function Operations({ businessId }: { businessId: string }) {
                 </div>
                 <button
                     type="submit"
-                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+                    className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 text-sm"
                     disabled={mutation.isPending}
                 >
                     {mutation.isPending ? 'Guardando...' : 'Registrar'}

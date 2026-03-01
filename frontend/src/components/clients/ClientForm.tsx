@@ -156,7 +156,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                     <h2 className="text-xl font-semibold text-gray-800">
                         {client ? 'Editar Cliente' : 'Nuevo Cliente'}
                     </h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                    <button onClick={onClose} className="text-primary-600 hover:text-primary-900">
                         <X size={24} />
                     </button>
                 </div>
@@ -172,13 +172,13 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                         {/* Selector de Negocio (Solo Super Admin) */}
                         {isSuperAdmin && !client && (
                             <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-primary-900 mb-1">
                                     Negocio *
                                 </label>
                                 <select
                                     value={formData.businessId}
                                     onChange={(e) => setFormData({ ...formData, businessId: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     required
                                 >
                                     <option value="">Seleccione un negocio</option>
@@ -193,14 +193,14 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
 
                         {/* Nombre Completo */}
                         <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Nombre Completo *
                             </label>
                             <input
                                 type="text"
                                 value={formData.fullName}
                                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 required
                                 minLength={3}
                                 maxLength={100}
@@ -209,7 +209,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
 
                         {/* Celular */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Celular *
                             </label>
                             <input
@@ -219,16 +219,16 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                                     const val = e.target.value.replace(/\D/g, '');
                                     if (val.length <= 10) setFormData({ ...formData, phone: val });
                                 }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 required
                                 placeholder="3XXXXXXXXX"
                             />
-                            <p className="text-xs text-gray-500 mt-1">10 dígitos, inicia con 3</p>
+                            <p className="text-xs text-primary-600 mt-1">10 dígitos, inicia con 3</p>
                         </div>
 
                         {/* Cédula */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Documento / Cédula *
                             </label>
                             <input
@@ -238,7 +238,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                                     const val = e.target.value.replace(/\D/g, '');
                                     setFormData({ ...formData, cedula: val });
                                 }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 required
                                 minLength={6}
                                 maxLength={10}
@@ -247,34 +247,34 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
 
                         {/* Nacionalidad */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Nacionalidad *
                             </label>
                             <input
                                 type="text"
                                 value={formData.nationality}
                                 onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 required
                             />
                         </div>
 
                         {/* Dirección */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Dirección
                             </label>
                             <input
                                 type="text"
                                 value={formData.address}
                                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                             />
                         </div>
 
                         {/* Recomendado por (Autocomplete) */}
                         <div className="md:col-span-2 relative">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Recomendado por (Cliente existente)
                             </label>
                             <div className="relative">
@@ -286,7 +286,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                                         setShowReferralResults(true);
                                         if (e.target.value === '') setFormData({ ...formData, referredById: '' });
                                     }}
-                                    className="w-full px-3 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    className="w-full px-3 py-2 pl-10 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     placeholder="Buscar por nombre o celular..."
                                 />
                                 <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
@@ -299,10 +299,10 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                                             key={ref.id}
                                             type="button"
                                             onClick={() => handleReferralSelect(ref)}
-                                            className="w-full text-left px-4 py-2 hover:bg-gray-50 focus:outline-none"
+                                            className="w-full text-left px-4 py-2 hover:bg-primary-50 focus:outline-none"
                                         >
                                             <div className="font-medium">{ref.fullName}</div>
-                                            <div className="text-xs text-gray-500">{ref.phone} - {ref.cedula}</div>
+                                            <div className="text-xs text-primary-600">{ref.phone} - {ref.cedula}</div>
                                         </button>
                                     ))}
                                 </div>
@@ -314,14 +314,14 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                            className="px-4 py-2 text-primary-900 bg-slate-50 rounded-md hover:bg-gray-200 transition-colors"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                            className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition-colors flex items-center gap-2 disabled:opacity-50"
                         >
                             <Save size={18} />
                             {isLoading ? 'Guardando...' : 'Guardar Cliente'}

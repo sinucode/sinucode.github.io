@@ -89,33 +89,33 @@ export default function AuditLogsViewer() {
             <div className="bg-white rounded-lg shadow p-4 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-primary-900 mb-1">
                             Fecha Inicio
                         </label>
                         <input
                             type="date"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-primary-900 mb-1">
                             Fecha Fin
                         </label>
                         <input
                             type="date"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                     </div>
 
                     <div className="flex items-end gap-2">
                         <button
                             onClick={handleApplyFilters}
-                            className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700"
+                            className="flex-1 bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600"
                         >
                             Filtrar
                         </button>
@@ -151,28 +151,28 @@ export default function AuditLogsViewer() {
                     <>
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
+                                <thead className="bg-white">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                             Fecha/Hora
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                             Usuario
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                             Acción
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                             Entidad
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                             Descripción
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                             IP
                                         </th>
                                         {user?.role === 'super_admin' && (
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                                 Acciones
                                             </th>
                                         )}
@@ -188,7 +188,7 @@ export default function AuditLogsViewer() {
                                                 <div className="text-sm font-medium text-gray-900">
                                                     {log.user?.fullName || 'N/A'}
                                                 </div>
-                                                <div className="text-sm text-gray-500">
+                                                <div className="text-sm text-primary-600">
                                                     {log.user?.email || 'N/A'}
                                                 </div>
                                             </td>
@@ -197,13 +197,13 @@ export default function AuditLogsViewer() {
                                                     {log.action}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-primary-600">
                                                 {log.entityType || 'N/A'}
                                             </td>
-                                            <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={log.description}>
+                                            <td className="px-6 py-4 text-sm text-primary-600 max-w-xs truncate" title={log.description}>
                                                 {log.description || 'N/A'}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-primary-600">
                                                 {log.ipAddress || 'N/A'}
                                             </td>
                                             {user?.role === 'super_admin' && (
@@ -224,15 +224,15 @@ export default function AuditLogsViewer() {
                         </div>
 
                         {data?.logs.length === 0 && (
-                            <div className="text-center py-12 text-gray-500">
+                            <div className="text-center py-12 text-primary-600">
                                 No se encontraron logs de auditoría
                             </div>
                         )}
 
                         {/* Paginación */}
                         {data && data.pagination.totalPages > 1 && (
-                            <div className="bg-gray-50 px-6 py-3 flex items-center justify-between border-t border-gray-200">
-                                <div className="text-sm text-gray-700">
+                            <div className="bg-white px-6 py-3 flex items-center justify-between border-t border-gray-200">
+                                <div className="text-sm text-primary-900">
                                     Mostrando página {data.pagination.page} de{' '}
                                     {data.pagination.totalPages} ({data.pagination.total} total)
                                 </div>
@@ -245,7 +245,7 @@ export default function AuditLogsViewer() {
                                             })
                                         }
                                         disabled={filters.page === 1}
-                                        className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                                        className="px-3 py-1 border border-primary-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
                                     >
                                         Anterior
                                     </button>
@@ -257,7 +257,7 @@ export default function AuditLogsViewer() {
                                             })
                                         }
                                         disabled={filters.page === data.pagination.totalPages}
-                                        className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                                        className="px-3 py-1 border border-primary-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
                                     >
                                         Siguiente
                                     </button>

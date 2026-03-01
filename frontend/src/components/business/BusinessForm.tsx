@@ -83,7 +83,7 @@ export default function BusinessForm({ onClose, onSuccess, initialData }: Busine
                     <div className="space-y-4">
                         {/* Name */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Nombre del Negocio *
                             </label>
                             <input
@@ -94,14 +94,14 @@ export default function BusinessForm({ onClose, onSuccess, initialData }: Busine
                                 onChange={(e) =>
                                     setFormData({ ...formData, name: e.target.value })
                                 }
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 placeholder="Ej: Tienda Principal"
                             />
                         </div>
 
                         {/* Description */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Descripción
                             </label>
                             <textarea
@@ -110,14 +110,14 @@ export default function BusinessForm({ onClose, onSuccess, initialData }: Busine
                                 onChange={(e) =>
                                     setFormData({ ...formData, description: e.target.value })
                                 }
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 placeholder="Descripción opcional del negocio"
                             />
                         </div>
 
                         {/* Initial Capital */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">
                                 Capital Inicial (COP) {initialData && '*'}
                             </label>
                             <input
@@ -133,11 +133,11 @@ export default function BusinessForm({ onClose, onSuccess, initialData }: Busine
                                     });
                                 }}
                                 disabled={!!initialData}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-slate-50 disabled:cursor-not-allowed"
                                 placeholder="0"
                             />
                             {!initialData ? (
-                                <p className="mt-1 text-xs text-gray-500">
+                                <p className="mt-1 text-xs text-primary-600">
                                     El balance actual iniciará con este valor. El capital inicial no se podrá cambiar después.
                                 </p>
                             ) : (
@@ -154,14 +154,14 @@ export default function BusinessForm({ onClose, onSuccess, initialData }: Busine
                             type="button"
                             onClick={onClose}
                             disabled={isLoading}
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                            className="flex-1 px-4 py-2 border border-primary-200 rounded-md hover:bg-primary-50 disabled:opacity-50"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+                            className="flex-1 px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50"
                         >
                             {isLoading
                                 ? 'Guardando...'

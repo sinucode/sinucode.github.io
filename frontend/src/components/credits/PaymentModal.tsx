@@ -98,14 +98,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ creditId, onClose, onSucces
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
                 <div className="flex items-center justify-between p-5 border-b">
                     <h3 className="text-lg font-semibold text-gray-800">Registrar Pago</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                    <button onClick={onClose} className="text-primary-600 hover:text-primary-900">
                         <X size={22} />
                     </button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     {error && <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{error}</div>}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Monto *</label>
+                        <label className="block text-sm font-medium text-primary-900 mb-1">Monto *</label>
                         <input
                             type="text"
                             value={formData.amount}
@@ -114,19 +114,19 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ creditId, onClose, onSucces
                                 const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
                                 setFormData({ ...formData, amount: formatted });
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
-                        <p className="text-xs text-gray-500 mt-1">Saldo pendiente: ${formatMoney(remainingBalance)}</p>
+                        <p className="text-xs text-primary-600 mt-1">Saldo pendiente: ${formatMoney(remainingBalance)}</p>
                         {formData.amount && (
                             <p className="text-xs text-gray-600">Cobertura estimada: {coverage()} cuota(s)</p>
                         )}
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Cuota a pagar</label>
+                        <label className="block text-sm font-medium text-primary-900 mb-1">Cuota a pagar</label>
                         <select
                             value={selectedScheduleId}
                             onChange={(e) => handleSelectSchedule(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             {pendingSchedules.length === 0 && <option value="">No hay cuotas pendientes</option>}
                             {pendingSchedules.map((s) => {
@@ -138,23 +138,23 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ creditId, onClose, onSucces
                                 );
                             })}
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-primary-600 mt-1">
                             Selecciona la cuota; el monto se autollenará con lo pendiente.
                         </p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de pago</label>
+                        <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de pago</label>
                         <input
                             type="date"
                             value={formData.paymentDate}
                             onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Método</label>
-                            <div className="flex flex-wrap gap-3 text-sm text-gray-700">
+                            <label className="block text-sm font-medium text-primary-900 mb-1">Método</label>
+                            <div className="flex flex-wrap gap-3 text-sm text-primary-900">
                                 {['efectivo', 'transferencia', 'cheque', 'otro'].map((m) => (
                                     <label key={m} className="inline-flex items-center gap-2">
                                         <input
@@ -170,12 +170,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ creditId, onClose, onSucces
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                            <label className="block text-sm font-medium text-primary-900 mb-1">Notas</label>
                             <input
                                 type="text"
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 maxLength={300}
                             />
                         </div>
@@ -184,14 +184,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ creditId, onClose, onSucces
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                            className="px-4 py-2 text-primary-900 bg-slate-50 rounded-md hover:bg-gray-200"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={mutation.isPending}
-                            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 flex items-center gap-2 disabled:opacity-50"
+                            className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 flex items-center gap-2 disabled:opacity-50"
                         >
                             <Save size={18} />
                             {mutation.isPending ? 'Guardando...' : 'Guardar Pago'}

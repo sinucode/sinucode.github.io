@@ -107,7 +107,7 @@ export default function DashboardHome() {
             {/* Resumen de cartera */}
             <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Cartera</h3>
-                <p className="text-sm text-gray-700">Saldo pendiente total: <strong>{formatMoney(stats.saldoPendiente)}</strong></p>
+                <p className="text-sm text-primary-900">Saldo pendiente total: <strong>{formatMoney(stats.saldoPendiente)}</strong></p>
                 <p className="text-sm text-gray-600 mt-2">Fuente: créditos cargados. Para métricas precisas conecta clientes y pagos reales.</p>
             </div>
         </div>
@@ -139,7 +139,7 @@ function QuickActionButton({ title, icon, onClick }: { title: string; icon: stri
     return (
         <button
             onClick={onClick}
-            className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition border border-gray-200"
+            className="flex items-center gap-3 p-4 bg-white hover:bg-slate-50 rounded-lg transition border border-gray-200"
         >
             <span className="text-2xl">{icon}</span>
             <span className="font-medium text-gray-900">{title}</span>
