@@ -10,7 +10,8 @@ export default function ChangePasswordForm() {
     const [success, setSuccess] = useState('');
 
     const changePasswordMutation = useMutation({
-        mutationFn: changePassword,
+        mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+            changePassword(data.currentPassword, data.newPassword),
         onSuccess: () => {
             setSuccess('Contraseña actualizada exitosamente');
             setCurrentPassword('');

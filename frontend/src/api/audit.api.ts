@@ -57,7 +57,7 @@ export const getAuditLogs = async (filters: AuditLogFilters): Promise<PaginatedA
 /**
  * Exportar logs de auditoría a Excel
  */
-export const exportAuditLogs = async (filters: AuditLogFilters): Promise<void> => {
+export const exportAuditLogs = async (filters: AuditLogFilters): Promise<Blob> => {
     const params = new URLSearchParams();
 
     if (filters.startDate) params.append('startDate', filters.startDate.toISOString());
@@ -69,15 +69,7 @@ export const exportAuditLogs = async (filters: AuditLogFilters): Promise<void> =
         responseType: 'blob',
     });
 
-    // Crear enlace de descarga
-    const url = window.URL.createObjectURL(response.data);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `audit_logs_${new Date().toISOString().split('T')[0]}.xlsx`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    return response.data;
 };
 
 /**

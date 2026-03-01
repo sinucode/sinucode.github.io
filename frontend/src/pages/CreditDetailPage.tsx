@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getCreditDetail, simulateCredit, updateCreditSchedule } from '../api/credits.api';
+import { getCreditDetail, simulateCredit, updateCreditSchedule, CreditDetail } from '../api/credits.api';
 import { registerPayment } from '../api/payments.api';
 import { useState, useEffect } from 'react';
 import PaymentModal from '../components/credits/PaymentModal';
-import { CreditDetail, PaymentSchedule, PaymentFrequency } from '../types';
-import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, Download, X } from 'lucide-react';
+import { PaymentSchedule, PaymentFrequency } from '../types';
+import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
 
@@ -96,8 +96,8 @@ export default function CreditDetailPage() {
         return <div className="text-gray-600">Cargando crédito...</div>;
     }
 
-    const totalPaid = credit.payments.reduce((acc, p) => acc + Number(p.amount), 0);
-    const nextDue = credit.paymentSchedule.find((p) => p.status !== 'paid');
+    const totalPaid = credit.payments.reduce((acc: number, p: any) => acc + Number(p.amount), 0);
+    const nextDue = credit.paymentSchedule.find((p: any) => p.status !== 'paid');
 
     const renderStatusIcon = (status: PaymentSchedule['status']) => {
         if (status === 'paid') return <CheckCircle2 size={16} />;
@@ -164,7 +164,7 @@ export default function CreditDetailPage() {
         const gapDays = gapDaysMap[editForm.frequency] || 7;
         const termValueNum = Number(editForm.termValue);
         let termDays = termDaysFromUnit(termValueNum, editForm.termUnit, editForm.frequency);
-        const paidCount = credit.paymentSchedule.filter((s) => Number(s.paidAmount) > 0).length;
+        const paidCount = credit.paymentSchedule.filter((s: any) => Number(s.paidAmount) > 0).length;
 
         if (editForm.useFixedInstallment && installment > 0) {
             termDays = estimateTermDays(amount, interestRate, installment, editForm.frequency);
@@ -328,7 +328,7 @@ export default function CreditDetailPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {credit.paymentSchedule.map((p, idx) => (
+                                {credit.paymentSchedule.map((p: any, idx: number) => (
                                     <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                         <td className="px-3 py-2 text-gray-900">{p.installmentNumber}</td>
                                         <td className="px-3 py-2 text-gray-900">{new Date(p.dueDate).toLocaleDateString()}</td>
@@ -361,7 +361,7 @@ export default function CreditDetailPage() {
 
                 <div className="p-6">
                     <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                        Pagos ({credit.paymentSchedule?.filter(s => s.status === 'paid' || Number(s.paidAmount) >= Number(s.scheduledAmount)).length || 0} cuotas pagadas)
+                        Pagos ({credit.paymentSchedule?.filter((s: any) => s.status === 'paid' || Number(s.paidAmount) >= Number(s.scheduledAmount)).length || 0} cuotas pagadas)
                     </h2>
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -405,7 +405,7 @@ export default function CreditDetailPage() {
                                         // 4. Intentar vincular pago con cuota
                                         // Primero por ID explícito
                                         let relatedSchedule = p.scheduleId
-                                            ? credit.paymentSchedule?.find(s => s.id === p.scheduleId)
+                                            ? credit.paymentSchedule?.find((s: any) => s.id === p.scheduleId)
                                             : null;
 
                                         // Si no tiene ID explícito, vincular virtualmente con la cuota pagada correspondiente al índice
@@ -503,7 +503,7 @@ export default function CreditDetailPage() {
                                         );
                                     });
                                 })()}
-                                {(!credit.payments || credit.payments.filter(p => p && p.id && p.paymentDate && p.amount).length === 0) && (
+                                {(!credit.payments || credit.payments.filter((p: any) => p && p.id && p.paymentDate && p.amount).length === 0) && (
                                     <tr>
                                         <td className="px-3 py-3 text-gray-500" colSpan={5}>Sin pagos registrados</td>
                                     </tr>
