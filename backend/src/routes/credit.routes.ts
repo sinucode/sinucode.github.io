@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, requireMinRole } from '../middleware/auth.middleware';
-import { simulateCredit, createCredit, listCredits, getCreditById, updateCreditSchedule } from '../controllers/credit.controller';
+import { simulateCredit, createCredit, listCredits, getCreditById, updateCreditSchedule, bulkDeleteCredits } from '../controllers/credit.controller';
 import { simulateCreditValidators, createCreditValidators, listCreditValidators, updateScheduleValidators } from '../validators/credit.validators';
 
 const router = Router();
@@ -21,5 +21,8 @@ router.get('/:id', requireMinRole('user'), getCreditById);
 
 // Actualizar plan de pagos (solo super admin)
 router.put('/:id/schedule', requireMinRole('super_admin'), updateScheduleValidators, updateCreditSchedule);
+
+// Eliminar créditos en lote (solo admin/super_admin)
+router.post('/bulk-delete', requireMinRole('admin'), bulkDeleteCredits);
 
 export default router;

@@ -640,6 +640,57 @@ export class CreditService {
         if (!refreshed) throw new Error('No se pudo actualizar el crédito');
         return refreshed;
     }
+
+    /**
+     * Eliminar múltiples créditos de manera masiva (Solo admin / super_admin)
+     */
+    async bulkDeleteCredits(
+        creditIds: string[],
+        requestingUserId: string,
+        userRole: UserRole,
+        ipAddress: string = ''
+    ) {
+        if (userRole === 'user') {
+            throw new Error('No tiene permisos para eliminar créditos en lote');
+        }
+
+        const creditsToDelete = await prisma.credit.findMany({
+            where: { id: { in: creditIds } },
+            include: { client: { select: { fullName: true } } }
+        });
+
+        if (creditsToDelete.length === 0) {
+            return { message: 'No se encontraron créditos para eliminar', deletedCount: 0 };
+        }
+
+        if (userRole === 'admin') {
+            const userBusinessId = await this.getUserBusiness(requestingUserId);
+            const invalidCredits = creditsToDelete.filter(c => c.businessId !== userBusinessId);
+            if (invalidCredits.length > 0) {
+                throw new Error('No tiene permisos para eliminar uno o más créditos seleccionados');
+            }
+        }
+
+        const validIds = creditsToDelete.map(c => c.id);
+
+        const { count } = await prisma.credit.deleteMany({
+            where: { id: { in: validIds } }
+        });
+
+        const auditLogs = creditsToDelete.map(c => ({
+            userId: requestingUserId,
+            businessId: c.businessId,
+            action: 'BULK_DELETE_CREDIT',
+            description: `Eliminación en lote: crédito del cliente '${c.client?.fullName}' por $${c.amount}`,
+            entityType: 'Credit',
+            entityId: c.id,
+            ipAddress,
+        }));
+
+        await prisma.auditLog.createMany({ data: auditLogs });
+
+        return { message: `Se eliminaron ${count} créditos exitosamente`, deletedCount: count };
+    }
 }
 
 export const creditService = new CreditService();

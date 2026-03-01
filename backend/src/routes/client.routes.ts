@@ -7,7 +7,8 @@ import {
     updateClient,
     deleteClient,
     searchClients,
-    batchImportClients
+    batchImportClients,
+    bulkDeleteClients
 } from '../controllers/client.controller';
 import { createClientValidators, updateClientValidators } from '../validators/client.validators';
 
@@ -28,6 +29,9 @@ router.delete('/:id', requireMinRole('admin'), deleteClient);
 
 // Ruta exclusiva para 'super_admin' - Importar clientes en lote
 router.post('/batch-import', requireMinRole('super_admin'), batchImportClients);
+
+// Eliminar clientes en lote (solo admin/super_admin)
+router.post('/bulk-delete', requireMinRole('admin'), bulkDeleteClients);
 
 export default router;
 

@@ -106,3 +106,32 @@ export const updateCreditSchedule = async (req: Request, res: Response) => {
         return res.status(status).json({ error: message });
     }
 };
+
+export const bulkDeleteCredits = async (req: Request, res: Response) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { creditIds } = req.body;
+        const userId = req.user!.userId;
+        const role = req.user!.role as UserRole;
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
+
+        if (!Array.isArray(creditIds) || creditIds.length === 0) {
+            return res.status(400).json({ error: 'Debe enviar un arreglo de creditIds válido' });
+        }
+
+        const result = await creditService.bulkDeleteCredits(creditIds, userId, role, ipAddress);
+
+        return res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error: any) {
+        console.error('Error en eliminación masiva de créditos:', error);
+        const status = error.message?.includes('permisos') ? 403 : 500;
+        return res.status(status).json({ success: false, error: error.message || 'Error al eliminar créditos' });
+    }
+};

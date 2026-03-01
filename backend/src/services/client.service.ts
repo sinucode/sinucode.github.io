@@ -400,6 +400,71 @@ export class ClientService {
     }
 
     /**
+     * Eliminar múltiples clientes en lote (solo admin/super_admin)
+     */
+    async bulkDeleteClients(
+        clientIds: string[],
+        requestingUserId: string,
+        userRole: UserRole,
+        ipAddress: string = ''
+    ) {
+        if (userRole === 'user') {
+            throw new Error('No tiene permisos para eliminar clientes en lote');
+        }
+
+        // Obtener clientes para verificar negocios y generar auditoría
+        const clientsToDelete = await prisma.client.findMany({
+            where: {
+                id: { in: clientIds }
+            },
+            include: {
+                credits: { take: 1 }
+            }
+        });
+
+        if (clientsToDelete.length === 0) {
+            return { message: 'No se encontraron clientes para eliminar', deletedCount: 0 };
+        }
+
+        if (userRole === 'admin') {
+            const userBusinessId = await this.getUserBusiness(requestingUserId);
+            const invalidClients = clientsToDelete.filter(c => c.businessId !== userBusinessId);
+            if (invalidClients.length > 0) {
+                throw new Error('No tiene permisos para eliminar uno o más clientes seleccionados');
+            }
+        }
+
+        // Verificar si tienen créditos
+        const clientsWithCredits = clientsToDelete.filter(c => c.credits.length > 0);
+        if (clientsWithCredits.length > 0) {
+            throw new Error(`No se pueden eliminar ${clientsWithCredits.length} clientes porque tienen créditos asociados`);
+        }
+
+        const validIds = clientsToDelete.map(c => c.id);
+
+        const { count } = await prisma.client.deleteMany({
+            where: {
+                id: { in: validIds }
+            }
+        });
+
+        // Generar registros de auditoría masivos
+        const auditLogs = clientsToDelete.map(c => ({
+            userId: requestingUserId,
+            businessId: c.businessId,
+            action: 'BULK_DELETE_CLIENT',
+            description: `Eliminación en lote: cliente '${c.fullName}'`,
+            entityType: 'Client',
+            entityId: c.id,
+            ipAddress,
+        }));
+
+        await prisma.auditLog.createMany({ data: auditLogs });
+
+        return { message: `Se eliminaron ${count} clientes exitosamente`, deletedCount: count };
+    }
+
+    /**
      * Buscar clientes
      */
     async searchClients(

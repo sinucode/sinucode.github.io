@@ -202,3 +202,32 @@ export const batchImportClients = async (req: Request, res: Response) => {
         return res.status(500).json({ error: error.message || 'Error al importar clientes' });
     }
 };
+
+/**
+ * Eliminar clientes en lote
+ */
+export const bulkDeleteClients = async (req: Request, res: Response) => {
+    try {
+        const { clientIds } = req.body;
+        const userId = req.user!.userId;
+        const userRole = req.user!.role as UserRole;
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
+
+        if (!Array.isArray(clientIds) || clientIds.length === 0) {
+            return res.status(400).json({ error: 'Debe proporcionar un arreglo de IDs válido' });
+        }
+
+        const result = await clientService.bulkDeleteClients(clientIds, userId, userRole, ipAddress);
+
+        return res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error: any) {
+        console.error('Error en eliminación masiva de clientes:', error);
+        if (error.message?.includes('permisos') || error.message?.includes('créditos asociados')) {
+            return res.status(403).json({ success: false, error: error.message });
+        }
+        return res.status(500).json({ success: false, error: error.message || 'Error al eliminar clientes' });
+    }
+};
