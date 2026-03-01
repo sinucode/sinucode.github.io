@@ -42,7 +42,7 @@ export class ClientService {
      * - admin/super_admin: clientes del negocio solicitado
      */
     async getAllClients(userId: string, userRole: UserRole, businessId?: string) {
-        let targetBusinessId: string;
+        let targetBusinessId: string | undefined;
 
         if (userRole === 'user') {
             // Usuario regular: si hay businessId lo usa, de lo contrario toma el asignado
@@ -56,15 +56,12 @@ export class ClientService {
                 targetBusinessId = userBusinessId;
             }
         } else {
-            // Admin/super_admin: usar el businessId proporcionado
-            if (!businessId) {
-                throw new Error('businessId es requerido para admin/super_admin');
-            }
-            targetBusinessId = businessId;
+            // Admin/super_admin: si viene businessId se filtra, si no se traen todos
+            targetBusinessId = businessId || undefined;
         }
 
         const clients = await prisma.client.findMany({
-            where: { businessId: targetBusinessId },
+            where: targetBusinessId ? { businessId: targetBusinessId } : {},
             select: {
                 id: true,
                 fullName: true,
@@ -411,7 +408,7 @@ export class ClientService {
         query: string,
         businessId?: string
     ) {
-        let targetBusinessId: string;
+        let targetBusinessId: string | undefined;
 
         if (userRole === 'user') {
             const userBusinessId = await this.getUserBusiness(userId);
@@ -420,15 +417,12 @@ export class ClientService {
             }
             targetBusinessId = userBusinessId;
         } else {
-            if (!businessId) {
-                throw new Error('businessId es requerido para admin/super_admin');
-            }
-            targetBusinessId = businessId;
+            targetBusinessId = businessId || undefined;
         }
 
         const clients = await prisma.client.findMany({
             where: {
-                businessId: targetBusinessId,
+                ...(targetBusinessId ? { businessId: targetBusinessId } : {}),
                 OR: [
                     { fullName: { contains: query, mode: 'insensitive' } },
                     { phone: { contains: query } },

@@ -3,20 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getCredits } from '../api/credits.api';
 import CreditForm from '../components/credits/CreditForm';
-import { Credit } from '../types';
 import { Plus } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
+import { getBusinesses } from '../api/business.api';
+import { Credit } from '../types';
 
 export default function CreditsPage() {
     const navigate = useNavigate();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [filter, setFilter] = useState<'all' | 'dueToday' | 'overdue'>('all');
+    const [selectedBusinessId, setSelectedBusinessId] = useState<string>('');
+    const { user } = useAuthStore();
+    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+
+    const { data: businesses } = useQuery({
+        queryKey: ['businesses'],
+        queryFn: getBusinesses,
+        enabled: isAdmin,
+    });
 
     const { data: credits, isLoading, refetch } = useQuery<Credit[]>({
-        queryKey: ['credits', filter],
+        queryKey: ['credits', filter, selectedBusinessId],
         queryFn: () =>
             getCredits({
                 ...(filter === 'dueToday' ? { dueToday: true } : {}),
                 ...(filter === 'overdue' ? { overdue: true } : {}),
+                ...(selectedBusinessId ? { businessId: selectedBusinessId } : {}),
             }),
     });
 
@@ -41,10 +53,28 @@ export default function CreditsPage() {
                 </button>
             </div>
 
-            <div className="flex gap-2">
-                <FilterChip label="Todos" active={filter === 'all'} onClick={() => setFilter('all')} />
-                <FilterChip label="Cobro hoy" active={filter === 'dueToday'} onClick={() => setFilter('dueToday')} />
-                <FilterChip label="En mora" active={filter === 'overdue'} onClick={() => setFilter('overdue')} />
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                    <FilterChip label="Todos" active={filter === 'all'} onClick={() => setFilter('all')} />
+                    <FilterChip label="Cobro hoy" active={filter === 'dueToday'} onClick={() => setFilter('dueToday')} />
+                    <FilterChip label="En mora" active={filter === 'overdue'} onClick={() => setFilter('overdue')} />
+                </div>
+                {isAdmin && (
+                    <div className="w-full md:w-1/3 min-w-[200px]">
+                        <select
+                            value={selectedBusinessId}
+                            onChange={(e) => setSelectedBusinessId(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                            <option value="">Todos los negocios</option>
+                            {businesses?.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                    {b.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">

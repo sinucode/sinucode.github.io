@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Edit2, Trash2, UserCheck, Download } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -36,15 +36,7 @@ const ClientsPage = () => {
     const { data: clients, isLoading } = useQuery({
         queryKey: ['clients', selectedBusinessId],
         queryFn: () => getClients(selectedBusinessId),
-        enabled: Boolean(selectedBusinessId),
     });
-
-    // Efecto para seleccionar el primer negocio por defecto si es admin
-    React.useEffect(() => {
-        if (isAdmin && businesses && businesses.length > 0 && !selectedBusinessId) {
-            setSelectedBusinessId(businesses[0].id);
-        }
-    }, [businesses, isAdmin, selectedBusinessId]);
 
     const deleteMutation = useMutation({
         mutationFn: deleteClient,
@@ -116,6 +108,7 @@ const ClientsPage = () => {
                             onChange={(e) => setSelectedBusinessId(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
+                            <option value="">Todos los negocios</option>
                             {businesses?.map((b) => (
                                 <option key={b.id} value={b.id}>
                                     {b.name}
