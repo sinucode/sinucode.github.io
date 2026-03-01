@@ -51,19 +51,18 @@ export class CreditService {
     }
 
     async createCredit(data: CreateCreditInput, userId: string, role: UserRole, ipAddress = '') {
-        const isAdmin = role === 'admin' || role === 'super_admin';
         const start = this.normalizeDate(data.startDate);
 
         // Determinar negocio objetivo
         let targetBusinessId: string;
-        if (isAdmin) {
+        if (role === 'super_admin') {
             if (!data.businessId) {
-                throw new Error('businessId es requerido para admin/super_admin');
+                throw new Error('businessId es requerido para super_admin');
             }
             targetBusinessId = data.businessId;
         } else {
             const userBusinessId = await this.getUserBusiness(userId);
-            if (!userBusinessId) throw new Error('Usuario no tiene negocio asignado');
+            if (!userBusinessId) throw new Error('Usuario/Administrador no tiene negocio asignado');
             targetBusinessId = userBusinessId;
         }
 

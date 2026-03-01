@@ -49,20 +49,20 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
     const [useFixedInstallment, setUseFixedInstallment] = useState(false);
     const [installmentAmount, setInstallmentAmount] = useState('');
 
-    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const isSuperAdmin = user?.role === 'super_admin';
 
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
         queryFn: getBusinesses,
-        enabled: isAdmin,
+        enabled: isSuperAdmin,
     });
 
     // Autoseleccionar negocio para admin
     useEffect(() => {
-        if (isAdmin && businesses && businesses.length > 0 && !formData.businessId) {
+        if (isSuperAdmin && businesses && businesses.length > 0 && !formData.businessId) {
             setFormData((prev) => ({ ...prev, businessId: businesses[0].id }));
         }
-    }, [businesses, formData.businessId, isAdmin]);
+    }, [businesses, formData.businessId, isSuperAdmin]);
 
     const { data: clientResults } = useQuery({
         queryKey: ['clients', 'search', clientSearch, formData.businessId],
@@ -73,7 +73,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
     const { data: clientList } = useQuery({
         queryKey: ['clients', 'list', formData.businessId],
         queryFn: () => getClients(formData.businessId),
-        enabled: isAdmin ? !!formData.businessId : true,
+        enabled: isSuperAdmin ? !!formData.businessId : true,
     });
 
     const simulateMutation = useMutation({
@@ -147,7 +147,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
         if (Number.isNaN(amount) || amount <= 0 || Number.isNaN(interestRate) || interestRate <= 0 || Number.isNaN(termDays) || termDays <= 0) {
             return setFormError('Monto, interés y plazo deben ser mayores a 0');
         }
-        if (isAdmin && !formData.businessId) {
+        if (isSuperAdmin && !formData.businessId) {
             return setFormError('Selecciona un negocio');
         }
         createMutation.mutate({
@@ -333,7 +333,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
                         </div>
 
                         {/* Negocio */}
-                        {isAdmin && (
+                        {isSuperAdmin && (
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Negocio *

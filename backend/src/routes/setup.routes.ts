@@ -10,7 +10,7 @@ const router = Router();
  * Only works if NO users exist in the database (security measure)
  * Should be called once after deployment
  */
-router.post('/create-admin', async (req: Request, res: Response) => {
+router.post('/create-admin', async (_req: Request, res: Response) => {
     try {
         // Security check: only allow if no users exist
         const userCount = await prisma.user.count();

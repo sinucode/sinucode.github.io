@@ -138,6 +138,23 @@ export class UserService {
         // Hash de la contraseña
         const hashedPassword = await bcrypt.hash(data.password, 10);
 
+        // Obtener el negocio al que pertenecerá el nuevo usuario
+        let targetBusinessId = data.businessId;
+
+        // Si es admin, autoasigna su propio negocio
+        if (requestingUserRole === 'admin') {
+            const adminBusiness = await prisma.userBusiness.findFirst({
+                where: { userId: requestingUserId },
+            });
+            if (adminBusiness) {
+                targetBusinessId = adminBusiness.businessId;
+            } else {
+                throw new Error('El administrador no tiene un negocio asignado');
+            }
+        } else if (data.role === 'user' && !targetBusinessId && requestingUserRole === 'super_admin') {
+            throw new Error('Debe proporcionar un negocio al crear un usuario');
+        }
+
         // Crear usuario
         const user = await prisma.user.create({
             data: {
@@ -158,12 +175,12 @@ export class UserService {
             },
         });
 
-        // Asignar negocio si es rol user
-        if (data.role === 'user' && data.businessId) {
+        // Asignar negocio (para user y admin)
+        if ((data.role === 'user' || data.role === 'admin') && targetBusinessId) {
             await prisma.userBusiness.create({
                 data: {
                     userId: user.id,
-                    businessId: data.businessId,
+                    businessId: targetBusinessId,
                 },
             });
         }
@@ -259,20 +276,32 @@ export class UserService {
             },
         });
 
-        // Reasignar negocio si viene businessId (para admin y user)
-        if (data.businessId) {
+        // Determinar si debemos reasignar negocio
+        let targetBusinessId = data.businessId;
+
+        if (requestingUserRole === 'admin') {
+            // Un admin no puede cambiar usuarios hacia otros negocios de los que no es dueño
+            // Por seguridad, aseguramos que siempre se asigne a su propio negocio si es requerido
+            const adminBusiness = await prisma.userBusiness.findFirst({
+                where: { userId: requestingUserId },
+            });
+            targetBusinessId = adminBusiness?.businessId;
+        }
+
+        // Reasignar negocio si viene businessId
+        if (targetBusinessId) {
             await prisma.userBusiness.deleteMany({
                 where: { userId },
             });
             await prisma.userBusiness.create({
                 data: {
                     userId,
-                    businessId: data.businessId,
+                    businessId: targetBusinessId!,
                 },
             });
         }
-        // Si se quita businessId explícitamente (cadena vacía), eliminar asignación
-        else if (data.businessId === '') {
+        // Si se quita businessId explícitamente (cadena vacía) y es super_admin, eliminar asignación
+        else if (data.businessId === '' && requestingUserRole === 'super_admin') {
             await prisma.userBusiness.deleteMany({
                 where: { userId },
             });

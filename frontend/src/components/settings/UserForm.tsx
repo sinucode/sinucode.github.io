@@ -25,7 +25,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
         queryFn: getBusinesses,
-        enabled: currentUserRole === 'super_admin' || currentUserRole === 'admin',
+        enabled: currentUserRole === 'super_admin',
     });
 
     useEffect(() => {
@@ -118,7 +118,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
         }
 
         // Validar negocio si rol user o admin
-        if ((formData.role === 'user' || formData.role === 'admin') && !formData.businessId && !initialData) {
+        if ((formData.role === 'user' || formData.role === 'admin') && !formData.businessId && !initialData && currentUserRole === 'super_admin') {
             setError('Selecciona un negocio para el usuario');
             return;
         }
@@ -223,11 +223,10 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                         </select>
                     </div>
 
-                    {(formData.role === 'user' || formData.role === 'admin') && (currentUserRole === 'super_admin' || currentUserRole === 'admin') && (
+                    {(formData.role === 'user' || formData.role === 'admin') && currentUserRole === 'super_admin' && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Negocio Asignado
-                                {formData.role === 'admin' && <span className="ml-1 text-xs text-gray-400">(opcional)</span>}
                             </label>
                             <select
                                 value={formData.businessId}

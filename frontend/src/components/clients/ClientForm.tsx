@@ -55,8 +55,8 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
 
     // Autoseleccionar el primer negocio para admin si no hay uno elegido
     useEffect(() => {
-        const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
-        if (isAdmin && businesses && businesses.length > 0 && !formData.businessId && !client) {
+        const isSuperAdmin = user?.role === 'super_admin';
+        if (isSuperAdmin && businesses && businesses.length > 0 && !formData.businessId && !client) {
             setFormData((prev) => ({ ...prev, businessId: businesses[0].id }));
         }
     }, [businesses, client, formData.businessId, user?.role]);
@@ -76,7 +76,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
         enabled:
             referralSearch.length > 2 &&
             showReferralResults &&
-            (!['admin', 'super_admin'].includes(user?.role || '') || !!formData.businessId),
+            (user?.role !== 'super_admin' || !!formData.businessId),
     });
 
     const createMutation = useMutation({
@@ -121,7 +121,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
         if (!formData.phone.match(/^3\d{9}$/)) return setError('El celular debe tener 10 dígitos y comenzar con 3');
         if (!formData.cedula.match(/^\d{6,15}$/)) return setError('El documento debe tener entre 6 y 15 dígitos');
         if (!formData.nationality.match(/^[a-záéíóúñA-ZÁÉÍÓÚÑ\s]{3,}$/)) return setError('La nacionalidad debe tener al menos 3 letras');
-        if (['admin', 'super_admin'].includes(user?.role || '') && !formData.businessId) {
+        if (user?.role === 'super_admin' && !formData.businessId) {
             return setError('Seleccione un negocio para crear el cliente');
         }
 
@@ -147,7 +147,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
     };
 
     const isLoading = createMutation.isPending || updateMutation.isPending;
-    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const isSuperAdmin = user?.role === 'super_admin';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -169,8 +169,8 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Selector de Negocio (Solo Admin) */}
-                        {isAdmin && !client && (
+                        {/* Selector de Negocio (Solo Super Admin) */}
+                        {isSuperAdmin && !client && (
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Negocio *

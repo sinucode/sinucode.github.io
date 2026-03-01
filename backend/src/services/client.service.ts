@@ -153,17 +153,17 @@ export class ClientService {
 
         let targetBusinessId: string;
 
-        if (userRole === 'user') {
-            // Usuario regular: crear en SU negocio
+        if (userRole !== 'super_admin') {
+            // Usuario/Admin regular: crear en SU negocio
             const userBusinessId = await this.getUserBusiness(requestingUserId);
             if (!userBusinessId) {
-                throw new Error('Usuario no tiene negocio asignado');
+                throw new Error('Usuario/Administrador no tiene negocio asignado');
             }
             targetBusinessId = userBusinessId;
         } else {
-            // Admin/super_admin: requiere businessId
+            // super_admin: requiere businessId
             if (!businessIdInput) {
-                throw new Error('businessId es requerido para admin/super_admin');
+                throw new Error('businessId es requerido para super_admin');
             }
             targetBusinessId = businessIdInput;
         }
