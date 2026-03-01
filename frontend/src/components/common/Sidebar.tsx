@@ -16,7 +16,6 @@ export default function Sidebar() {
     const { user, logout } = useAuthStore();
     const { selectedBusinessName } = useBusinessStore();
     const navigate = useNavigate();
-    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
 
     const handleLogout = async () => {
         logout();
@@ -28,9 +27,9 @@ export default function Sidebar() {
             {/* Logo */}
             <div className="p-6 border-b border-gray-800">
                 <h1 className="text-xl font-bold">Gestióncredifacil</h1>
-                <p className="text-xs text-gray-400 mt-1 capitalize">
+                <p className="text-xs text-gray-400 mt-1 capitalize truncate max-w-[200px]" title={user?.fullName || 'Usuario'}>
                     {user?.fullName || 'Usuario'}
-                    {isAdmin && ` • ${selectedBusinessName}`}
+                    {selectedBusinessName ? ` • ${selectedBusinessName}` : ''}
                 </p>
             </div>
 
