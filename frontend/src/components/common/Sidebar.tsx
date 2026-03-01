@@ -23,11 +23,13 @@ export default function Sidebar() {
     };
 
     return (
-        <div className="w-64 bg-gray-900 text-white flex flex-col">
+        <div className="w-64 bg-primary-950 text-white flex flex-col border-r border-primary-900/50 shadow-xl z-10">
             {/* Logo */}
-            <div className="p-6 border-b border-gray-800">
-                <h1 className="text-xl font-bold">Gestióncredifacil</h1>
-                <p className="text-xs text-gray-400 mt-1 capitalize truncate max-w-[200px]" title={user?.fullName || 'Usuario'}>
+            <div className="p-6 border-b border-primary-900/50">
+                <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-200 to-white">
+                    Gestióncredifacil
+                </h1>
+                <p className="text-xs text-primary-300 mt-1 capitalize truncate max-w-[200px]" title={user?.fullName || 'Usuario'}>
                     {user?.fullName || 'Usuario'}
                     {selectedBusinessName ? ` • ${selectedBusinessName}` : ''}
                 </p>
@@ -49,19 +51,19 @@ export default function Sidebar() {
             </nav>
 
             {/* User & Logout */}
-            <div className="p-4 border-t border-gray-800">
-                <div className="flex items-center gap-3 mb-4 p-2 bg-gray-800 rounded-lg">
-                    <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center font-bold">
+            <div className="p-4 border-t border-primary-900/50">
+                <div className="flex items-center gap-3 mb-4 p-3 bg-primary-900/30 rounded-xl border border-primary-800/30 shadow-inner">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center font-bold text-white shadow-md">
                         {user?.fullName?.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{user?.fullName}</p>
-                        <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                        <p className="text-sm font-semibold text-primary-50 truncate">{user?.fullName}</p>
+                        <p className="text-xs text-primary-300 truncate">{user?.email}</p>
                     </div>
                 </div>
                 <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-danger-400 hover:text-white hover:bg-danger-500 rounded-lg transition-all duration-200"
                 >
                     <LogOut size={18} />
                     Cerrar Sesión
@@ -76,14 +78,14 @@ function SidebarLink({ to, icon, label }: { to: string; icon: React.ReactNode; l
         <NavLink
             to={to}
             className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 rounded-lg transition ${isActive
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800'
+                `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${isActive
+                    ? 'bg-primary-600 text-white shadow-md shadow-primary-600/20'
+                    : 'text-primary-200 hover:bg-primary-800/50 hover:text-white'
                 }`
             }
         >
             {icon}
-            <span>{label}</span>
+            <span className="font-medium">{label}</span>
         </NavLink>
     );
 }
