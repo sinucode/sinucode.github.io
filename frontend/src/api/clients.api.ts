@@ -63,6 +63,11 @@ export const deleteClient = async (id: string) => {
     return response.data;
 };
 
+export const bulkDeleteClients = async (clientIds: string[]) => {
+    const response = await api.post<{ success: boolean; data: any }>('/clients/bulk-delete', { clientIds });
+    return response.data;
+};
+
 export const searchClients = async (query: string, businessId?: string) => {
     const params = { q: query, ...(businessId && { businessId }) };
     const response = await api.get<Client[]>('/clients/search', { params });
