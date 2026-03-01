@@ -57,6 +57,9 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Confianza en el proxy (necesario para Vercel)
+app.set('trust proxy', 1);
+
 // Rate limiting general
 app.use('/api/', apiLimiter);
 
