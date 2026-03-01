@@ -28,7 +28,6 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
     const [referralSearch, setReferralSearch] = useState('');
     const [showReferralResults, setShowReferralResults] = useState(false);
 
-    // Cargar datos si es edición
     useEffect(() => {
         if (client) {
             setFormData({
@@ -40,20 +39,16 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                 referredById: client.referredById || '',
                 businessId: client.businessId,
             });
-            if (client.referredBy) {
-                setReferralSearch(client.referredBy.fullName);
-            }
+            if (client.referredBy) setReferralSearch(client.referredBy.fullName);
         }
     }, [client]);
 
-    // Cargar negocios para admin/super_admin
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
         queryFn: getBusinesses,
         enabled: ['admin', 'super_admin'].includes(user?.role || ''),
     });
 
-    // Autoseleccionar el primer negocio para admin si no hay uno elegido
     useEffect(() => {
         const isSuperAdmin = user?.role === 'super_admin';
         if (isSuperAdmin && businesses && businesses.length > 0 && !formData.businessId && !client) {
@@ -61,7 +56,6 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
         }
     }, [businesses, client, formData.businessId, user?.role]);
 
-    // Alinear con el negocio seleccionado anteriormente en la vista de lista
     useEffect(() => {
         const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
         if (isAdmin && selectedBusinessId && !client) {
@@ -69,75 +63,47 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
         }
     }, [client, selectedBusinessId, user?.role]);
 
-    // Buscar referidos
     const { data: referralResults } = useQuery({
         queryKey: ['clients', 'search', referralSearch],
         queryFn: () => searchClients(referralSearch, formData.businessId),
-        enabled:
-            referralSearch.length > 2 &&
-            showReferralResults &&
-            (user?.role !== 'super_admin' || !!formData.businessId),
+        enabled: referralSearch.length > 2 && showReferralResults && (user?.role !== 'super_admin' || !!formData.businessId),
     });
 
     const createMutation = useMutation({
         mutationFn: createClient,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['clients'] });
-            onSuccess();
-        },
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['clients'] }); onSuccess(); },
         onError: (err: any) => {
             const errors = err.response?.data?.errors;
-            if (Array.isArray(errors) && errors.length > 0) {
-                setError(errors[0].msg);
-                return;
-            }
-            setError(err.response?.data?.error || 'Error al crear el cliente');
+            setError(Array.isArray(errors) && errors.length > 0 ? errors[0].msg : err.response?.data?.error || 'Error al crear el cliente');
         },
     });
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: CreateClientData }) =>
-            updateClient(id, data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['clients'] });
-            onSuccess();
-        },
+        mutationFn: ({ id, data }: { id: string; data: CreateClientData }) => updateClient(id, data),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['clients'] }); onSuccess(); },
         onError: (err: any) => {
             const errors = err.response?.data?.errors;
-            if (Array.isArray(errors) && errors.length > 0) {
-                setError(errors[0].msg);
-                return;
-            }
-            setError(err.response?.data?.error || 'Error al actualizar el cliente');
+            setError(Array.isArray(errors) && errors.length > 0 ? errors[0].msg : err.response?.data?.error || 'Error al actualizar el cliente');
         },
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = () => {
         setError('');
-
-        // Validaciones básicas frontend (alineadas con backend)
         if (!formData.fullName.trim()) return setError('El nombre es requerido');
         if (!formData.phone.match(/^3\d{9}$/)) return setError('El celular debe tener 10 dígitos y comenzar con 3');
         if (!formData.cedula.match(/^\d{6,15}$/)) return setError('El documento debe tener entre 6 y 15 dígitos');
         if (!formData.nationality.match(/^[a-záéíóúñA-ZÁÉÍÓÚÑ\s]{3,}$/)) return setError('La nacionalidad debe tener al menos 3 letras');
-        if (user?.role === 'super_admin' && !formData.businessId) {
-            return setError('Seleccione un negocio para crear el cliente');
-        }
+        if (user?.role === 'super_admin' && !formData.businessId) return setError('Seleccione un negocio para crear el cliente');
 
-        // Normalizar payload para evitar strings vacíos que rompan validación backend
         const payload: CreateClientData = {
             ...formData,
-            businessId: client ? undefined : (formData.businessId || undefined), // no enviar businessId en edición
+            businessId: client ? undefined : (formData.businessId || undefined),
             referredById: formData.referredById ? formData.referredById : undefined,
             address: formData.address || undefined,
         };
 
-        if (client) {
-            updateMutation.mutate({ id: client.id, data: payload });
-        } else {
-            createMutation.mutate(payload);
-        }
+        if (client) updateMutation.mutate({ id: client.id, data: payload });
+        else createMutation.mutate(payload);
     };
 
     const handleReferralSelect = (referral: Client) => {
@@ -150,71 +116,63 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
     const isSuperAdmin = user?.role === 'super_admin';
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-            <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-2xl flex flex-col" style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-bottom, 0px) - 56px)' }}>
-                {/* Header fijo */}
-                <div className="flex justify-between items-center px-5 py-4 border-b shrink-0">
-                    <h2 className="text-lg font-semibold text-gray-800">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/60">
+            <div className="
+                flex flex-col bg-white w-full h-full
+                sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-2xl
+                sm:h-auto sm:max-h-[90vh]
+                sm:m-auto
+            ">
+                {/* ── HEADER FIJO ── */}
+                <div className="flex justify-between items-center px-5 py-4 border-b border-gray-200 bg-white shrink-0">
+                    <h2 className="text-lg font-bold text-gray-900">
                         {client ? 'Editar Cliente' : 'Nuevo Cliente'}
                     </h2>
-                    <button onClick={onClose} className="p-2 text-primary-600 hover:text-primary-900 hover:bg-primary-50 rounded-lg">
+                    <button onClick={onClose} className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition">
                         <X size={22} />
                     </button>
                 </div>
 
-                {/* Contenido scrollable */}
+                {/* ── CONTENIDO SCROLLABLE ── */}
                 <div className="flex-1 overflow-y-auto overscroll-contain">
-                    <form onSubmit={handleSubmit} className="px-5 pt-4 pb-2 space-y-5">
+                    <div className="px-5 py-4 space-y-4">
                         {error && (
-                            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
-                                {error}
-                            </div>
+                            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-sm">{error}</div>
                         )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Selector de Negocio (Solo Super Admin) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Negocio */}
                             {isSuperAdmin && !client && (
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-primary-900 mb-1">
-                                        Negocio *
-                                    </label>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Negocio *</label>
                                     <select
                                         value={formData.businessId}
                                         onChange={(e) => setFormData({ ...formData, businessId: e.target.value })}
-                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
                                         required
                                     >
                                         <option value="">Seleccione un negocio</option>
-                                        {businesses?.map((b) => (
-                                            <option key={b.id} value={b.id}>
-                                                {b.name}
-                                            </option>
-                                        ))}
+                                        {businesses?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                                     </select>
                                 </div>
                             )}
 
-                            {/* Nombre Completo */}
+                            {/* Nombre */}
                             <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-primary-900 mb-1">
-                                    Nombre Completo *
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre Completo *</label>
                                 <input
                                     type="text"
                                     value={formData.fullName}
                                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                    minLength={3}
-                                    maxLength={100}
+                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                    placeholder="Nombre completo del cliente"
+                                    required minLength={3} maxLength={100}
                                 />
                             </div>
 
                             {/* Celular */}
                             <div>
-                                <label className="block text-sm font-medium text-primary-900 mb-1">
-                                    Celular *
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Celular *</label>
                                 <input
                                     type="tel"
                                     value={formData.phone}
@@ -222,18 +180,15 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                                         const val = e.target.value.replace(/\D/g, '');
                                         if (val.length <= 10) setFormData({ ...formData, phone: val });
                                     }}
-                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
+                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                                     placeholder="3XXXXXXXXX"
                                 />
-                                <p className="text-xs text-primary-600 mt-1">10 dígitos, inicia con 3</p>
+                                <p className="text-xs text-gray-500 mt-1">10 dígitos, inicia con 3</p>
                             </div>
 
                             {/* Cédula */}
                             <div>
-                                <label className="block text-sm font-medium text-primary-900 mb-1">
-                                    Documento / Cédula *
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Documento / Cédula *</label>
                                 <input
                                     type="text"
                                     value={formData.cedula}
@@ -241,45 +196,38 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                                         const val = e.target.value.replace(/\D/g, '');
                                         setFormData({ ...formData, cedula: val });
                                     }}
-                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                    minLength={6}
-                                    maxLength={10}
+                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                    placeholder="12345678"
+                                    required minLength={6} maxLength={10}
                                 />
                             </div>
 
                             {/* Nacionalidad */}
                             <div>
-                                <label className="block text-sm font-medium text-primary-900 mb-1">
-                                    Nacionalidad *
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Nacionalidad *</label>
                                 <input
                                     type="text"
                                     value={formData.nationality}
                                     onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
-                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
+                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                                 />
                             </div>
 
                             {/* Dirección */}
                             <div>
-                                <label className="block text-sm font-medium text-primary-900 mb-1">
-                                    Dirección
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Dirección</label>
                                 <input
                                     type="text"
                                     value={formData.address}
                                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                    className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                    placeholder="Dirección (opcional)"
                                 />
                             </div>
 
-                            {/* Recomendado por (Autocomplete) */}
+                            {/* Referido */}
                             <div className="md:col-span-2 relative">
-                                <label className="block text-sm font-medium text-primary-900 mb-1">
-                                    Recomendado por (Cliente existente)
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Recomendado por</label>
                                 <div className="relative">
                                     <input
                                         type="text"
@@ -289,47 +237,45 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                                             setShowReferralResults(true);
                                             if (e.target.value === '') setFormData({ ...formData, referredById: '' });
                                         }}
-                                        className="w-full px-3 py-2 pl-10 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-3 py-3 pl-10 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                                         placeholder="Buscar por nombre o celular..."
                                     />
-                                    <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                                    <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
                                 </div>
-
                                 {showReferralResults && referralResults && referralResults.length > 0 && (
-                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
                                         {referralResults.map((ref) => (
                                             <button
                                                 key={ref.id}
                                                 type="button"
                                                 onClick={() => handleReferralSelect(ref)}
-                                                className="w-full text-left px-4 py-2 hover:bg-primary-50 focus:outline-none"
+                                                className="w-full text-left px-4 py-3 hover:bg-primary-50 border-b last:border-0"
                                             >
-                                                <div className="font-medium">{ref.fullName}</div>
-                                                <div className="text-xs text-primary-600">{ref.phone} - {ref.cedula}</div>
+                                                <div className="font-medium text-gray-900">{ref.fullName}</div>
+                                                <div className="text-xs text-gray-500">{ref.phone} - {ref.cedula}</div>
                                             </button>
                                         ))}
                                     </div>
                                 )}
                             </div>
                         </div>
-                    </form>
-                </div>{/* fin scrollable */}
+                    </div>
+                </div>
 
-                {/* Botones fijos al fondo */}
-                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-3 flex items-center gap-3">
+                {/* ── FOOTER FIJO - SIEMPRE VISIBLE ── */}
+                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 sm:flex-none px-4 py-3 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition font-medium text-sm text-center"
+                        className="flex-1 py-3.5 px-4 text-gray-700 bg-gray-100 rounded-2xl hover:bg-gray-200 active:bg-gray-300 transition font-semibold text-sm"
                     >
                         Cancelar
                     </button>
                     <button
-                        type="submit"
-                        form="client-form-inner"
+                        type="button"
                         onClick={handleSubmit}
                         disabled={isLoading}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition font-medium text-sm disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 bg-primary-600 text-white rounded-2xl hover:bg-primary-700 active:bg-primary-800 transition font-semibold text-sm disabled:opacity-50 shadow-lg shadow-primary-200"
                     >
                         <Save size={18} />
                         {isLoading ? 'Guardando...' : (client ? 'Actualizar' : 'Guardar Cliente')}

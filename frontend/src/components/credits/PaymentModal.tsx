@@ -100,20 +100,25 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-            <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-lg flex flex-col" style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-bottom, 0px) - 56px)' }}>
-                {/* Header fijo */}
-                <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
-                    <h3 className="text-lg font-semibold text-gray-800">Registrar Pago</h3>
-                    <button onClick={onClose} className="p-2 text-primary-600 hover:text-primary-900 hover:bg-primary-50 rounded-lg">
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/60">
+            <div className="
+                flex flex-col bg-white w-full h-full
+                sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-lg
+                sm:h-auto sm:max-h-[90vh]
+                sm:m-auto
+            ">
+                {/* ── HEADER FIJO ── */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white shrink-0">
+                    <h3 className="text-lg font-bold text-gray-900">Registrar Pago</h3>
+                    <button onClick={onClose} className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition">
                         <X size={22} />
                     </button>
                 </div>
 
-                {/* Contenido scrollable */}
+                {/* ── CONTENIDO SCROLLABLE ── */}
                 <div className="flex-1 overflow-y-auto overscroll-contain">
-                    <form onSubmit={handleSubmit} className="px-5 pt-4 pb-2 space-y-4">
-                        {error && <div className="bg-red-50 text-red-700 border border-red-200 p-3 rounded-md text-sm">{error}</div>}
+                    <div className="px-5 pt-4 pb-2 space-y-4">
+                        {error && <div className="bg-red-50 text-red-700 border border-red-200 p-3 rounded-xl text-sm">{error}</div>}
 
                         {/* Selección de cuotas */}
                         <div>
@@ -232,23 +237,23 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                                 maxLength={300}
                             />
                         </div>
-                    </form>
+                    </div>
                 </div>{/* fin scrollable */}
 
-                {/* Botones fijos al fondo - siempre visibles */}
-                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-3 flex items-center gap-3">
+                {/* ── FOOTER FIJO - SIEMPRE VISIBLE ── */}
+                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 sm:flex-none px-4 py-3 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition font-medium text-sm"
+                        className="flex-1 py-3.5 px-4 text-gray-700 bg-gray-100 rounded-2xl hover:bg-gray-200 active:bg-gray-300 transition font-semibold text-sm"
                     >
                         Cancelar
                     </button>
                     <button
-                        type="submit"
-                        onClick={handleSubmit}
+                        type="button"
+                        onClick={(e) => handleSubmit(e as any)}
                         disabled={isSubmitting || selectedIds.size === 0}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                        className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 bg-primary-600 text-white rounded-2xl hover:bg-primary-700 active:bg-primary-800 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm shadow-lg shadow-primary-200"
                     >
                         <Save size={18} />
                         {isSubmitting
