@@ -23,7 +23,7 @@ export default function LoginPage() {
 
         try {
             const response = await loginApi({ email, password });
-            login(response.accessToken, response.refreshToken, response.user);
+            login(response.accessToken, response.refreshToken, response.user as any);
             navigate('/dashboard');
         } catch (err: any) {
             setError(err.response?.data?.error || 'Error al iniciar sesión');

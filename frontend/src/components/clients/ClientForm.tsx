@@ -129,7 +129,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
         const payload: CreateClientData = {
             ...formData,
             businessId: client ? undefined : (formData.businessId || undefined), // no enviar businessId en edición
-            referredById: formData.referredById ? formData.referredById : (client ? null : undefined),
+            referredById: formData.referredById ? formData.referredById : undefined,
             address: formData.address || undefined,
         };
 

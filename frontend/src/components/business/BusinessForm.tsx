@@ -122,7 +122,7 @@ export default function BusinessForm({ onClose, onSuccess, initialData }: Busine
                             </label>
                             <input
                                 type="text"
-                                value={formData.initialCapital.toLocaleString('es-CO')}
+                                value={(formData.initialCapital || 0).toLocaleString('es-CO')}
                                 onChange={(e) => {
                                     // Remove dots and convert to number
                                     const numericValue = e.target.value.replace(/\./g, '');

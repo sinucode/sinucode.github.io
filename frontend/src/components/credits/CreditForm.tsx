@@ -211,15 +211,6 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated }) => {
 
     const isLoading = simulateMutation.isPending || createMutation.isPending;
 
-    const simulationTotal = useMemo(() => {
-        if (!simulation) return null;
-        return {
-            total: simulation.totalWithInterest,
-            cuota: simulation.paymentAmount,
-            cuotas: simulation.numberOfPayments,
-        };
-    }, [simulation]);
-
     const derivedTermInfo = useMemo(() => {
         const amount = Number(formData.amount.replace(/[^0-9]/g, ''));
         const interestRate = Number(formData.interestRate);

@@ -248,7 +248,7 @@ export default function UserManagement() {
                                             >
                                                 Editar
                                             </button>
-                                            {user.userId !== currentUser?.userId && (
+                                            {user.userId !== currentUser?.id && (
                                                 <button
                                                     onClick={() =>
                                                         toggleStatusMutation.mutate(user.userId)

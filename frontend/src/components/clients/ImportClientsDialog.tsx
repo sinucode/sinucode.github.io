@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, CheckSquare, Square, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { getBusinesses } from '../../api/business.api';
-import { getClients, batchImportClients, Client } from '../../api/clients.api';
+import { getClients, batchImportClients } from '../../api/clients.api';
 
 interface ImportClientsDialogProps {
     currentBusinessId: string;
@@ -208,8 +208,8 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                         {/* Import Results */}
                         {importResult && (
                             <div className={`rounded-lg p-4 border ${importResult.failed === 0
-                                    ? 'bg-green-50 border-green-200'
-                                    : 'bg-yellow-50 border-yellow-200'
+                                ? 'bg-green-50 border-green-200'
+                                : 'bg-yellow-50 border-yellow-200'
                                 }`}>
                                 <div className="flex items-start gap-3">
                                     {importResult.failed === 0 ? (
