@@ -64,3 +64,51 @@
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* ─── Mobile / Responsive helpers ── */
+
+/* Eliminar highlight azul en tap (Android/iOS) */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Inputs: evitar zoom automático en iOS al hacer focus (font size >= 16px) */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Safe area para iPhone con notch / Dynamic Island / barra de inicio */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Bottom nav extiende al área segura de iOS */
+nav.fixed.bottom-0 {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Scroll suave en toda la app */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Inputs mejores para móvil */
+input,
+select,
+textarea {
+  outline-offset: 2px;
+}
+
+/* Touch action para botones: respuesta inmediata */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
