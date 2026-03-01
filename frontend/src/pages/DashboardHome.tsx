@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
@@ -20,7 +20,7 @@ export default function DashboardHome() {
         enabled: isAdmin,
     });
 
-    useMemo(() => {
+    useEffect(() => {
         if (isAdmin && businesses && businesses.length > 0 && !businessId) {
             setBusinessId(businesses[0].id);
         }
@@ -42,9 +42,9 @@ export default function DashboardHome() {
         const saldoPendiente = credits?.reduce((acc: number, c: any) => acc + Number(c.remainingBalance || 0), 0) || 0;
         const pagosHoy = credits?.reduce((acc: number, c: any) => {
             if (!c.paymentSchedule) return acc;
-            const today = new Date(); today.setHours(0,0,0,0);
+            const today = new Date(); today.setHours(0, 0, 0, 0);
             const count = c.paymentSchedule.filter((p: any) => {
-                const d = new Date(p.dueDate); d.setHours(0,0,0,0);
+                const d = new Date(p.dueDate); d.setHours(0, 0, 0, 0);
                 return d.getTime() === today.getTime() && p.status !== 'paid';
             }).length;
             return acc + count;

@@ -17,9 +17,6 @@ import creditRoutes from './routes/credit.routes';
 import paymentRoutes from './routes/payment.routes';
 import cashRoutes from './routes/cash.routes';
 import setupRoutes from './routes/setup.routes';
-// import cashRoutes from './routes/cash.routes';
-// import dashboardRoutes from './routes/dashboard.routes';
-// import auditRoutes from './routes/audit.routes';
 
 const app: Application = express();
 
@@ -84,9 +81,6 @@ app.use('/api/credits', creditRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/cash', cashRoutes);
 app.use('/api/setup', setupRoutes);
-// app.use('/api/cash', cashRoutes);
-// app.use('/api/dashboard', dashboardRoutes);
-// app.use('/api/audit', auditRoutes);
 
 /**
  * MANEJO DE ERRORES

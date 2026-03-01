@@ -36,9 +36,7 @@ const ClientsPage = () => {
     const { data: clients, isLoading } = useQuery({
         queryKey: ['clients', selectedBusinessId],
         queryFn: () => getClients(selectedBusinessId),
-        enabled: !isAdmin || !!selectedBusinessId, // evitar error en admin sin negocio seleccionado
-        // Si es admin, espera a que seleccione negocio o carga todos si la API lo soporta (ajustamos backend para requerir ID o no)
-        // En este caso, el backend requiere businessId para admin, así que podríamos seleccionar el primero por defecto
+        enabled: Boolean(selectedBusinessId),
     });
 
     // Efecto para seleccionar el primer negocio por defecto si es admin

@@ -30,8 +30,14 @@ export interface Client {
     phone: string;
     cedula: string;
     fullName: string;
+    nationality: string;
     address?: string;
-    email?: string;
+    referredById?: string;
+    referredBy?: {
+        id: string;
+        fullName: string;
+        phone: string;
+    };
     createdAt: string;
     updatedAt: string;
 }
@@ -164,6 +170,9 @@ export interface LoginResponse {
         email: string;
         fullName: string;
         role: UserRole;
+        isActive: boolean;
+        createdAt: string;
+        updatedAt: string;
     };
 }
 

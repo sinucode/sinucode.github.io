@@ -103,12 +103,39 @@ export const me = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
+        // Obtener datos completos del usuario desde la BD
+        const prisma = (await import('../config/database')).default;
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.userId },
+            select: {
+                id: true,
+                email: true,
+                fullName: true,
+                role: true,
+                isActive: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+
+        if (!user) {
+            res.status(404).json({
+                success: false,
+                error: 'User not found',
+            });
+            return;
+        }
+
         res.json({
             success: true,
             data: {
-                userId: req.user.userId,
-                email: req.user.email,
-                role: req.user.role,
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role,
+                isActive: user.isActive,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
             },
         });
     } catch (error) {

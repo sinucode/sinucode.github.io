@@ -14,7 +14,8 @@ export const config = {
     },
 
     frontend: {
-        url: process.env.FRONTEND_URL || 'http://localhost:5173',
+        // FRONTEND_URL debe configurarse en las variables de entorno de Vercel
+        url: process.env.FRONTEND_URL || '',
     },
 
     email: {
@@ -38,4 +39,8 @@ if (config.nodeEnv === 'production') {
     if (config.jwt.refreshSecret === 'fallback-refresh-secret-change-me') {
         throw new Error('JWT_REFRESH_SECRET must be defined in production');
     }
+    if (!config.frontend.url) {
+        throw new Error('FRONTEND_URL must be defined in production');
+    }
 }
+

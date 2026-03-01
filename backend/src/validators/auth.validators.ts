@@ -43,8 +43,8 @@ export const createUserValidation = [
         .isLength({ min: 2, max: 255 })
         .withMessage('Full name must be between 2 and 255 characters'),
     body('role')
-        .isIn(['super_admin', 'business_user'])
-        .withMessage('Role must be either super_admin or business_user'),
+        .isIn(['super_admin', 'admin', 'user'])
+        .withMessage('Role must be super_admin, admin, or user'),
 ];
 
 /**

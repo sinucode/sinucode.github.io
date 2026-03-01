@@ -15,6 +15,9 @@ export interface LoginResult {
         email: string;
         fullName: string;
         role: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     };
 }
 
@@ -93,6 +96,9 @@ export const login = async (
                 email: user.email,
                 fullName: user.fullName,
                 role: user.role,
+                isActive: user.isActive,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
             },
         };
     } catch (error) {

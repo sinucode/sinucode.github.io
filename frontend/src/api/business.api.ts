@@ -24,7 +24,7 @@ export interface CreateBusinessData {
 export interface UpdateBusinessData {
     name?: string;
     description?: string;
-    initialCapital?: number;
+    // initialCapital NO puede ser modificado después de la creación (integridad financiera)
 }
 
 /**
