@@ -7,6 +7,7 @@ import { getCashFlow } from '../api/cash.api';
 import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
 import ColombianCalendar from '../components/dashboard/ColombianCalendar';
+import { startOfTodayBogota } from '../utils/dates';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
 
@@ -64,27 +65,31 @@ export default function DashboardHome() {
 
         let overdueCredits = 0;
         let pagosHoy = 0;
-        const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+        const startOfBogotaToday = startOfTodayBogota().getTime();
+        const endOfBogotaToday = startOfBogotaToday + 24 * 60 * 60 * 1000;
 
         credits?.forEach((c: any) => {
             if (c.status === 'paid' || c.status === 'cancelled') return;
 
-            // Check if overdue (status is overdue OR any unpaid schedule item is past today AND status is purely 'pending')
+            // Check if overdue (status is overdue OR any unpaid schedule item is past today AND status is purely 'pending' or 'overdue')
             const isOverdue = c.status === 'overdue' || (c.paymentSchedule && c.paymentSchedule.some((p: any) => {
-                if (p.status !== 'pending' && p.status !== 'overdue') return false;
-                const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-                return dStr < todayStr;
+                if (p.status === 'overdue') return true;
+                if (p.status === 'pending') {
+                    const pDate = new Date(p.dueDate).getTime();
+                    return pDate < startOfBogotaToday;
+                }
+                return false;
             }));
 
             if (isOverdue) {
                 overdueCredits++;
             }
 
-            // Check if due today (any unpaid schedule item is exactly today)
+            // Check if due today (exact match with backend logic)
             const isDueToday = c.paymentSchedule && c.paymentSchedule.some((p: any) => {
-                if (p.status === 'paid') return false;
-                const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-                return dStr === todayStr;
+                const pDate = new Date(p.dueDate).getTime();
+                return pDate >= startOfBogotaToday && pDate < endOfBogotaToday && (p.status === 'pending' || p.status === 'partial');
             });
 
             if (isDueToday) {
