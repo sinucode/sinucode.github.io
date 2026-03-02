@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'ax
 
 // En Vercel, frontend y backend comparten el mismo dominio.
 // VITE_API_URL debe estar vacío → baseURL queda como '/api' (mismo origen).
-// @ts-ignore
+// @ts-expect-error
 const API_URL = import.meta.env?.VITE_API_URL || '';
 
 // Crear instancia de axios

@@ -230,7 +230,9 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 scheduledAmount: Number(p.scheduledAmount),
             }));
         }
-        const start = formData.startDate ? new Date(formData.startDate) : new Date();
+        const startRaw = formData.startDate ? new Date(formData.startDate) : new Date();
+        const start = new Date(startRaw);
+        start.setHours(12, 0, 0, 0);
         const daysMap: Record<PaymentFrequency, number> = { daily: 1, weekly: 7, biweekly: 15, monthly: 30 };
         const gap = daysMap[formData.frequency] ?? 7;
         const count = Number(simulation.numberOfPayments) || 0;

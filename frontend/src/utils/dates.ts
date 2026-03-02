@@ -36,19 +36,6 @@ export const formatDateTime = (date: string | Date | null | undefined): string =
 };
 
 /**
- * Formatea solo la hora en zona Bogotá
- * Ejemplo: "10:30 a.m."
- */
-export const formatTime = (date: string | Date | null | undefined): string => {
-    if (!date) return '—';
-    return new Date(date).toLocaleTimeString('es-CO', {
-        timeZone: TIMEZONE,
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-};
-
-/**
  * Retorna la fecha actual en Bogotá como string YYYY-MM-DD
  * Útil para inicializar inputs de tipo date
  */
@@ -74,12 +61,4 @@ export const isOverdueBogota = (dueDate: string | Date): boolean => {
     const dueStr = due.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     const todayStr = now.toLocaleDateString('en-CA', { timeZone: TIMEZONE });
     return dueStr < todayStr;
-};
-
-/**
- * Formatea moneda en pesos colombianos
- */
-export const formatCOP = (val: number | string | null | undefined): string => {
-    const num = Math.ceil(Number(val || 0));
-    return `$${num.toLocaleString('es-CO')}`;
 };

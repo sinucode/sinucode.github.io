@@ -44,13 +44,3 @@ export const loginLimiter = rateLimit({
     },
 });
 
-/**
- * Rate limiter para operaciones sensibles (crear/editar/eliminar)
- */
-export const strictLimiter = rateLimit({
-    windowMs: 5 * 60 * 1000, // 5 minutos
-    max: 20, // 20 requests cada 5 minutos
-    message: 'Too many requests, please slow down',
-    standardHeaders: true,
-    legacyHeaders: false,
-});

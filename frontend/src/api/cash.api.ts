@@ -9,10 +9,6 @@ export interface CashMovementInput {
     relatedPaymentId?: string;
 }
 
-export const recordMovement = async (payload: CashMovementInput) => {
-    const res = await api.post('/cash/movements', payload);
-    return res.data;
-};
 
 export const injectCapital = async (payload: { businessId: string; amount: number; description?: string }) => {
     const res = await api.post('/cash/inject', payload);
@@ -29,10 +25,6 @@ export const getCashFlow = async (params: { businessId: string; startDate?: stri
     return res.data as { movements: any[]; summary: { totalIncome: number; totalExpenses: number; net: number } };
 };
 
-export const reconcileCash = async (businessId: string) => {
-    const res = await api.get('/cash/reconcile', { params: { businessId } });
-    return res.data;
-};
 
 export const forecastCash = async (params: { businessId: string; targetDate: string }) => {
     const res = await api.get('/cash/forecast', { params });

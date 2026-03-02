@@ -233,7 +233,9 @@ export default function CreditDetailPage() {
         const total = editForm.useFixedInstallment && installment > 0 ? targetCount * installment : baseTotal;
         const base = Math.floor(total / targetCount);
         const remainder = total - base * targetCount;
-        const start = editForm.startDate ? new Date(editForm.startDate) : new Date();
+        const startRaw = editForm.startDate ? new Date(editForm.startDate) : new Date();
+        const start = new Date(startRaw);
+        start.setHours(12, 0, 0, 0);
 
         const plan = Array.from({ length: targetCount }).map((_, idx) => {
             const due = new Date(start);

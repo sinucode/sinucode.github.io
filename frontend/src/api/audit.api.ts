@@ -72,13 +72,6 @@ export const exportAuditLogs = async (filters: AuditLogFilters): Promise<Blob> =
     return response.data;
 };
 
-/**
- * Obtener acciones disponibles para filtros
- */
-export const getAvailableActions = async (): Promise<string[]> => {
-    const response = await api.get('/audit/actions');
-    return response.data.data;
-};
 
 /**
  * Eliminar log de auditoría

@@ -24,12 +24,6 @@ export const refreshToken = async (refreshToken: string): Promise<{ accessToken:
     return response.data.data!;
 };
 
-/**
- * Logout
- */
-export const logout = async (): Promise<void> => {
-    await api.post('/auth/logout');
-};
 
 /**
  * Obtener usuario actual

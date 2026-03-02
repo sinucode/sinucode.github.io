@@ -81,10 +81,13 @@ export const calculateCreditPlan = (
     // Generar plan de pagos
     const paymentPlan: PaymentPlan[] = [];
     const start = new Date(startDate);
+    // Asegurar que trabajamos al mediodía para evitar saltos de día por zona horaria
+    start.setHours(12, 0, 0, 0);
 
     for (let i = 0; i < numberOfPayments; i++) {
         const dueDate = new Date(start);
         dueDate.setDate(start.getDate() + daysBetweenPayments * (i + 1));
+        dueDate.setHours(12, 0, 0, 0);
 
         paymentPlan.push({
             installmentNumber: i + 1,
@@ -108,41 +111,7 @@ export const calculateCreditPlan = (
 export const calculateEndDate = (startDate: Date, termDays: number): Date => {
     const endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + termDays);
+    endDate.setHours(12, 0, 0, 0);
     return endDate;
 };
 
-/**
- * Distribuye un pago entre capital e intereses
- * @param paymentAmount - Monto del pago
- * @param remainingBalance - Saldo pendiente total
- * @param originalAmount - Monto original del préstamo
- * @param totalInterest - Interés total del crédito
- * @returns Distribución del pago
- */
-export const distributePayment = (
-    paymentAmount: number,
-    remainingBalance: number,
-    originalAmount: number,
-    totalInterest: number
-) => {
-    const totalAmount = originalAmount + totalInterest;
-    const paidSoFar = totalAmount - remainingBalance;
-
-    // Calcular cuánto del interés ya se ha pagado
-    const interestProportion = totalInterest / totalAmount;
-    const interestPaidSoFar = paidSoFar * interestProportion;
-    const remainingInterest = totalInterest - interestPaidSoFar;
-
-    // Distribuir el pago proporcionalmente
-    const amountToInterest = Math.min(
-        paymentAmount * interestProportion,
-        remainingInterest
-    );
-    const amountToPrincipal = paymentAmount - amountToInterest;
-
-    return {
-        amountToPrincipal,
-        amountToInterest,
-        newBalance: remainingBalance - paymentAmount,
-    };
-};

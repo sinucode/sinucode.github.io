@@ -30,8 +30,13 @@ export class CreditService {
         return userBusiness?.businessId || null;
     }
 
-    private normalizeDate(date?: string): Date {
-        return date ? new Date(date) : new Date();
+    private normalizeDate(dateStr?: string): Date {
+        if (!dateStr) return new Date();
+        // dateStr usually comes as YYYY-MM-DD
+        // By adding T12:00:00-05:00 we force the time to be Noon in Colombia
+        // This prevents the date from shifting to the previous day when converted to UTC
+        const formatted = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00.000-05:00`;
+        return new Date(formatted);
     }
 
     async simulateCredit(data: CreateCreditInput) {

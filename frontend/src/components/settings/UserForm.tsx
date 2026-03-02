@@ -67,8 +67,6 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
 
     const updateUserMutation = useMutation({
         mutationFn: (data: any) => {
-            console.log('Updating user with ID:', initialData!.userId);
-            console.log('Update data:', data);
             return updateUser(initialData!.userId, data);
         },
         onSuccess: () => {

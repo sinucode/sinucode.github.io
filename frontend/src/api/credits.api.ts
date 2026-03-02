@@ -64,7 +64,3 @@ export const updateCreditSchedule = async (
     return res.data;
 };
 
-export const bulkDeleteCredits = async (creditIds: string[]) => {
-    const response = await api.post<{ success: boolean; data: any }>('/credits/bulk-delete', { creditIds });
-    return response.data;
-};
