@@ -29,8 +29,8 @@ export default function DashboardHome() {
     }, [isAdmin, businesses, businessId, setSelectedBusiness]);
 
     const { data: credits } = useQuery({
-        queryKey: ['credits-dashboard'],
-        queryFn: () => getCredits(),
+        queryKey: ['credits-dashboard', businessId],
+        queryFn: () => getCredits({ ...(businessId ? { businessId } : {}) }),
     });
 
     const { data: cashFlow } = useQuery({
@@ -41,10 +41,8 @@ export default function DashboardHome() {
 
     const stats = useMemo(() => {
         const now = new Date();
-        // Inicio del mes actual en zona Bogotá
-        const mesActualStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7); // 'YYYY-MM'
+        const mesActualStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7);
 
-        // ── 1. Pagos recibidos en el mes ──
         const pagosDelMes = cashFlow?.movements
             ?.filter((m: any) => {
                 if (m.type !== 'payment_received') return false;
@@ -53,30 +51,15 @@ export default function DashboardHome() {
             })
             ?.reduce((sum: number, m: any) => sum + Number(m.amount), 0) || 0;
 
-        // ── 2. Cartera activa = saldo pendiente total de créditos activos ──
         const carteraActiva = credits
             ?.filter((c: any) => c.status === 'active')
             ?.reduce((sum: number, c: any) => sum + Number(c.remainingBalance || 0), 0) || 0;
 
-        // ── 3. Total prestado = capital+intereses de créditos activos y en mora ──
         const totalPrestado = credits
             ?.filter((c: any) => c.status === 'active' || c.status === 'overdue')
             ?.reduce((sum: number, c: any) => sum + Number(c.totalWithInterest || c.amount || 0), 0) || 0;
 
-        // ── Métricas existentes ──
-        const activeCredits = credits?.filter((c: any) => c.status === 'active').length || 0;
-        const overdueCredits = credits?.filter((c: any) => c.status === 'overdue').length || 0;
-        const pagosHoy = credits?.reduce((acc: number, c: any) => {
-            if (!c.paymentSchedule) return acc;
-            const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-            const count = c.paymentSchedule.filter((p: any) => {
-                const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-                return dStr === todayStr && p.status !== 'paid';
-            }).length;
-            return acc + count;
-        }, 0) || 0;
-
-        return { pagosDelMes, carteraActiva, totalPrestado, activeCredits, overdueCredits, pagosHoy };
+        return { pagosDelMes, carteraActiva, totalPrestado };
     }, [credits, cashFlow]);
 
     return (
@@ -110,7 +93,7 @@ export default function DashboardHome() {
                 </div>
             </div>
 
-            {/* Stats Grid — fila 1: métricas financieras clave */}
+            {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard
                     title="Pagos recibidos (mes)"
@@ -133,13 +116,6 @@ export default function DashboardHome() {
                     color="purple"
                     subtitle="activos + mora (capital+interés)"
                 />
-            </div>
-
-            {/* Stats Grid — fila 2: operativas */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard title="Créditos activos" value={String(stats.activeCredits)} icon="✅" color="green" subtitle="en curso" />
-                <StatCard title="Cobros hoy" value={String(stats.pagosHoy)} icon="📅" color="orange" subtitle="cuotas vencen hoy" />
-                <StatCard title="En mora" value={String(stats.overdueCredits)} icon="⚠️" color="red" subtitle="créditos vencidos" />
             </div>
 
             {/* Calendario + Panel lateral */}
@@ -173,21 +149,9 @@ export default function DashboardHome() {
                                 <span className="text-sm text-gray-600">Cartera activa</span>
                                 <span className="text-sm font-bold text-green-600">{formatMoney(stats.carteraActiva)}</span>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                            <div className="flex justify-between items-center py-2">
                                 <span className="text-sm text-gray-600">Total prestado</span>
                                 <span className="text-sm font-bold text-purple-600">{formatMoney(stats.totalPrestado)}</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span className="text-sm text-gray-600">Créditos activos</span>
-                                <span className="text-sm font-bold text-gray-800">{stats.activeCredits}</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span className="text-sm text-gray-600">Cobros hoy</span>
-                                <span className={`text-sm font-bold ${stats.pagosHoy > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{stats.pagosHoy}</span>
-                            </div>
-                            <div className="flex justify-between items-center py-2">
-                                <span className="text-sm text-gray-600">En mora</span>
-                                <span className={`text-sm font-bold ${stats.overdueCredits > 0 ? 'text-red-600' : 'text-gray-400'}`}>{stats.overdueCredits}</span>
                             </div>
                         </div>
                     </div>
