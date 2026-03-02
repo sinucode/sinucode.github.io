@@ -146,7 +146,8 @@ model Credit {
 enum PaymentFrequency {
   daily
   weekly
-  biweekly
+  bisemanal
+  quincenal
   monthly
 
   @@map("payment_frequency")

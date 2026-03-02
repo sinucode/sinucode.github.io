@@ -3,7 +3,7 @@ import prisma from '../config/database';
 import { calculateCreditPlan, calculateEndDate } from '../utils/calculations';
 import { normalizeToNoon } from '../utils/dates';
 
-export type PaymentFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+export type PaymentFrequency = 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly';
 
 interface CreateCreditInput {
     clientId: string;

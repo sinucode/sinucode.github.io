@@ -1,6 +1,6 @@
 import { body, query } from 'express-validator';
 
-const frequencyValues = ['daily', 'weekly', 'biweekly', 'monthly'];
+const frequencyValues = ['daily', 'weekly', 'bisemanal', 'quincenal', 'monthly'];
 
 export const simulateCreditValidators = [
     body('amount')

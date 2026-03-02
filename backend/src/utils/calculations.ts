@@ -19,12 +19,35 @@ export interface CreditCalculation {
 }
 
 /**
+ * Función auxiliar para obtener la siguiente fecha quincenal (15 o 30 de cada mes)
+ */
+const getNextQuincena = (currentDate: Date): Date => {
+    const d = new Date(currentDate);
+    const day = d.getDate();
+    const month = d.getMonth();
+    const year = d.getFullYear();
+
+    if (day < 15) {
+        d.setDate(15);
+    } else if (day >= 15 && day < 30) {
+        // Si es febrero o el mes no tiene día 30, caerá al último del mes (ej: 28 de feb)
+        const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+        d.setDate(Math.min(30, lastDayOfMonth));
+    } else {
+        // Día 30 o 31 -> 15 del siguiente mes
+        d.setMonth(month + 1);
+        d.setDate(15);
+    }
+    return normalizeToNoon(d);
+};
+
+/**
  * Calcula el plan de pagos para un crédito
  * @param amount - Monto del préstamo
  * @param interestRate - Tasa de interés mensual (ej: 10 para 10%)
  * @param startDate - Fecha de inicio del crédito
  * @param termDays - Plazo en días
- * @param frequency - Frecuencia de pago (daily, weekly, biweekly, monthly)
+ * @param frequency - Frecuencia de pago (daily, weekly, bisemanal, quincenal, monthly)
  * @returns Calculation con plan de pagos completo
  */
 export const calculateCreditPlan = (
@@ -32,7 +55,7 @@ export const calculateCreditPlan = (
     interestRate: number,
     startDate: Date,
     termDays: number,
-    frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly'
+    frequency: 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly'
 ): CreditCalculation => {
     // Calcular número de cuotas según frecuencia
     let numberOfPayments = 0;
@@ -47,8 +70,12 @@ export const calculateCreditPlan = (
             daysBetweenPayments = 7;
             numberOfPayments = Math.ceil(termDays / 7);
             break;
-        case 'biweekly':
-            daysBetweenPayments = 15;
+        case 'bisemanal':
+            daysBetweenPayments = 14;
+            numberOfPayments = Math.ceil(termDays / 14);
+            break;
+        case 'quincenal':
+            daysBetweenPayments = 15; // Promedio para cálculo de número de cuotas
             numberOfPayments = Math.ceil(termDays / 15);
             break;
         case 'monthly':
@@ -58,19 +85,13 @@ export const calculateCreditPlan = (
     }
 
     // Calcular interés total basado en el número de cuotas
-    // La tasa de interés es MENSUAL, pero se prorratea por cuota
-    // Regla de negocio:
-    //   - 10% mensual con 4 cuotas semanales = 2.5% por semana (10% / 4)
-    //   - 2 semanas al 10% mensual = 2 × 2.5% = 5% total = $50,000 en $1M
-    //   - 3 semanas al 10% mensual = 3 × 2.5% = 7.5% total = $75,000 en $1M
-    //   - 4 semanas al 10% mensual = 4 × 2.5% = 10% total = $100,000 en $1M
     const rateDecimal = interestRate / 100;
 
     // Calcular el interés por cuota según la frecuencia
-    // 1 mes = 4 semanas, 2 quincenas, o 1 mensualidad
+    // 1 mes = 4 semanas, 2 quincenas (bisemanal o quincenal), o 1 mensualidad
     let paymentsPerMonth = 1;
     if (frequency === 'weekly') paymentsPerMonth = 4;
-    else if (frequency === 'biweekly') paymentsPerMonth = 2;
+    else if (frequency === 'bisemanal' || frequency === 'quincenal') paymentsPerMonth = 2;
     else if (frequency === 'daily') paymentsPerMonth = 30;
 
     const interestPerPayment = rateDecimal / paymentsPerMonth;
@@ -82,15 +103,20 @@ export const calculateCreditPlan = (
 
     // Generar plan de pagos
     const paymentPlan: PaymentPlan[] = [];
-    const start = normalizeToNoon(startDate);
+    let currentDueDate = normalizeToNoon(startDate);
 
     for (let i = 0; i < numberOfPayments; i++) {
-        const dueDate = new Date(start);
-        dueDate.setDate(start.getDate() + daysBetweenPayments * (i + 1));
+        if (frequency === 'quincenal') {
+            currentDueDate = getNextQuincena(currentDueDate);
+        } else {
+            const nextDate = new Date(currentDueDate);
+            nextDate.setDate(currentDueDate.getDate() + daysBetweenPayments);
+            currentDueDate = normalizeToNoon(nextDate);
+        }
 
         paymentPlan.push({
             installmentNumber: i + 1,
-            dueDate: normalizeToNoon(dueDate),
+            dueDate: currentDueDate,
             scheduledAmount: paymentAmount,
         });
     }
