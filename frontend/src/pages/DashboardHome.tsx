@@ -69,9 +69,9 @@ export default function DashboardHome() {
         credits?.forEach((c: any) => {
             if (c.status === 'paid' || c.status === 'cancelled') return;
 
-            // Check if overdue (status is overdue OR any unpaid schedule item is past today)
+            // Check if overdue (status is overdue OR any unpaid schedule item is past today AND status is purely 'pending')
             const isOverdue = c.status === 'overdue' || (c.paymentSchedule && c.paymentSchedule.some((p: any) => {
-                if (p.status === 'paid') return false;
+                if (p.status !== 'pending' && p.status !== 'overdue') return false;
                 const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
                 return dStr < todayStr;
             }));
@@ -80,14 +80,14 @@ export default function DashboardHome() {
                 overdueCredits++;
             }
 
-            // Check if due today (any unpaid schedule item is exactly today)
+            // Check if due today (any unpaid schedule item is exactly today) AND it's not already in mora
             const isDueToday = c.paymentSchedule && c.paymentSchedule.some((p: any) => {
                 if (p.status === 'paid') return false;
                 const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
                 return dStr === todayStr;
             });
 
-            if (isDueToday) {
+            if (isDueToday && !isOverdue) {
                 pagosHoy++;
             }
         });

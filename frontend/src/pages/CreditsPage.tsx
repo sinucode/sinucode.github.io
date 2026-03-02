@@ -118,7 +118,7 @@ export default function CreditsPage() {
                                     ? credit.paymentSchedule.find((p: any) => p.status !== 'paid')
                                     : null;
 
-                                const isOverdue = credit.status === 'overdue' || (credit.paymentSchedule && credit.paymentSchedule.some((p: any) => p.status !== 'paid' && isOverdueBogota(p.dueDate)));
+                                const isOverdue = credit.status === 'overdue' || (credit.paymentSchedule && credit.paymentSchedule.some((p: any) => p.status === 'pending' && isOverdueBogota(p.dueDate)));
 
                                 let displayStatus = 'Activo';
                                 let statusColor = 'bg-emerald-100 text-emerald-800';

@@ -165,12 +165,27 @@ export class CreditService {
         const endOfBogotaToday = new Date(startOfBogotaToday.getTime() + 24 * 60 * 60 * 1000);
 
         if (filters.dueToday) {
-            where.paymentSchedule = {
-                some: {
-                    dueDate: { gte: startOfBogotaToday, lt: endOfBogotaToday },
-                    status: { not: 'paid' }
+            where.AND = [
+                ...(where.AND ? (Array.isArray(where.AND) ? where.AND : [where.AND]) : []),
+                {
+                    paymentSchedule: {
+                        some: {
+                            dueDate: { gte: startOfBogotaToday, lt: endOfBogotaToday },
+                            status: { not: 'paid' }
+                        }
+                    }
+                },
+                // NO DEBE ESTAR EN MORA
+                {
+                    NOT: {
+                        OR: [
+                            { status: 'overdue' },
+                            { paymentSchedule: { some: { status: 'overdue' } } },
+                            { paymentSchedule: { some: { dueDate: { lt: startOfBogotaToday }, status: 'pending' } } }
+                        ]
+                    }
                 }
-            };
+            ];
         }
 
         if (filters.overdue) {
@@ -180,7 +195,7 @@ export class CreditService {
                     OR: [
                         { status: 'overdue' },
                         { paymentSchedule: { some: { status: 'overdue' } } },
-                        { paymentSchedule: { some: { dueDate: { lt: startOfBogotaToday }, status: { in: ['pending', 'partial'] } } } }
+                        { paymentSchedule: { some: { dueDate: { lt: startOfBogotaToday }, status: 'pending' } } }
                     ]
                 }
             ];
