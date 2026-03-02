@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { registerPayment } from '../../api/payments.api';
 import { Save, X, CheckSquare, Square } from 'lucide-react';
@@ -99,8 +100,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/60">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-black/60">
             <div className="
                 flex flex-col bg-white w-full h-full
                 sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-lg
@@ -263,7 +264,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 </div>
             </div>
         </div>
-    );
+        , document.body);
 };
 
 export default PaymentModal;

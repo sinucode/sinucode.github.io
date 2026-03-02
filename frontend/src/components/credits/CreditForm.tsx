@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { getBusinesses } from '../../api/business.api';
@@ -241,9 +242,9 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         });
     }, [formData.frequency, formData.startDate, simulation]);
 
-    return (
-        /* Overlay cubre TODO incluyendo bottom nav (z-[100]) */
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/60">
+    return createPortal(
+        /* Overlay al nivel del body: nunca tapado por bottom nav ni layout */
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-black/60">
             {/* En móvil: pantalla completa. En desktop: modal centrado */}
             <div className="
                 flex flex-col bg-white w-full h-full
@@ -503,7 +504,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 </div>
             </div>
         </div>
-    );
+        , document.body);
 };
 
 export default CreditForm;

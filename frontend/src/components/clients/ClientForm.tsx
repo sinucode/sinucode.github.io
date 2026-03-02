@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Save, Search } from 'lucide-react';
 import { createClient, updateClient, Client, CreateClientData, searchClients } from '../../api/clients.api';
@@ -115,8 +116,8 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
     const isLoading = createMutation.isPending || updateMutation.isPending;
     const isSuperAdmin = user?.role === 'super_admin';
 
-    return (
-        <div className="fixed inset-0 z-[100] flex flex-col bg-black/60">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-black/60">
             <div className="
                 flex flex-col bg-white w-full h-full
                 sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-2xl
@@ -283,7 +284,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                 </div>
             </div>
         </div>
-    );
+        , document.body);
 };
 
 export default ClientForm;
