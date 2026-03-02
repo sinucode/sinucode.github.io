@@ -13,12 +13,25 @@ class WhatsAppService {
     private phoneNumber: string | null = null;
 
     constructor() {
+        logger.info('WhatsAppService constructor: Creating client');
         this.client = new Client({
             authStrategy: new LocalAuth({
                 clientId: 'gestioncredifacil-session'
             }),
             puppeteer: {
-                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--single-process', // <- Puede ayudar en entornos con pocos recursos
+                    '--disable-gpu'
+                ],
+                // Si estamos en macOS (darwin), intentamos usar Chrome del sistema si existe
+                // pero si falla, dejamos que puppeteer use el suyo
                 executablePath: process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : undefined
             }
         });

@@ -242,6 +242,7 @@ enum CashMovementType {
   loan_disbursement
   payment_received
   interest_earned
+  payment_reversion
   credit_cancellation
   internal_transfer
 

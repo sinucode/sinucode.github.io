@@ -74,3 +74,12 @@ export const deleteCredit = async (id: string): Promise<{ success: boolean; reve
     return res.data;
 };
 
+export const revertInstallment = async (
+    creditId: string,
+    scheduleId: string,
+    payload: { amountToRevert: number; businessId: string }
+): Promise<{ success: boolean; newPaidAmount: number; newRemaining: number }> => {
+    const res = await api.post(`/credits/${creditId}/schedule/${scheduleId}/revert`, payload);
+    return res.data;
+};
+

@@ -160,3 +160,33 @@ export const deleteCredit = async (req: Request, res: Response) => {
         return res.status(status).json({ error: error.message || 'Error al eliminar el crédito' });
     }
 };
+
+export const revertInstallment = async (req: Request, res: Response) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { creditId, scheduleId } = req.params;
+        const { amountToRevert } = req.body;
+        const userId = req.user!.userId;
+        const role = req.user!.role as UserRole;
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
+
+        const result = await creditService.revertInstallment(
+            creditId,
+            scheduleId,
+            Number(amountToRevert),
+            userId,
+            role,
+            ipAddress
+        );
+
+        return res.json(result);
+    } catch (error: any) {
+        console.error('Error revertiendo cuota:', error);
+        const status = error.message?.includes('permisos') ? 403 : (error.message?.includes('encontrado') ? 404 : 400);
+        return res.status(status).json({ error: error.message || 'Error al revertir la cuota' });
+    }
+};

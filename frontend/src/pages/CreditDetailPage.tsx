@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getCreditDetail, simulateCredit, updateCreditSchedule, deleteCredit, CreditDetail } from '../api/credits.api';
+import { getCreditDetail, simulateCredit, updateCreditSchedule, deleteCredit, CreditDetail, revertInstallment } from '../api/credits.api';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { registerPayment } from '../api/payments.api';
 import { useState, useEffect } from 'react';
 import PaymentModal from '../components/credits/PaymentModal';
 import { PaymentSchedule, PaymentFrequency } from '../types';
-import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, X, Undo2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
 import { formatDate, formatDateTime } from '../utils/dates';
@@ -56,6 +56,8 @@ export default function CreditDetailPage() {
     const [editRows, setEditRows] = useState<PaymentSchedule[]>([]);
     const [editError, setEditError] = useState('');
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [selectedRevertInstallment, setSelectedRevertInstallment] = useState<PaymentSchedule | null>(null);
+    const [isRevertModalOpen, setIsRevertModalOpen] = useState(false);
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
     const canEditPlan = user?.role === 'super_admin' || user?.role === 'admin';
@@ -392,7 +394,7 @@ export default function CreditDetailPage() {
                                         <td className="px-3 py-2 text-gray-900">{formatDate(p.dueDate)}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatMoney(p.scheduledAmount)}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatMoney(p.paidAmount)}</td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 flex items-center gap-2">
                                             <button
                                                 onClick={() => p.status !== 'paid' && setQuickPaySchedule(p)}
                                                 disabled={p.status === 'paid'}
@@ -404,6 +406,18 @@ export default function CreditDetailPage() {
                                                 {renderStatusIcon(p.status === 'paid' ? 'paid' : 'pending')}
                                                 {p.status === 'paid' ? 'paid' : 'pending'}
                                             </button>
+                                            {user?.role === 'super_admin' && Number(p.paidAmount) > 0 && (
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedRevertInstallment(p);
+                                                        setIsRevertModalOpen(true);
+                                                    }}
+                                                    className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                                                    title="Revertir pago de esta cuota"
+                                                >
+                                                    <Undo2 size={16} />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -598,6 +612,19 @@ export default function CreditDetailPage() {
                         }}
                     />
                 </div>
+            )}
+
+            {isRevertModalOpen && selectedRevertInstallment && (
+                <RevertInstallmentModal
+                    schedule={selectedRevertInstallment}
+                    creditId={credit.id}
+                    businessId={credit.businessId}
+                    onClose={() => setIsRevertModalOpen(false)}
+                    onSuccess={() => {
+                        setIsRevertModalOpen(false);
+                        refetch();
+                    }}
+                />
             )}
 
 
@@ -847,6 +874,91 @@ function SummaryCard({ title, value, valueClass = "text-gray-800" }: { title: st
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
             <p className="text-sm text-primary-600">{title}</p>
             <p className={`text-xl font-semibold ${valueClass}`}>{value}</p>
+        </div>
+    );
+}
+
+function RevertInstallmentModal({
+    schedule,
+    creditId,
+    businessId,
+    onClose,
+    onSuccess,
+}: {
+    schedule: PaymentSchedule;
+    creditId: string;
+    businessId: string;
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [amount, setAmount] = useState(String(Math.ceil(Number(schedule.paidAmount))));
+    const queryClient = useQueryClient();
+
+    const mutation = useMutation({
+        mutationFn: (amountToRevert: number) =>
+            revertInstallment(creditId, schedule.id, { amountToRevert, businessId }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
+            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+            onSuccess();
+        },
+        onError: (err: any) => {
+            alert(err.response?.data?.error || 'Error al revertir la cuota');
+        },
+    });
+
+    const handleRevert = () => {
+        const amt = Number(amount.replace(/[^0-9]/g, ''));
+        if (amt <= 0 || amt > Number(schedule.paidAmount)) {
+            alert('Monto inválido');
+            return;
+        }
+        mutation.mutate(amt);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-gray-900 text-rose-600">Revertir pago de cuota</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                        Esta acción restará el monto del pago realizado a la cuota #{schedule.installmentNumber} y lo devolverá al saldo pendiente del crédito. También restará el monto de la caja.
+                    </p>
+                    <div className="bg-rose-50 p-3 rounded-lg border border-rose-100">
+                        <div className="text-xs text-rose-700 font-semibold uppercase tracking-wider mb-1">Monto actual pagado</div>
+                        <div className="text-xl font-bold text-rose-600">{formatMoney(schedule.paidAmount)}</div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Monto a revertir</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-gray-400">$</span>
+                            <input
+                                type="text"
+                                value={Number(amount.replace(/[^0-9]/g, '')).toLocaleString('es-CO')}
+                                onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                                className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleRevert}
+                            disabled={mutation.isPending}
+                            className="px-4 py-2 bg-rose-600 text-white text-sm font-bold rounded-lg hover:bg-rose-700 shadow-lg shadow-rose-200 disabled:opacity-50 transition-all"
+                        >
+                            {mutation.isPending ? 'Confirmando...' : 'Revertir Pago'}
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

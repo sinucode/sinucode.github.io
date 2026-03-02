@@ -734,6 +734,93 @@ export class CreditService {
             return { success: true, revertedAmount: amountToRevert };
         });
     }
+
+    async revertInstallment(
+        creditId: string,
+        scheduleId: string,
+        amountToRevert: number,
+        userId: string,
+        role: UserRole,
+        ipAddress = ''
+    ) {
+        if (role !== 'super_admin') throw new Error('No tiene permisos para revertir cuotas. Solo Super Admin.');
+        if (amountToRevert <= 0) throw new Error('El monto a revertir debe ser mayor a cero');
+
+        return await prisma.$transaction(async (tx) => {
+            const schedule = await tx.paymentSchedule.findUnique({
+                where: { id: scheduleId, creditId },
+                include: { credit: { include: { business: true } } }
+            });
+
+            if (!schedule) throw new Error('Cuota no encontrada');
+            if (amountToRevert > Number(schedule.paidAmount)) {
+                throw new Error(`El monto a revertir ($${amountToRevert}) excede el monto pagado de la cuota ($${schedule.paidAmount})`);
+            }
+
+            const business = schedule.credit.business;
+            const credit = schedule.credit;
+
+            // 1. Actualizar la cuota
+            const newPaidAmount = new Prisma.Decimal(schedule.paidAmount).minus(amountToRevert);
+            const newStatus = Number(newPaidAmount) <= 0 ? 'pending' : 'partial';
+
+            await tx.paymentSchedule.update({
+                where: { id: scheduleId },
+                data: {
+                    paidAmount: newPaidAmount,
+                    status: newStatus
+                }
+            });
+
+            // 2. Actualizar el crédito
+            const newRemaining = new Prisma.Decimal(credit.remainingBalance).plus(amountToRevert);
+            // Aseguramos que el crédito vuelva a estar activo si estaba pagado
+            await tx.credit.update({
+                where: { id: creditId },
+                data: {
+                    remainingBalance: newRemaining,
+                    status: 'active'
+                }
+            });
+
+            // 3. Compensar la Caja
+            const newBalance = new Prisma.Decimal(business.currentBalance).minus(amountToRevert);
+            await tx.cashMovement.create({
+                data: {
+                    businessId: business.id,
+                    type: 'payment_reversion' as any, // Cast to any to avoid temporary TS sync issues
+                    amount: new Prisma.Decimal(amountToRevert),
+                    balanceAfter: newBalance,
+                    description: `Reversión en cuota #${schedule.installmentNumber} del crédito ${credit.id.slice(0, 8)}`,
+                    paymentMethod: 'efectivo',
+                    createdById: userId,
+                    relatedCreditId: creditId
+                }
+            });
+
+            await tx.business.update({
+                where: { id: business.id },
+                data: { currentBalance: newBalance }
+            });
+
+            // 4. Auditoría
+            await tx.auditLog.create({
+                data: {
+                    userId,
+                    businessId: business.id,
+                    action: 'REVERT_PAYMENT_INSTALLMENT',
+                    description: `Reversión de $${amountToRevert.toLocaleString('es-CO')} en cuota #${schedule.installmentNumber}`,
+                    entityType: 'PaymentSchedule',
+                    entityId: scheduleId,
+                    oldValues: { paidAmount: schedule.paidAmount, remainingBalance: credit.remainingBalance },
+                    newValues: { paidAmount: newPaidAmount, remainingBalance: newRemaining },
+                    ipAddress
+                }
+            });
+
+            return { success: true, newPaidAmount, newRemaining };
+        });
+    }
 }
 
 export const creditService = new CreditService();

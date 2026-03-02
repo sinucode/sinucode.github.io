@@ -4,7 +4,7 @@
     "description": "Backend API para Gestióncredifacil - Sistema de gestión de créditos",
     "main": "dist/server.js",
     "scripts": {
-        "dev": "nodemon src/server.ts",
+        "dev": "nodemon",
         "build": "prisma generate && tsc",
         "postinstall": "prisma generate",
         "start": "node dist/server.js",
