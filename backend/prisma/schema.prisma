@@ -122,8 +122,8 @@ model Credit {
   interestRate       Decimal          @map("interest_rate") @db.Decimal(5, 2)
   totalWithInterest  Decimal          @map("total_with_interest") @db.Decimal(15, 2)
   paymentFrequency   PaymentFrequency @map("payment_frequency")
-  startDate          DateTime         @map("start_date") @db.Date
-  endDate            DateTime         @map("end_date") @db.Date
+  startDate          DateTime         @map("start_date")
+  endDate            DateTime         @map("end_date")
   termDays           Int              @map("term_days")
   remainingBalance   Decimal          @map("remaining_balance") @db.Decimal(15, 2)
   status             CreditStatus     @default(active)
@@ -166,7 +166,7 @@ model PaymentSchedule {
   id                String              @id @default(uuid())
   creditId          String              @map("credit_id")
   installmentNumber Int                 @map("installment_number")
-  dueDate           DateTime            @map("due_date") @db.Date
+  dueDate           DateTime            @map("due_date")
   scheduledAmount   Decimal             @map("scheduled_amount") @db.Decimal(15, 2)
   paidAmount        Decimal             @default(0) @map("paid_amount") @db.Decimal(15, 2)
   status            PaymentScheduleStatus @default(pending)
@@ -193,7 +193,7 @@ model Payment {
   id                    String   @id @default(uuid())
   creditId              String   @map("credit_id")
   amount                Decimal  @db.Decimal(15, 2)
-  paymentDate           DateTime @map("payment_date") @db.Date
+  paymentDate           DateTime @map("payment_date")
   amountToPrincipal     Decimal  @map("amount_to_principal") @db.Decimal(15, 2)
   amountToInterest      Decimal  @map("amount_to_interest") @db.Decimal(15, 2)
   remainingBalanceAfter Decimal  @map("remaining_balance_after") @db.Decimal(15, 2)
@@ -274,7 +274,7 @@ model EmailReminder {
   id        String              @id @default(uuid())
   creditId  String              @map("credit_id")
   clientId  String              @map("client_id")
-  dueDate   DateTime            @map("due_date") @db.Date
+  dueDate   DateTime            @map("due_date")
   sentAt    DateTime?           @map("sent_at")
   status    EmailReminderStatus @default(pending)
   createdAt DateTime            @default(now()) @map("created_at")
