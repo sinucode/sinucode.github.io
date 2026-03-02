@@ -1,3 +1,6 @@
+// Forzar zona horaria Colombia (Bogotá/Lima/Quito UTC-5) antes de cualquier otra importación
+process.env.TZ = 'America/Bogota';
+
 import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

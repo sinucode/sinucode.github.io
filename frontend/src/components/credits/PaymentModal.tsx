@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { registerPayment } from '../../api/payments.api';
 import { Save, X, CheckSquare, Square, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { todayBogota, isOverdueBogota, formatDate } from '../../utils/dates';
 
 interface PaymentModalProps {
     creditId: string;
@@ -25,7 +26,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 }) => {
     const queryClient = useQueryClient();
     const [formData, setFormData] = useState({
-        paymentDate: new Date().toISOString().slice(0, 10),
+        paymentDate: todayBogota(),
         paymentMethod: 'efectivo',
         notes: '',
     });
@@ -193,7 +194,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                                         const defaultAmt = Number(s.scheduledAmount) - Number(s.paidAmount || 0);
                                         const currentAmt = getAmount(s);
                                         const isSelected = selectedIds.has(s.id);
-                                        const isOverdue = new Date(s.dueDate) < new Date();
+                                        const isOverdue = isOverdueBogota(s.dueDate);
                                         const diff = currentAmt - defaultAmt;
 
                                         return (
@@ -213,7 +214,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                                                     <div className="flex-1 min-w-0">
                                                         <span className="text-sm font-semibold text-gray-900">Cuota #{s.installmentNumber}</span>
                                                         <span className={`ml-2 text-xs ${isOverdue ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
-                                                            {new Date(s.dueDate).toLocaleDateString('es-CO')}
+                                                            {formatDate(s.dueDate)}
                                                             {isOverdue && ' ⚠️ Vencida'}
                                                         </span>
                                                     </div>

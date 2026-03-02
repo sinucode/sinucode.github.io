@@ -8,6 +8,7 @@ import { PaymentSchedule, PaymentFrequency } from '../types';
 import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
+import { formatDate, formatDateTime } from '../utils/dates';
 
 const statusColors: Record<PaymentSchedule['status'], string> = {
     paid: 'text-green-600 bg-green-50',
@@ -310,7 +311,7 @@ export default function CreditDetailPage() {
                     <span><strong>Cliente:</strong> {credit.client?.fullName}</span>
                     <span><strong>Interés:</strong> {credit.interestRate}%</span>
                     <span><strong>Frecuencia:</strong> {credit.paymentFrequency}</span>
-                    <span><strong>Próximo vencimiento:</strong> {nextDue ? new Date(nextDue.dueDate).toLocaleDateString() : '-'}</span>
+                    <span><strong>Próximo vencimiento:</strong> {nextDue ? formatDate(nextDue.dueDate) : '-'}</span>
                     <span><strong>Estado:</strong> {credit.status}</span>
                 </div>
 
@@ -331,7 +332,7 @@ export default function CreditDetailPage() {
                                 {credit.paymentSchedule.map((p: any, idx: number) => (
                                     <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-white'}>
                                         <td className="px-3 py-2 text-gray-900">{p.installmentNumber}</td>
-                                        <td className="px-3 py-2 text-gray-900">{new Date(p.dueDate).toLocaleDateString()}</td>
+                                        <td className="px-3 py-2 text-gray-900">{formatDate(p.dueDate)}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatMoney(p.scheduledAmount)}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatMoney(p.paidAmount)}</td>
                                         <td className="px-3 py-2">
@@ -416,7 +417,7 @@ export default function CreditDetailPage() {
 
                                         return (
                                             <tr key={p.id}>
-                                                <td className="px-3 py-2">{new Date(p.paymentDate).toLocaleDateString()}</td>
+                                                <td className="px-3 py-2">{formatDateTime(p.paymentDate)}</td>
                                                 <td className="px-3 py-2">{formatMoney(p.amount)}</td>
                                                 <td className="px-3 py-2">{p.paymentMethod || '-'}</td>
                                                 <td className="px-3 py-2">{p.notes || '-'}</td>

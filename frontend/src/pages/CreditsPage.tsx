@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
 import { Credit } from '../types';
+import { formatDate } from '../utils/dates';
 
 export default function CreditsPage() {
     const navigate = useNavigate();
@@ -131,7 +132,7 @@ export default function CreditsPage() {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-primary-900">
-                                            {nextDue ? new Date((nextDue as any).dueDate).toLocaleDateString() : '-'}
+                                            {nextDue ? formatDate((nextDue as any).dueDate) : '-'}
                                         </td>
                                     </tr>
                                 );

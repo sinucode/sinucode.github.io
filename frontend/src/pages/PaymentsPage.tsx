@@ -6,6 +6,7 @@ import { getPayments } from '../api/payments.api';
 import { useAuthStore } from '../store/authStore';
 import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
+import { formatDateTime } from '../utils/dates';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
 
@@ -135,7 +136,7 @@ export default function PaymentsPage() {
                             <tbody className="divide-y">
                                 {filtered.map((p) => (
                                     <tr key={p.id} className="text-gray-800">
-                                        <td className="px-3 py-2">{new Date(p.paymentDate).toLocaleDateString()}</td>
+                                        <td className="px-3 py-2">{formatDateTime(p.paymentDate)}</td>
                                         <td className="px-3 py-2">{formatMoney(p.amount)}</td>
                                         <td className="px-3 py-2 capitalize">{p.paymentMethod || '-'}</td>
                                         <td className="px-3 py-2">{p.notes || '-'}</td>
