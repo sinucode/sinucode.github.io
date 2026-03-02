@@ -10,6 +10,7 @@ export const createUserValidators = [
         .normalizeEmail(),
     body('fullName')
         .trim()
+        .escape()
         .isLength({ min: 2, max: 100 })
         .withMessage('Full name must be between 2 and 100 characters'),
     body('password')
@@ -37,6 +38,7 @@ export const updateUserValidators = [
     body('fullName')
         .optional()
         .trim()
+        .escape()
         .isLength({ min: 2, max: 100 })
         .withMessage('Full name must be between 2 and 100 characters'),
     body('role')

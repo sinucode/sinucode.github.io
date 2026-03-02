@@ -40,6 +40,7 @@ export const createUserValidation = [
         .notEmpty()
         .withMessage('Full name is required')
         .trim()
+        .escape()
         .isLength({ min: 2, max: 255 })
         .withMessage('Full name must be between 2 and 255 characters'),
     body('role')
@@ -60,6 +61,8 @@ export const changePasswordValidation = [
         .notEmpty()
         .withMessage('New password is required')
         .isLength({ min: 8 })
+        .withMessage('New password must be at least 8 characters')
+        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
         .withMessage('New password must contain at least one uppercase letter, one lowercase letter, and one number'),
 ];
 

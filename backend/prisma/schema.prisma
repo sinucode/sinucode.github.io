@@ -26,6 +26,10 @@ model User {
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
 
+  // Seguridad Brute Force y OWASP
+  failedLoginAttempts  Int       @default(0) @map("failed_login_attempts")
+  lockedUntil          DateTime? @map("locked_until")
+
   // Relaciones
   businessesCreated Business[]      @relation("BusinessCreator")
   userBusinesses    UserBusiness[]

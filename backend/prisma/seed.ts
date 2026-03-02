@@ -22,11 +22,16 @@ async function main() {
     // 1. Crear usuarios
     console.log('👤 Creando usuarios...');
 
-    const passwordHash = await bcrypt.hash('Admin123!', 12);
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'Admin123!';
+    const userPassword = process.env.SEED_USER_PASSWORD || 'Usuario123!';
+    const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@gestioncredifacil.com';
+
+    const passwordHash = await bcrypt.hash(adminPassword, 12);
+    const userPasswordHash = await bcrypt.hash(userPassword, 12);
 
     const superAdmin = await prisma.user.create({
         data: {
-            email: 'admin@gestioncredifacil.com',
+            email: adminEmail,
             passwordHash,
             fullName: 'Super Administrador',
             role: 'super_admin',
@@ -37,7 +42,7 @@ async function main() {
     const adminUser = await prisma.user.create({
         data: {
             email: 'admin1@example.com',
-            passwordHash: await bcrypt.hash('Admin123!', 12),
+            passwordHash,
             fullName: 'María González',
             role: 'admin',
             isActive: true,
@@ -47,16 +52,16 @@ async function main() {
     const regularUser = await prisma.user.create({
         data: {
             email: 'usuario1@example.com',
-            passwordHash: await bcrypt.hash('Usuario123!', 12),
+            passwordHash: userPasswordHash,
             fullName: 'Juan Pérez',
             role: 'user',
             isActive: true,
         },
     });
 
-    console.log(`✅ Super Admin creado: ${superAdmin.email} / Admin123!`);
-    console.log(`✅ Admin creado: ${adminUser.email} / Admin123!`);
-    console.log(`✅ Usuario creado: ${regularUser.email} / Usuario123!`);
+    console.log(`✅ Super Admin creado: ${superAdmin.email}`);
+    console.log(`✅ Admin creado: ${adminUser.email}`);
+    console.log(`✅ Usuario creado: ${regularUser.email}`);
 
     // 2. Crear negocios
     console.log('🏢 Creando negocios...');
@@ -114,7 +119,6 @@ async function main() {
             cedula: '1234567890',
             fullName: 'Carlos Rodríguez',
             address: 'Calle 123 #45-67, Bogotá',
-            email: 'carlos@example.com',
         },
     });
 
@@ -125,7 +129,6 @@ async function main() {
             cedula: '9876543210',
             fullName: 'Ana Martínez',
             address: 'Carrera 45 #12-34, Medellín',
-            email: 'ana@example.com',
         },
     });
 
@@ -136,7 +139,6 @@ async function main() {
             cedula: '5551234567',
             fullName: 'Luis Hernández',
             address: 'Avenida 68 #23-45, Cali',
-            email: 'luis@example.com',
         },
     });
 
@@ -254,9 +256,9 @@ async function main() {
     console.log(`   - Clientes: 3`);
     console.log(`   - Créditos: 1 activo`);
     console.log('\n🔑 Credenciales de acceso:');
-    console.log(`   Super Admin: admin@gestioncredifacil.com / Admin123!`);
-    console.log(`   Admin: admin1@example.com / Admin123!`);
-    console.log(`   Usuario: usuario1@example.com / Usuario123!`);
+    console.log(`   Super Admin: ${superAdmin.email} / (Contraseña configurada)`);
+    console.log(`   Admin: admin1@example.com / (Contraseña de admin configurada)`);
+    console.log(`   Usuario: usuario1@example.com / (Contraseña de usuario configurada)`);
 }
 
 main()

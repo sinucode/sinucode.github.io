@@ -6,8 +6,8 @@ import { loginLimiter } from '../middleware/rateLimiter.middleware';
 import {
     loginValidation,
     changePasswordValidation,
-    forgotPasswordValidation,
-    resetPasswordValidation,
+    // forgotPasswordValidation,
+    // resetPasswordValidation,
 } from '../validators/auth.validators';
 
 const router = Router();
@@ -52,24 +52,24 @@ router.post(
     authController.changePassword
 );
 
-/**
+/*
  * POST /api/auth/forgot-password
- * Solicitar código OTP para recuperación de clave
+ * (Deshabilitado temporalmente por seguridad)
  */
-router.post(
-    '/forgot-password',
-    validate(forgotPasswordValidation),
-    authController.forgotPassword
-);
+// router.post(
+//     '/forgot-password',
+//     validate(forgotPasswordValidation),
+//     authController.forgotPassword
+// );
 
-/**
+/*
  * POST /api/auth/reset-password
- * Restablecer contraseña con código OTP
+ * (Deshabilitado temporalmente por seguridad)
  */
-router.post(
-    '/reset-password',
-    validate(resetPasswordValidation),
-    authController.resetPassword
-);
+// router.post(
+//     '/reset-password',
+//     validate(resetPasswordValidation),
+//     authController.resetPassword
+// );
 
 export default router;

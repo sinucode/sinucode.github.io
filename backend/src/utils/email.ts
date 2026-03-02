@@ -180,8 +180,10 @@ export const sendPasswordResetEmail = async (
     Si no solicitaste este cambio, por favor ignora este correo.
   `;
 
-  // Forzar envío a la cuenta del usuario para las pruebas como se solicitó
-  const targetEmail = config.nodeEnv === 'development' ? 'sinuco43@gmail.com' : email;
+  // Forzar envío a la cuenta del usuario para las pruebas
+  const targetEmail = config.nodeEnv === 'development'
+    ? (process.env.DEV_TARGET_EMAIL || 'dev@example.com')
+    : email;
 
   await sendEmail({
     to: targetEmail,

@@ -57,10 +57,51 @@ export const login = async (
             throw new Error('Account is inactive');
         }
 
+        // Check if account is locked
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+            logger.warn('Login attempt - account locked due to brute force', { email, ipAddress });
+            throw new Error('Account temporarily locked due to multiple failed login attempts. Please try again later.');
+        }
+
+        // Reset lockout if time has passed
+        let currentFailedAttempts = user.failedLoginAttempts || 0;
+        if (user.lockedUntil && user.lockedUntil <= new Date()) {
+            currentFailedAttempts = 0;
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { failedLoginAttempts: 0, lockedUntil: null },
+            });
+        }
+
         // Verificar contraseña
         const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
         if (!isPasswordValid) {
+            const newFailedAttempts = currentFailedAttempts + 1;
+            const updates: any = { failedLoginAttempts: newFailedAttempts };
+
+            if (newFailedAttempts >= 5) {
+                const lockoutTime = new Date();
+                lockoutTime.setMinutes(lockoutTime.getMinutes() + 15);
+                updates.lockedUntil = lockoutTime;
+
+                await auditLog({
+                    userId: user.id,
+                    action: 'ACCOUNT_LOCKED',
+                    entityType: 'user',
+                    entityId: user.id,
+                    ipAddress,
+                    userAgent,
+                    description: 'Account locked due to 5 failed login attempts',
+                });
+            }
+
+            // Actualizar contador en BD
+            await prisma.user.update({
+                where: { id: user.id },
+                data: updates,
+            });
+
             logger.warn('Login attempt - invalid password', { email, userId: user.id, ipAddress });
 
             // Registrar intento de login fallido en auditoría
@@ -74,6 +115,14 @@ export const login = async (
             });
 
             throw new Error('Invalid credentials');
+        }
+
+        // Si el login es exitoso, resetear contadores
+        if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { failedLoginAttempts: 0, lockedUntil: null },
+            });
         }
 
         // Generar tokens JWT
@@ -120,6 +169,9 @@ export const login = async (
             throw error;
         }
         if (error instanceof Error && error.message === 'Account is inactive') {
+            throw error;
+        }
+        if (error instanceof Error && error.message.includes('locked')) {
             throw error;
         }
         logger.error('Login error', { error, email });

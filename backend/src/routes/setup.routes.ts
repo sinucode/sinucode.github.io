@@ -25,11 +25,14 @@ router.post('/create-admin', async (_req: Request, res: Response) => {
         logger.info('Creating initial super admin user...');
 
         // Create super admin
-        const passwordHash = await bcrypt.hash('Admin123!', 12);
+        const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@gestioncredifacil.com';
+        const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'Admin123!';
+
+        const passwordHash = await bcrypt.hash(adminPassword, 12);
 
         const superAdmin = await prisma.user.create({
             data: {
-                email: 'admin@gestioncredifacil.com',
+                email: adminEmail,
                 passwordHash,
                 fullName: 'Super Administrador',
                 role: 'super_admin',
@@ -46,7 +49,7 @@ router.post('/create-admin', async (_req: Request, res: Response) => {
                 email: superAdmin.email,
                 fullName: superAdmin.fullName,
                 role: superAdmin.role,
-                message: 'You can now login with: admin@gestioncredifacil.com / Admin123!',
+                message: `You can now login with: ${adminEmail} and the configured password`,
             },
         });
     } catch (error) {
