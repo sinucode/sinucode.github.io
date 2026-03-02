@@ -12,8 +12,11 @@ import { formatDate } from '../utils/dates';
 
 export default function CreditsPage() {
     const navigate = useNavigate();
+    const queryParams = new URLSearchParams(window.location.search);
+    const initialFilter = (queryParams.get('filter') as 'all' | 'dueToday' | 'overdue') || 'all';
+
     const [isFormOpen, setIsFormOpen] = useState(false);
-    const [filter, setFilter] = useState<'all' | 'dueToday' | 'overdue'>('all');
+    const [filter, setFilter] = useState<'all' | 'dueToday' | 'overdue'>(initialFilter);
     const { selectedBusinessId, setSelectedBusiness } = useBusinessStore();
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');

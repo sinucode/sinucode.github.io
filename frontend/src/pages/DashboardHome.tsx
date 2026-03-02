@@ -119,9 +119,9 @@ export default function DashboardHome() {
 
             {/* Stats Grid — fila 2 */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard title="Créditos activos" value={String(stats.activeCredits)} icon="✅" color="green" subtitle="en curso" />
-                <StatCard title="Cobros hoy" value={String(stats.pagosHoy)} icon="📅" color="orange" subtitle="cuotas vencen hoy" />
-                <StatCard title="En mora" value={String(stats.overdueCredits)} icon="⚠️" color="red" subtitle="créditos vencidos" />
+                <StatCard title="Créditos activos" value={String(stats.activeCredits)} icon="✅" color="green" subtitle="en curso" onClick={() => navigate('/credits')} />
+                <StatCard title="Cobros hoy" value={String(stats.pagosHoy)} icon="📅" color="orange" subtitle="cuotas vencen hoy" onClick={() => navigate('/credits?filter=dueToday')} />
+                <StatCard title="En mora" value={String(stats.overdueCredits)} icon="⚠️" color="red" subtitle="créditos vencidos" onClick={() => navigate('/credits?filter=overdue')} />
             </div>
 
             {/* Calendario + Panel lateral */}
@@ -179,7 +179,7 @@ export default function DashboardHome() {
     );
 }
 
-function StatCard({ title, value, icon, color, subtitle }: { title: string; value: string; icon: string; color: string; subtitle?: string }) {
+function StatCard({ title, value, icon, color, subtitle, onClick }: { title: string; value: string; icon: string; color: string; subtitle?: string; onClick?: () => void }) {
     const colors: Record<string, string> = {
         blue: 'from-blue-500 to-blue-600',
         green: 'from-emerald-500 to-emerald-600',
@@ -190,7 +190,11 @@ function StatCard({ title, value, icon, color, subtitle }: { title: string; valu
     };
 
     return (
-        <div className={`bg-gradient-to-br ${colors[color] || colors.blue} rounded-xl shadow p-5 text-white`}>
+        <div
+            onClick={onClick}
+            className={`bg-gradient-to-br ${colors[color] || colors.blue} rounded-xl shadow p-5 text-white ${onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
+                }`}
+        >
             <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium opacity-80 uppercase tracking-wide">{title}</p>
