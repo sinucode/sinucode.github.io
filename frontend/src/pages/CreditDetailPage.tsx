@@ -27,6 +27,13 @@ const gapDaysMap: Record<PaymentFrequency, number> = {
     monthly: 30,
 };
 const DAYS_PER_MONTH = 30; // 1 mes = 30 días (alineado con backend)
+const frequencyLabels: Record<PaymentFrequency, string> = {
+    daily: 'Diario',
+    weekly: 'Semanal',
+    bisemanal: 'Bisemanal (14 días)',
+    quincenal: 'Quincenal (15 y 30)',
+    monthly: 'Mensual',
+};
 
 const getDayOfWeek = (dateString: string | undefined | null) => {
     if (!dateString) return '-';
@@ -348,7 +355,7 @@ export default function CreditDetailPage() {
                 <div className="flex flex-wrap gap-4 text-sm text-primary-900">
                     <span><strong>Cliente:</strong> {credit.client?.fullName}</span>
                     <span><strong>Interés:</strong> {credit.interestRate}%</span>
-                    <span><strong>Frecuencia:</strong> {credit.paymentFrequency}</span>
+                    <span><strong>Frecuencia:</strong> {frequencyLabels[credit.paymentFrequency as PaymentFrequency] || credit.paymentFrequency}</span>
                     <span><strong>Próximo vencimiento:</strong> {nextDue ? formatDate(nextDue.dueDate) : '-'}</span>
                     <span><strong>Estado:</strong> {credit.status}</span>
                 </div>

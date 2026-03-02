@@ -24,6 +24,14 @@ const frequencies: { value: PaymentFrequency; label: string }[] = [
     { value: 'monthly', label: 'Mensual' },
 ];
 
+const frequencyLabels: Record<PaymentFrequency, string> = {
+    daily: 'Diario',
+    weekly: 'Semanal',
+    bisemanal: 'Bisemanal',
+    quincenal: 'Quincenal',
+    monthly: 'Mensual',
+};
+
 const formatMoney = (value: any) => Math.ceil(Number(value || 0)).toLocaleString('es-CO');
 const gapDaysMap: Record<PaymentFrequency, number> = {
     daily: 1,
@@ -32,7 +40,7 @@ const gapDaysMap: Record<PaymentFrequency, number> = {
     quincenal: 15,
     monthly: 30,
 };
-const DAYS_PER_MONTH = 28;
+const DAYS_PER_MONTH = 30; // 1 mes = 30 días (alineado con backend y detalles)
 
 const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBusinessId }) => {
     const { user } = useAuthStore();
@@ -202,7 +210,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         doc.text(`Cliente: ${selectedClient?.fullName || ''}`, 14, startY + 8);
         doc.text(`Documento: ${selectedClient?.cedula || ''}  Tel: ${selectedClient?.phone || ''}`, 14, startY + 14);
         doc.text(`Monto: $${formData.amount}  Interés: ${formData.interestRate}%  Plazo: ${formData.termMonths} meses`, 14, startY + 20);
-        doc.text(`Frecuencia: ${formData.frequency}  Fecha inicio: ${formData.startDate}`, 14, startY + 26);
+        doc.text(`Frecuencia: ${frequencyLabels[formData.frequency] || formData.frequency}  Fecha inicio: ${formData.startDate}`, 14, startY + 26);
         doc.text(`Total con interés: $${formatMoney(simulation.totalWithInterest)}`, 14, startY + 34);
         doc.text(`Cuota estimada: $${formatMoney(simulation.paymentAmount)}  Cuotas: ${simulation.numberOfPayments}`, 14, startY + 40);
 

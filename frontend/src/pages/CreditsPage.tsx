@@ -9,6 +9,15 @@ import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
 import { Credit } from '../types';
 import { formatDate, isOverdueBogota } from '../utils/dates';
+import { PaymentFrequency } from '../types';
+
+const frequencyLabels: Record<PaymentFrequency, string> = {
+    daily: 'Diario',
+    weekly: 'Semanal',
+    bisemanal: 'Bisemanal',
+    quincenal: 'Quincenal',
+    monthly: 'Mensual',
+};
 
 export default function CreditsPage() {
     const navigate = useNavigate();
@@ -93,6 +102,7 @@ export default function CreditsPage() {
                             <tr>
                                 <th className="px-4 py-3">Cliente</th>
                                 <th className="px-4 py-3">Monto</th>
+                                <th className="px-4 py-3">Frecuencia</th>
                                 <th className="px-4 py-3">Saldo</th>
                                 <th className="px-4 py-3">Estado</th>
                                 <th className="px-4 py-3">Próximo venc.</th>
@@ -141,7 +151,12 @@ export default function CreditsPage() {
                                             <div className="font-medium text-gray-900">{credit.client?.fullName || credit.clientId}</div>
                                             <div className="text-xs text-primary-600">{credit.client?.phone}</div>
                                         </td>
-                                        <td className="px-4 py-3 text-primary-900">${Number(credit.amount).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
+                                        <td className="px-4 py-3 text-primary-900 font-semibold">${Number(credit.amount).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
+                                        <td className="px-4 py-3">
+                                            <span className="text-xs font-medium text-primary-700 bg-primary-50 px-2 py-1 rounded-md border border-primary-100">
+                                                {frequencyLabels[credit.paymentFrequency as PaymentFrequency] || credit.paymentFrequency}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-3 text-primary-900">${Number(credit.remainingBalance).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
