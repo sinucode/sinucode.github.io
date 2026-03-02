@@ -219,16 +219,14 @@ function TabItem({ label, active, onClick }: { label: string; active: boolean; o
 }
 
 function MovementsTable({ movements, isLoading }: { movements: any[]; isLoading: boolean }) {
-    const typeColor = (type: string, amount: number) => {
-        if (type === 'internal_transfer') return amount > 0 ? 'text-emerald-600' : 'text-rose-600';
-        const income = ['payment_received', 'capital_injection', 'interest_earned'].includes(type);
-        return income ? 'text-emerald-600 font-medium' : 'text-rose-600 font-medium';
+    const isIncomeMovement = (type: string, amount: number) => {
+        if (type === 'internal_transfer') return amount > 0;
+        return ['payment_received', 'capital_injection', 'interest_earned', 'initial_capital'].includes(type);
     };
 
-    const getIcon = (type: string) => {
+    const getIcon = (type: string, amount: number) => {
         if (type === 'internal_transfer') return <ArrowRightLeft size={16} />;
-        const income = ['payment_received', 'capital_injection', 'interest_earned'].includes(type);
-        return income ? <TrendingUp size={16} /> : <TrendingDown size={16} />;
+        return isIncomeMovement(type, amount) ? <TrendingUp size={16} /> : <TrendingDown size={16} />;
     };
 
     return (
@@ -265,15 +263,15 @@ function MovementsTable({ movements, isLoading }: { movements: any[]; isLoading:
                                         <div className="text-gray-400">{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${typeColor(m.type, amt)}`}>
-                                            {getIcon(m.type)}
-                                            {m.type.replace('_', ' ')}
+                                        <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${isIncomeMovement(m.type, amt) ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            {getIcon(m.type, amt)}
+                                            {m.type.replace(/_/g, ' ')}
                                         </div>
                                         <div className="text-[10px] mt-0.5 text-gray-400 font-bold uppercase tracking-widest">{m.paymentMethod || 'EFECTIVO'}</div>
                                     </td>
                                     <td className="px-6 py-4 max-w-[200px] overflow-hidden text-ellipsis text-gray-600">{m.description || '-'}</td>
-                                    <td className={`px-6 py-4 font-bold ${amt > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                        {amt > 0 ? '+' : ''}{formatMoney(amt)}
+                                    <td className={`px-6 py-4 font-bold ${isIncomeMovement(m.type, amt) ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {isIncomeMovement(m.type, amt) ? '+' : '-'}{formatMoney(Math.abs(amt))}
                                     </td>
                                     <td className="px-6 py-4 font-medium text-gray-900">{formatMoney(m.balanceAfter)}</td>
                                     <td className="px-6 py-4 text-xs font-medium text-gray-500">{m.createdBy?.fullName || '-'}</td>
