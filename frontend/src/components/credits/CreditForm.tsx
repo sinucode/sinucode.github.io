@@ -8,6 +8,7 @@ import { createCredit, simulateCredit, CreditSimulation } from '../../api/credit
 import { Client, PaymentFrequency } from '../../types';
 import { Search, Calculator, Save, X, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { todayBogota } from '../../utils/dates';
 
 interface CreditFormProps {
     onClose: () => void;
@@ -45,7 +46,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         interestRate: '',
         termMonths: '',
         frequency: 'weekly' as PaymentFrequency,
-        startDate: new Date().toISOString().slice(0, 10),
+        startDate: todayBogota(),
         businessId: selectedBusinessId || '',
     });
     const [useFixedInstallment, setUseFixedInstallment] = useState(false);
