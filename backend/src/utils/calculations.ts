@@ -87,6 +87,7 @@ export const calculateCreditPlan = (
     for (let i = 0; i < numberOfPayments; i++) {
         const dueDate = new Date(start);
         dueDate.setDate(start.getDate() + daysBetweenPayments * (i + 1));
+        // Resetting at exactly noon avoids shift across midnight regardless of native UTC/Bogota conversions 
         dueDate.setHours(12, 0, 0, 0);
 
         paymentPlan.push({
