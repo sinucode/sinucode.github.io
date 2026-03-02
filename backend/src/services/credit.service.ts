@@ -171,7 +171,7 @@ export class CreditService {
                     paymentSchedule: {
                         some: {
                             dueDate: { gte: startOfBogotaToday, lt: endOfBogotaToday },
-                            status: { not: 'paid' }
+                            status: { in: ['pending', 'partial'] }
                         }
                     }
                 },
