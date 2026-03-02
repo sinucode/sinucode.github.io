@@ -160,16 +160,30 @@ export class CreditService {
             ...(filters.status && { status: filters.status as any }),
         };
 
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+        const startOfBogotaToday = new Date(`${todayStr}T00:00:00.000-05:00`);
+        const endOfBogotaToday = new Date(startOfBogotaToday.getTime() + 24 * 60 * 60 * 1000);
+
         if (filters.dueToday) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(today.getDate() + 1);
-            where.paymentSchedule = { some: { dueDate: { gte: today, lt: tomorrow }, status: { in: ['pending', 'partial'] } } };
+            where.paymentSchedule = {
+                some: {
+                    dueDate: { gte: startOfBogotaToday, lt: endOfBogotaToday },
+                    status: { not: 'paid' }
+                }
+            };
         }
 
         if (filters.overdue) {
-            where.paymentSchedule = { some: { status: 'overdue' } };
+            where.AND = [
+                ...(where.AND ? (Array.isArray(where.AND) ? where.AND : [where.AND]) : []),
+                {
+                    OR: [
+                        { status: 'overdue' },
+                        { paymentSchedule: { some: { status: 'overdue' } } },
+                        { paymentSchedule: { some: { dueDate: { lt: startOfBogotaToday }, status: { in: ['pending', 'partial'] } } } }
+                    ]
+                }
+            ];
         }
 
         return prisma.credit.findMany({

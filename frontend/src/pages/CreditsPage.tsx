@@ -8,7 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
 import { Credit } from '../types';
-import { formatDate } from '../utils/dates';
+import { formatDate, isOverdueBogota } from '../utils/dates';
 
 export default function CreditsPage() {
     const navigate = useNavigate();
@@ -117,6 +117,20 @@ export default function CreditsPage() {
                                 const nextDue = credit.paymentSchedule
                                     ? credit.paymentSchedule.find((p: any) => p.status !== 'paid')
                                     : null;
+
+                                const isOverdue = credit.status === 'overdue' || (credit.paymentSchedule && credit.paymentSchedule.some((p: any) => p.status !== 'paid' && isOverdueBogota(p.dueDate)));
+
+                                let displayStatus = 'Activo';
+                                let statusColor = 'bg-emerald-100 text-emerald-800';
+
+                                if (credit.status === 'paid') {
+                                    displayStatus = 'Completado';
+                                    statusColor = 'bg-blue-100 text-blue-800';
+                                } else if (isOverdue) {
+                                    displayStatus = 'En mora';
+                                    statusColor = 'bg-red-100 text-red-800';
+                                }
+
                                 return (
                                     <tr
                                         key={credit.id}
@@ -130,8 +144,8 @@ export default function CreditsPage() {
                                         <td className="px-4 py-3 text-primary-900">${Number(credit.amount).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
                                         <td className="px-4 py-3 text-primary-900">${Number(credit.remainingBalance).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
                                         <td className="px-4 py-3">
-                                            <span className="px-2 py-1 rounded-full text-xs bg-slate-50 text-primary-900">
-                                                {credit.status}
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
+                                                {displayStatus}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-primary-900">
