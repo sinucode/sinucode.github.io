@@ -33,7 +33,12 @@ export interface CreditDetail extends Credit {
 }
 
 export interface UpdateSchedulePayload {
-    schedules: { id: string; dueDate: string; scheduledAmount: number }[];
+    schedules: { id?: string; dueDate: string; scheduledAmount: number; installmentNumber?: number }[];
+    amount?: number;
+    interestRate?: number;
+    termDays?: number;
+    frequency?: PaymentFrequency;
+    startDate?: string;
 }
 
 export const simulateCredit = async (payload: SimulateCreditPayload): Promise<CreditSimulation> => {

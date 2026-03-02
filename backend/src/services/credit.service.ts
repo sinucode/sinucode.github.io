@@ -489,12 +489,21 @@ export class CreditService {
     }
 
     async updateCreditSchedule(
-        creditId: string,
-        schedules: { id?: string; dueDate: string; scheduledAmount: number; installmentNumber?: number }[],
-        userId: string,
-        role: UserRole
+        params: {
+            creditId: string;
+            schedules: { id?: string; dueDate: string; scheduledAmount: number; installmentNumber?: number }[];
+            userId: string;
+            role: UserRole;
+            amount?: number;
+            interestRate?: number;
+            termDays?: number;
+            frequency?: PaymentFrequency;
+            startDate?: string;
+        }
     ) {
-        if (role !== 'super_admin') throw new Error('No tiene permisos para editar créditos');
+        const { creditId, schedules, userId, role, amount, interestRate, termDays, frequency, startDate } = params;
+
+        if (role !== 'super_admin' && role !== 'admin') throw new Error('No tiene permisos para editar créditos');
 
         const credit = await prisma.credit.findUnique({
             where: { id: creditId },
@@ -578,9 +587,30 @@ export class CreditService {
                 }
             }
 
+            let endDate;
+            if (startDate && termDays) {
+                endDate = calculateEndDate(new Date(startDate), termDays);
+            } else if (startDate && credit.termDays) {
+                endDate = calculateEndDate(new Date(startDate), credit.termDays);
+            } else if (credit.startDate && termDays) {
+                endDate = calculateEndDate(new Date(credit.startDate), termDays);
+            }
+
+            const dataToUpdate: any = {
+                remainingBalance: new Prisma.Decimal(newRemaining),
+                status: newStatus,
+                totalWithInterest: new Prisma.Decimal(totalScheduled),
+                ...(amount !== undefined && { amount: new Prisma.Decimal(amount) }),
+                ...(interestRate !== undefined && { interestRate: new Prisma.Decimal(interestRate) }),
+                ...(termDays !== undefined && { termDays }),
+                ...(frequency !== undefined && { paymentFrequency: frequency }),
+                ...(startDate !== undefined && { startDate: new Date(startDate) }),
+                ...(endDate !== undefined && { endDate }),
+            };
+
             await tx.credit.update({
                 where: { id: creditId },
-                data: { remainingBalance: new Prisma.Decimal(newRemaining), status: newStatus },
+                data: dataToUpdate,
             });
 
             await tx.auditLog.create({

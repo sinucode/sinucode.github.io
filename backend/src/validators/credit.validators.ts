@@ -52,6 +52,26 @@ export const listCreditValidators = [
 ];
 
 export const updateScheduleValidators = [
+    body('amount')
+        .optional()
+        .isFloat({ gt: 0 })
+        .withMessage('El monto debe ser mayor a 0'),
+    body('interestRate')
+        .optional()
+        .isFloat({ min: 0 })
+        .withMessage('La tasa de interés debe ser válida'),
+    body('termDays')
+        .optional()
+        .isInt({ gt: 0 })
+        .withMessage('El plazo debe ser mayor a 0'),
+    body('frequency')
+        .optional()
+        .isIn(frequencyValues)
+        .withMessage('Frecuencia inválida'),
+    body('startDate')
+        .optional()
+        .isISO8601()
+        .withMessage('La fecha de inicio es inválida'),
     body('schedules')
         .isArray({ min: 1 })
         .withMessage('Debes enviar las cuotas a actualizar'),

@@ -96,8 +96,18 @@ export const updateCreditSchedule = async (req: Request, res: Response) => {
         const userId = req.user!.userId;
         const role = req.user!.role as UserRole;
         const { id } = req.params;
-        const schedules = req.body.schedules;
-        const credit = await creditService.updateCreditSchedule(id, schedules, userId, role);
+        const { schedules, amount, interestRate, termDays, frequency, startDate } = req.body;
+        const credit = await creditService.updateCreditSchedule({
+            creditId: id,
+            schedules,
+            userId,
+            role,
+            amount: amount ? Number(amount) : undefined,
+            interestRate: interestRate ? Number(interestRate) : undefined,
+            termDays: termDays ? Number(termDays) : undefined,
+            frequency,
+            startDate
+        });
         return res.json(credit);
     } catch (error: any) {
         console.error('Error actualizando plan de pagos:', error);

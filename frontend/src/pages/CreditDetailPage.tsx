@@ -36,7 +36,7 @@ export default function CreditDetailPage() {
     const [editError, setEditError] = useState('');
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
-    const isSuperAdmin = user?.role === 'super_admin';
+    const canEditPlan = user?.role === 'super_admin' || user?.role === 'admin';
     const [editForm, setEditForm] = useState({
         amount: '',
         interestRate: '',
@@ -281,7 +281,7 @@ export default function CreditDetailPage() {
                     <ArrowLeft size={16} /> Volver
                 </button>
                 <div className="flex items-center gap-2">
-                    {isSuperAdmin && (
+                    {canEditPlan && (
                         <button
                             onClick={() => {
                                 setEditError('');
@@ -746,7 +746,18 @@ export default function CreditDetailPage() {
                                             scheduledAmount: Math.ceil(Number(r.scheduledAmount || 0)),
                                             installmentNumber: r.installmentNumber || idx + 1,
                                         }));
-                                        updateMutation.mutate({ schedules: payload });
+                                        const calculatedTermDays = editForm.useFixedInstallment && parseMoney(editForm.installmentAmount) > 0
+                                            ? estimateTermDays(parseMoney(editForm.amount), Number(editForm.interestRate), parseMoney(editForm.installmentAmount), editForm.frequency)
+                                            : termDaysFromUnit(Number(editForm.termValue), editForm.termUnit, editForm.frequency);
+
+                                        updateMutation.mutate({
+                                            schedules: payload,
+                                            amount: parseMoney(editForm.amount),
+                                            interestRate: Number(editForm.interestRate),
+                                            termDays: calculatedTermDays,
+                                            frequency: editForm.frequency,
+                                            startDate: editForm.startDate ? new Date(editForm.startDate).toISOString() : undefined,
+                                        });
                                     }}
                                     disabled={updateMutation.isPending}
                                     className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50"
