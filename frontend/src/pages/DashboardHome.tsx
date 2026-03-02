@@ -80,14 +80,14 @@ export default function DashboardHome() {
                 overdueCredits++;
             }
 
-            // Check if due today (any unpaid schedule item is exactly today) AND it's not already in mora
+            // Check if due today (any unpaid schedule item is exactly today)
             const isDueToday = c.paymentSchedule && c.paymentSchedule.some((p: any) => {
                 if (p.status === 'paid') return false;
                 const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
                 return dStr === todayStr;
             });
 
-            if (isDueToday && !isOverdue) {
+            if (isDueToday) {
                 pagosHoy++;
             }
         });
