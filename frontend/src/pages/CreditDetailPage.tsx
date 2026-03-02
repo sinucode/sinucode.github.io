@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getCreditDetail, simulateCredit, updateCreditSchedule, CreditDetail } from '../api/credits.api';
+import { getCreditDetail, simulateCredit, updateCreditSchedule, deleteCredit, CreditDetail } from '../api/credits.api';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 import { registerPayment } from '../api/payments.api';
 import { useState, useEffect } from 'react';
 import PaymentModal from '../components/credits/PaymentModal';
@@ -34,6 +35,7 @@ export default function CreditDetailPage() {
     const [quickPaySchedule, setQuickPaySchedule] = useState<PaymentSchedule | null>(null);
     const [editRows, setEditRows] = useState<PaymentSchedule[]>([]);
     const [editError, setEditError] = useState('');
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
     const canEditPlan = user?.role === 'super_admin' || user?.role === 'admin';
@@ -90,6 +92,19 @@ export default function CreditDetailPage() {
                 return;
             }
             setEditError(err.response?.data?.error || 'Error al actualizar el plan de pagos');
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: () => deleteCredit(id!),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['credits'] });
+            queryClient.invalidateQueries({ queryKey: ['business'] });
+            queryClient.invalidateQueries({ queryKey: ['cashMovements'] });
+            navigate('/credits');
+        },
+        onError: (err: any) => {
+            alert(err.response?.data?.error || 'Error al eliminar el crédito');
         },
     });
 
@@ -299,6 +314,14 @@ export default function CreditDetailPage() {
                     >
                         Registrar Pago
                     </button>
+                    {user?.role === 'super_admin' && (
+                        <button
+                            onClick={() => setIsDeleteConfirmOpen(true)}
+                            className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm font-medium"
+                        >
+                            Eliminar Crédito
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -769,6 +792,17 @@ export default function CreditDetailPage() {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={isDeleteConfirmOpen}
+                title="¿Eliminar crédito?"
+                message="Esta acción es irreversible y devolverá el capital del crédito al saldo de la caja. ¿Deseas continuar?"
+                confirmText="Sí, eliminar"
+                cancelText="Cancelar"
+                onConfirm={() => deleteMutation.mutate()}
+                onCancel={() => setIsDeleteConfirmOpen(false)}
+                isLoading={deleteMutation.isPending}
+            />
         </div>
     );
 }

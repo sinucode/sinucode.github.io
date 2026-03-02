@@ -1,3 +1,5 @@
+import { normalizeToNoon } from './dates';
+
 /**
  * Cálculos de intereses y plan de pagos para créditos
  */
@@ -80,19 +82,15 @@ export const calculateCreditPlan = (
 
     // Generar plan de pagos
     const paymentPlan: PaymentPlan[] = [];
-    const start = new Date(startDate);
-    // Asegurar que trabajamos al mediodía para evitar saltos de día por zona horaria
-    start.setHours(12, 0, 0, 0);
+    const start = normalizeToNoon(startDate);
 
     for (let i = 0; i < numberOfPayments; i++) {
         const dueDate = new Date(start);
         dueDate.setDate(start.getDate() + daysBetweenPayments * (i + 1));
-        // Resetting at exactly noon avoids shift across midnight regardless of native UTC/Bogota conversions 
-        dueDate.setHours(12, 0, 0, 0);
 
         paymentPlan.push({
             installmentNumber: i + 1,
-            dueDate,
+            dueDate: normalizeToNoon(dueDate),
             scheduledAmount: paymentAmount,
         });
     }
@@ -112,7 +110,5 @@ export const calculateCreditPlan = (
 export const calculateEndDate = (startDate: Date, termDays: number): Date => {
     const endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + termDays);
-    endDate.setHours(12, 0, 0, 0);
-    return endDate;
+    return normalizeToNoon(endDate);
 };
-

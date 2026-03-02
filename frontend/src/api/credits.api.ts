@@ -69,3 +69,8 @@ export const updateCreditSchedule = async (
     return res.data;
 };
 
+export const deleteCredit = async (id: string): Promise<{ success: boolean; revertedAmount: number }> => {
+    const res = await api.delete(`/credits/${id}`);
+    return res.data;
+};
+

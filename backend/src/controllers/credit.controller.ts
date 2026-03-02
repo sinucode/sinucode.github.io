@@ -145,3 +145,18 @@ export const bulkDeleteCredits = async (req: Request, res: Response) => {
         return res.status(status).json({ success: false, error: error.message || 'Error al eliminar créditos' });
     }
 };
+export const deleteCredit = async (req: Request, res: Response) => {
+    try {
+        const userId = req.user!.userId;
+        const role = req.user!.role as UserRole;
+        const { id } = req.params;
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
+
+        const result = await creditService.deleteCredit(id, userId, role, ipAddress);
+        return res.json(result);
+    } catch (error: any) {
+        console.error('Error eliminando crédito:', error);
+        const status = error.message?.includes('Super Admin') ? 403 : (error.message?.includes('encontrado') ? 404 : 400);
+        return res.status(status).json({ error: error.message || 'Error al eliminar el crédito' });
+    }
+};

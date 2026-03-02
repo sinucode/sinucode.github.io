@@ -1,6 +1,7 @@
 import { Prisma, UserRole } from '@prisma/client';
 import prisma from '../config/database';
 import { calculateCreditPlan, calculateEndDate } from '../utils/calculations';
+import { normalizeToNoon } from '../utils/dates';
 
 export type PaymentFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
 
@@ -31,12 +32,7 @@ export class CreditService {
     }
 
     private normalizeDate(dateStr?: string): Date {
-        if (!dateStr) return new Date();
-        // dateStr usually comes as YYYY-MM-DD
-        // By adding T12:00:00-05:00 we force the time to be Noon in Colombia
-        // This prevents the date from shifting to the previous day when converted to UTC
-        const formatted = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00.000-05:00`;
-        return new Date(formatted);
+        return normalizeToNoon(dateStr);
     }
 
     async simulateCredit(data: CreateCreditInput) {
@@ -672,6 +668,67 @@ export class CreditService {
         await prisma.auditLog.createMany({ data: auditLogs });
 
         return { message: `Se eliminaron ${count} créditos exitosamente`, deletedCount: count };
+    }
+    async deleteCredit(creditId: string, userId: string, role: UserRole, ipAddress: string = '') {
+        if (role !== 'super_admin') {
+            throw new Error('Solo el Super Admin puede eliminar créditos completos');
+        }
+
+        const credit = await prisma.credit.findUnique({
+            where: { id: creditId },
+            include: {
+                business: { select: { id: true, currentBalance: true } },
+                client: { select: { fullName: true } }
+            }
+        });
+
+        if (!credit) throw new Error('Crédito no encontrado');
+
+        const amountToRevert = Number(credit.amount);
+        const businessId = credit.businessId;
+
+        return prisma.$transaction(async (tx) => {
+            // 1. Revertir balance del negocio
+            const newBalance = new Prisma.Decimal(credit.business.currentBalance).plus(amountToRevert);
+            await tx.business.update({
+                where: { id: businessId },
+                data: { currentBalance: newBalance }
+            });
+
+            // 2. Registrar movimiento de caja por cancelación
+            await tx.cashMovement.create({
+                data: {
+                    businessId,
+                    type: 'credit_cancellation',
+                    amount: new Prisma.Decimal(amountToRevert),
+                    balanceAfter: newBalance,
+                    description: `Cancelación/Eliminación Crédito #${credit.id.slice(0, 8)} - Cliente: ${credit.client.fullName}`,
+                    relatedCreditId: null, // El crédito será eliminado
+                    createdById: userId,
+                }
+            });
+
+            // 3. Eliminar el crédito (Prisma maneja cascada para paymentSchedule y payments)
+            await tx.credit.delete({
+                where: { id: creditId }
+            });
+
+            // 4. Auditoría
+            await tx.auditLog.create({
+                data: {
+                    userId,
+                    businessId,
+                    action: 'DELETE_CREDIT_FULL',
+                    description: `Eliminación total de crédito de ${credit.client.fullName} por $${amountToRevert.toLocaleString('es-CO')}. Capital devuelto a caja.`,
+                    entityType: 'Credit',
+                    entityId: creditId,
+                    oldValues: { creditId, amount: amountToRevert, clientId: credit.clientId },
+                    ipAddress,
+                }
+            });
+
+            return { success: true, revertedAmount: amountToRevert };
+        });
     }
 }
 

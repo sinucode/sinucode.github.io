@@ -222,27 +222,14 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     }, [formData.amount, formData.frequency, formData.interestRate, installmentAmount, useFixedInstallment]);
 
     const paymentPlanView = useMemo(() => {
-        if (!simulation) return [];
-        if (Array.isArray(simulation.paymentPlan) && simulation.paymentPlan.length > 0) {
-            return simulation.paymentPlan.map((p, idx) => ({
-                installmentNumber: p.installmentNumber ?? idx + 1,
-                dueDate: p.dueDate,
-                scheduledAmount: Number(p.scheduledAmount),
-            }));
-        }
-        const startRaw = formData.startDate ? new Date(formData.startDate) : new Date();
-        const start = new Date(startRaw);
-        start.setHours(12, 0, 0, 0);
-        const daysMap: Record<PaymentFrequency, number> = { daily: 1, weekly: 7, biweekly: 15, monthly: 30 };
-        const gap = daysMap[formData.frequency] ?? 7;
-        const count = Number(simulation.numberOfPayments) || 0;
-        const schedAmount = Number(simulation.paymentAmount) || 0;
-        return Array.from({ length: count }).map((_, idx) => {
-            const due = new Date(start);
-            due.setDate(start.getDate() + gap * (idx + 1));
-            return { installmentNumber: idx + 1, dueDate: due.toISOString(), scheduledAmount: schedAmount };
-        });
-    }, [formData.frequency, formData.startDate, simulation]);
+        if (!simulation || !Array.isArray(simulation.paymentPlan)) return [];
+
+        return simulation.paymentPlan.map((p, idx) => ({
+            installmentNumber: p.installmentNumber ?? idx + 1,
+            dueDate: p.dueDate, // Mantener como string/Date retornado por el API
+            scheduledAmount: Number(p.scheduledAmount),
+        }));
+    }, [simulation]);
 
     return createPortal(
         /* Overlay al nivel del body: nunca tapado por bottom nav ni layout */
