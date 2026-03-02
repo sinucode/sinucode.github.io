@@ -781,6 +781,10 @@ function QuickPayDialog({
     onSuccess: () => void;
 }) {
     const queryClient = useQueryClient();
+    const { data: credit } = useQuery<CreditDetail>({
+        queryKey: ['credit', creditId],
+        enabled: false, // Usar data de caché
+    });
     const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
 
     const paymentMutation = useMutation({
@@ -813,14 +817,22 @@ function QuickPayDialog({
                     Cancelar
                 </button>
                 <button
-                    onClick={() =>
+                    onClick={() => {
+                        if (credit && pending > Number(credit.remainingBalance) + 1) {
+                            const excess = pending - Number(credit.remainingBalance);
+                            const confirmExcess = window.confirm(
+                                `El pago supera el valor de la deuda por ${formatMoney(excess)}. \n\n¿Deseas aceptar y registrar este excedente como ganancia por interés para el negocio?`
+                            );
+                            if (!confirmExcess) return;
+                        }
+
                         paymentMutation.mutate({
                             creditId,
                             amount: pending,
                             scheduleId: schedule.id,
                             paymentMethod: 'efectivo',
-                        })
-                    }
+                        });
+                    }}
                     disabled={paymentMutation.isPending}
                     className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >

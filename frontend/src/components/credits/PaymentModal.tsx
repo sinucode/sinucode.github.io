@@ -107,7 +107,17 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
         if (selectedIds.size === 0) return setError('Selecciona al menos una cuota a pagar');
         if (totalSelected <= 0) return setError('El monto total debe ser mayor a 0');
-        if (totalSelected > remainingBalance + 1) return setError('El monto total supera el saldo pendiente del crédito');
+
+        // Handle overpayment relative to totally remaining balance
+        if (totalSelected > remainingBalance + 1) {
+            const excess = totalSelected - remainingBalance;
+            const confirmExcess = window.confirm(
+                `El pago supera el valor de la deuda por ${formatMoney(excess)}. \n\n¿Deseas aceptar y registrar este excedente como ganancia por interés para el negocio?`
+            );
+            if (!confirmExcess) {
+                return; // User cancelled
+            }
+        }
 
         const schedulesToPay = pendingSchedules.filter((s) => selectedIds.has(s.id));
         setIsSubmitting(true);
