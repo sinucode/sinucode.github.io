@@ -71,7 +71,11 @@ export default function DashboardHome() {
             }).length;
         }, 0) || 0;
 
-        return { pagosDelMes, carteraActiva, totalPrestado, activeCredits, overdueCredits, pagosHoy };
+        const gananciaEsperada = credits
+            ?.filter((c: any) => c.status === 'active' || c.status === 'overdue')
+            ?.reduce((sum: number, c: any) => sum + (Number(c.totalWithInterest || 0) - Number(c.amount || 0)), 0) || 0;
+
+        return { pagosDelMes, carteraActiva, totalPrestado, gananciaEsperada, activeCredits, overdueCredits, pagosHoy };
     }, [credits, cashFlow]);
 
     return (
@@ -105,29 +109,12 @@ export default function DashboardHome() {
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard
-                    title="Pagos recibidos (mes)"
-                    value={formatMoney(stats.pagosDelMes)}
-                    icon="💵"
-                    color="blue"
-                    subtitle="cobros del mes actual"
-                />
-                <StatCard
-                    title="Cartera activa"
-                    value={formatMoney(stats.carteraActiva)}
-                    icon="📋"
-                    color="green"
-                    subtitle="saldo pendiente activos"
-                />
-                <StatCard
-                    title="Total prestado"
-                    value={formatMoney(stats.totalPrestado)}
-                    icon="📊"
-                    color="purple"
-                    subtitle="activos + mora (capital+interés)"
-                />
+            {/* Stats Grid — fila 1 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard title="Pagos recibidos (mes)" value={formatMoney(stats.pagosDelMes)} icon="💵" color="blue" subtitle="cobros del mes actual" />
+                <StatCard title="Cartera activa" value={formatMoney(stats.carteraActiva)} icon="📋" color="green" subtitle="saldo pendiente activos" />
+                <StatCard title="Total prestado" value={formatMoney(stats.totalPrestado)} icon="📊" color="purple" subtitle="activos + mora (capital+interés)" />
+                <StatCard title="Ganancia esperada" value={formatMoney(stats.gananciaEsperada)} icon="🌟" color="amber" subtitle="intereses por cobrar" />
             </div>
 
             {/* Stats Grid — fila 2 */}
@@ -199,6 +186,7 @@ function StatCard({ title, value, icon, color, subtitle }: { title: string; valu
         purple: 'from-purple-500 to-purple-600',
         orange: 'from-orange-500 to-orange-600',
         red: 'from-red-500 to-red-600',
+        amber: 'from-amber-500 to-amber-600',
     };
 
     return (
