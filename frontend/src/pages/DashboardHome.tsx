@@ -40,20 +40,43 @@ export default function DashboardHome() {
     });
 
     const stats = useMemo(() => {
+        const now = new Date();
+        // Inicio del mes actual en zona Bogotá
+        const mesActualStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7); // 'YYYY-MM'
+
+        // ── 1. Pagos recibidos en el mes ──
+        const pagosDelMes = cashFlow?.movements
+            ?.filter((m: any) => {
+                if (m.type !== 'payment_received') return false;
+                const dateStr = new Date(m.createdAt).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+                return dateStr.startsWith(mesActualStr);
+            })
+            ?.reduce((sum: number, m: any) => sum + Number(m.amount), 0) || 0;
+
+        // ── 2. Cartera activa = saldo pendiente total de créditos activos ──
+        const carteraActiva = credits
+            ?.filter((c: any) => c.status === 'active')
+            ?.reduce((sum: number, c: any) => sum + Number(c.remainingBalance || 0), 0) || 0;
+
+        // ── 3. Total prestado = capital+intereses de créditos activos y en mora ──
+        const totalPrestado = credits
+            ?.filter((c: any) => c.status === 'active' || c.status === 'overdue')
+            ?.reduce((sum: number, c: any) => sum + Number(c.totalWithInterest || c.amount || 0), 0) || 0;
+
+        // ── Métricas existentes ──
         const activeCredits = credits?.filter((c: any) => c.status === 'active').length || 0;
-        const saldoPendiente = credits?.reduce((acc: number, c: any) => acc + Number(c.remainingBalance || 0), 0) || 0;
+        const overdueCredits = credits?.filter((c: any) => c.status === 'overdue').length || 0;
         const pagosHoy = credits?.reduce((acc: number, c: any) => {
             if (!c.paymentSchedule) return acc;
-            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
             const count = c.paymentSchedule.filter((p: any) => {
-                const d = new Date(p.dueDate); d.setHours(0, 0, 0, 0);
-                return d.getTime() === today.getTime() && p.status !== 'paid';
+                const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+                return dStr === todayStr && p.status !== 'paid';
             }).length;
             return acc + count;
         }, 0) || 0;
-        const totalIncome = cashFlow?.summary?.totalIncome || 0;
-        const totalExpenses = cashFlow?.summary?.totalExpenses || 0;
-        return { activeCredits, saldoPendiente, pagosHoy, totalIncome, totalExpenses };
+
+        return { pagosDelMes, carteraActiva, totalPrestado, activeCredits, overdueCredits, pagosHoy };
     }, [credits, cashFlow]);
 
     return (
@@ -87,12 +110,36 @@ export default function DashboardHome() {
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatCard title="Ingresos (flujo)" value={formatMoney(stats.totalIncome)} icon="💰" color="blue" />
-                <StatCard title="Egresos (flujo)" value={formatMoney(stats.totalExpenses)} icon="💸" color="orange" />
-                <StatCard title="Créditos activos" value={String(stats.activeCredits)} icon="📋" color="green" />
-                <StatCard title="Pagos hoy" value={String(stats.pagosHoy)} icon="📅" color="purple" />
+            {/* Stats Grid — fila 1: métricas financieras clave */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <StatCard
+                    title="Pagos recibidos (mes)"
+                    value={formatMoney(stats.pagosDelMes)}
+                    icon="💵"
+                    color="blue"
+                    subtitle="cobros del mes actual"
+                />
+                <StatCard
+                    title="Cartera activa"
+                    value={formatMoney(stats.carteraActiva)}
+                    icon="📋"
+                    color="green"
+                    subtitle="saldo pendiente activos"
+                />
+                <StatCard
+                    title="Total prestado"
+                    value={formatMoney(stats.totalPrestado)}
+                    icon="📊"
+                    color="purple"
+                    subtitle="activos + mora (capital+interés)"
+                />
+            </div>
+
+            {/* Stats Grid — fila 2: operativas */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <StatCard title="Créditos activos" value={String(stats.activeCredits)} icon="✅" color="green" subtitle="en curso" />
+                <StatCard title="Cobros hoy" value={String(stats.pagosHoy)} icon="📅" color="orange" subtitle="cuotas vencen hoy" />
+                <StatCard title="En mora" value={String(stats.overdueCredits)} icon="⚠️" color="red" subtitle="créditos vencidos" />
             </div>
 
             {/* Calendario + Panel lateral */}
@@ -119,18 +166,28 @@ export default function DashboardHome() {
                         <h3 className="text-sm font-semibold text-gray-900 mb-3">Resumen de Cartera</h3>
                         <div className="space-y-3">
                             <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span className="text-sm text-gray-600">Saldo pendiente</span>
-                                <span className="text-sm font-bold text-primary-700">{formatMoney(stats.saldoPendiente)}</span>
+                                <span className="text-sm text-gray-600">Pagos del mes</span>
+                                <span className="text-sm font-bold text-blue-600">{formatMoney(stats.pagosDelMes)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-sm text-gray-600">Cartera activa</span>
+                                <span className="text-sm font-bold text-green-600">{formatMoney(stats.carteraActiva)}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-sm text-gray-600">Total prestado</span>
+                                <span className="text-sm font-bold text-purple-600">{formatMoney(stats.totalPrestado)}</span>
                             </div>
                             <div className="flex justify-between items-center py-2 border-b border-gray-100">
                                 <span className="text-sm text-gray-600">Créditos activos</span>
-                                <span className="text-sm font-bold text-green-600">{stats.activeCredits}</span>
+                                <span className="text-sm font-bold text-gray-800">{stats.activeCredits}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-sm text-gray-600">Cobros hoy</span>
+                                <span className={`text-sm font-bold ${stats.pagosHoy > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{stats.pagosHoy}</span>
                             </div>
                             <div className="flex justify-between items-center py-2">
-                                <span className="text-sm text-gray-600">Pagos hoy</span>
-                                <span className={`text-sm font-bold ${stats.pagosHoy > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                                    {stats.pagosHoy}
-                                </span>
+                                <span className="text-sm text-gray-600">En mora</span>
+                                <span className={`text-sm font-bold ${stats.overdueCredits > 0 ? 'text-red-600' : 'text-gray-400'}`}>{stats.overdueCredits}</span>
                             </div>
                         </div>
                     </div>
@@ -140,22 +197,24 @@ export default function DashboardHome() {
     );
 }
 
-function StatCard({ title, value, icon, color }: { title: string; value: string; icon: string; color: string }) {
+function StatCard({ title, value, icon, color, subtitle }: { title: string; value: string; icon: string; color: string; subtitle?: string }) {
     const colors: Record<string, string> = {
         blue: 'from-blue-500 to-blue-600',
-        green: 'from-green-500 to-green-600',
+        green: 'from-emerald-500 to-emerald-600',
         purple: 'from-purple-500 to-purple-600',
         orange: 'from-orange-500 to-orange-600',
+        red: 'from-red-500 to-red-600',
     };
 
     return (
-        <div className={`bg-gradient-to-br ${colors[color]} rounded-lg shadow p-6 text-white`}>
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-sm opacity-90">{title}</p>
-                    <p className="text-3xl font-bold mt-2">{value}</p>
+        <div className={`bg-gradient-to-br ${colors[color] || colors.blue} rounded-xl shadow p-5 text-white`}>
+            <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium opacity-80 uppercase tracking-wide">{title}</p>
+                    <p className="text-2xl font-bold mt-1 truncate">{value}</p>
+                    {subtitle && <p className="text-xs opacity-70 mt-1">{subtitle}</p>}
                 </div>
-                <div className="text-4xl opacity-75">{icon}</div>
+                <div className="text-3xl opacity-75 ml-2">{icon}</div>
             </div>
         </div>
     );
