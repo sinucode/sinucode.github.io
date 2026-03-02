@@ -187,6 +187,45 @@ export class CashService {
 
     async getCashFlow(filters: CashFlowFilters, userId: string, role: UserRole) {
         await this.validateAccess(filters.businessId, userId, role);
+
+        // 1. Calcular saldos globales reales (sin filtro de fecha)
+        const business = await prisma.business.findUnique({
+            where: { id: filters.businessId },
+            select: { currentBalance: true },
+        });
+        if (!business) throw new Error('Negocio no encontrado');
+
+        const allMovements = await prisma.cashMovement.findMany({
+            where: { businessId: filters.businessId },
+            select: { type: true, amount: true, paymentMethod: true }
+        });
+
+        let cashBalance = 0;
+        let bankBalance = 0;
+
+        allMovements.forEach(mov => {
+            const amount = Number(mov.amount);
+            const isInc = this.isIncome(mov.type, amount);
+            // Si es ingreso suma, si es egreso resta. Transferencias internas ya vienen con + o -
+            const effectAmount = mov.type === 'internal_transfer' ? amount : (isInc ? amount : -amount);
+
+            if (mov.paymentMethod === 'efectivo') {
+                cashBalance += effectAmount;
+            } else {
+                bankBalance += effectAmount;
+            }
+        });
+
+        // Asegurar que los subtotales cuadran con el balance declarado (herencia de datos)
+        const declaredTotal = Number(business.currentBalance);
+        const calculatedTotal = cashBalance + bankBalance;
+
+        if (Math.abs(declaredTotal - calculatedTotal) > 0.01) {
+            const diff = declaredTotal - calculatedTotal;
+            cashBalance += diff; // asume que cualquier discrepancia de base está en efectivo
+        }
+
+        // 2. Obtener movimientos para el periodo seleccionado
         const where: Prisma.CashMovementWhereInput = { businessId: filters.businessId };
 
         if (filters.startDate || filters.endDate) {
@@ -196,7 +235,7 @@ export class CashService {
             };
         }
 
-        const movements = await prisma.cashMovement.findMany({
+        const filteredMovements = await prisma.cashMovement.findMany({
             where,
             orderBy: { createdAt: 'desc' },
             include: {
@@ -206,7 +245,7 @@ export class CashService {
             },
         });
 
-        const summary = movements.reduce(
+        const periodSummary = filteredMovements.reduce(
             (acc, mov) => {
                 const amount = Number(mov.amount);
                 const isInc = this.isIncome(mov.type, amount);
@@ -215,17 +254,21 @@ export class CashService {
                     if (isInc) acc.totalIncome += amount;
                     else acc.totalExpenses += Math.abs(amount);
                 }
-
-                if (mov.paymentMethod === 'efectivo') acc.cashBalance += amount;
-                else acc.bankBalance += amount;
-
-                acc.net = acc.cashBalance + acc.bankBalance;
+                acc.net = acc.totalIncome - acc.totalExpenses;
                 return acc;
             },
-            { totalIncome: 0, totalExpenses: 0, net: 0, cashBalance: 0, bankBalance: 0 }
+            { totalIncome: 0, totalExpenses: 0, net: 0 }
         );
 
-        return { movements, summary };
+        return {
+            movements: filteredMovements,
+            summary: periodSummary,
+            balances: {
+                total: declaredTotal,
+                cash: cashBalance,
+                bank: bankBalance
+            }
+        };
     }
 
     async reconcile(businessId: string, userId: string, role: UserRole) {

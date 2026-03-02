@@ -58,7 +58,8 @@ model Business {
   currentBalance Decimal  @default(0) @map("current_balance") @db.Decimal(15, 2)
   createdById    String   @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  whatsappMessageTemplate String? @db.Text @map("whatsapp_message_template")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
   // Relaciones
   createdBy      User             @relation("BusinessCreator", fields: [createdById], references: [id])

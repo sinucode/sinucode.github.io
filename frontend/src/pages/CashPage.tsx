@@ -31,7 +31,8 @@ export default function CashPage() {
     });
 
     const movements = flow?.movements || [];
-    const summary = flow?.summary || { totalIncome: 0, totalExpenses: 0, net: 0, cashBalance: 0, bankBalance: 0 };
+
+    const balances = flow?.balances || { total: 0, cash: 0, bank: 0 };
 
     // Autoselect first business for admin
     useEffect(() => {
@@ -107,9 +108,9 @@ export default function CashPage() {
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <SummaryCard title="Saldo Total" value={formatMoney(summary.net)} icon={<DollarSign size={20} />} variant="primary" isLoading={isLoading} />
-                <SummaryCard title="En Efectivo" value={formatMoney(summary.cashBalance)} icon={<Wallet size={20} />} variant="success" isLoading={isLoading} />
-                <SummaryCard title="En Bancos/Otros" value={formatMoney(summary.bankBalance)} icon={<Building2 size={20} />} variant="warning" isLoading={isLoading} />
+                <SummaryCard title="Saldo Total" value={formatMoney(balances.total)} icon={<DollarSign size={20} />} variant="primary" isLoading={isLoading} />
+                <SummaryCard title="En Efectivo" value={formatMoney(balances.cash)} icon={<Wallet size={20} />} variant="success" isLoading={isLoading} />
+                <SummaryCard title="En Bancos/Otros" value={formatMoney(balances.bank)} icon={<Building2 size={20} />} variant="warning" isLoading={isLoading} />
             </div>
 
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">

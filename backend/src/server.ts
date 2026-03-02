@@ -20,6 +20,8 @@ import creditRoutes from './routes/credit.routes';
 import paymentRoutes from './routes/payment.routes';
 import cashRoutes from './routes/cash.routes';
 import setupRoutes from './routes/setup.routes';
+import whatsappRoutes from './routes/whatsapp.routes';
+import { startWhatsAppRemindersJob } from './cron/whatsappReminders.cron';
 
 const app: Application = express();
 
@@ -87,6 +89,7 @@ app.use('/api/credits', creditRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/cash', cashRoutes);
 app.use('/api/setup', setupRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 /**
  * MANEJO DE ERRORES
@@ -104,6 +107,9 @@ if (!process.env.VERCEL) {
         logger.info(`🚀 Server running on port ${PORT}`);
         logger.info(`📍 Environment: ${config.nodeEnv}`);
         logger.info(`🔗 Frontend URL: ${config.frontend.url}`);
+
+        // Iniciar cron jobs
+        startWhatsAppRemindersJob();
     });
 }
 

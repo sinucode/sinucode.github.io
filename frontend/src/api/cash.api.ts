@@ -28,9 +28,12 @@ export const getCashFlow = async (params: { businessId: string; startDate?: stri
             totalIncome: number;
             totalExpenses: number;
             net: number;
-            cashBalance: number;
-            bankBalance: number;
-        }
+        };
+        balances: {
+            total: number;
+            cash: number;
+            bank: number;
+        };
     };
 };
 

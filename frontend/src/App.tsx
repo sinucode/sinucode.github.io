@@ -12,6 +12,7 @@ import CreditsPage from './pages/CreditsPage';
 import CreditDetailPage from './pages/CreditDetailPage';
 import PaymentsPage from './pages/PaymentsPage';
 import CashPage from './pages/CashPage';
+import WhatsAppPage from './pages/WhatsAppPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, isLoading } = useAuthStore();
@@ -59,6 +60,7 @@ function App() {
                     <Route path="credits/:id" element={<CreditDetailPage />} />
                     <Route path="payments" element={<PaymentsPage />} />
                     <Route path="cash" element={<CashPage />} />
+                    <Route path="whatsapp" element={<WhatsAppPage />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Route>
                 {/* Redirección por defecto para rutas no coincidentes fuera de la autenticación */}
