@@ -133,6 +133,8 @@ export default function CreditDetailPage() {
     }
 
     const totalPaid = credit.payments.reduce((acc: number, p: any) => acc + Number(p.amount), 0);
+    const expectedInterest = Number(credit.totalWithInterest || 0) - Number(credit.amount || 0);
+    const actualProfit = totalPaid - Number(credit.amount || 0);
     const nextDue = credit.paymentSchedule.find((p: any) => p.status !== 'paid');
 
     const renderStatusIcon = (status: PaymentSchedule['status']) => {
@@ -345,10 +347,18 @@ export default function CreditDetailPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 <SummaryCard title="Total Prestado" value={formatMoney(credit.amount)} />
+                <SummaryCard title="Intereses a pagar" value={formatMoney(expectedInterest)} />
                 <SummaryCard title="Total Pagado" value={formatMoney(totalPaid)} />
                 <SummaryCard title="Saldo Pendiente" value={formatMoney(credit.remainingBalance)} />
+                {credit.status === 'paid' && (
+                    <SummaryCard
+                        title="Ganancia del crédito"
+                        value={formatMoney(actualProfit)}
+                        valueClass="text-green-600"
+                    />
+                )}
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
@@ -832,11 +842,11 @@ export default function CreditDetailPage() {
     );
 }
 
-function SummaryCard({ title, value }: { title: string; value: string }) {
+function SummaryCard({ title, value, valueClass = "text-gray-800" }: { title: string; value: string; valueClass?: string }) {
     return (
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
             <p className="text-sm text-primary-600">{title}</p>
-            <p className="text-xl font-semibold text-gray-800">{value}</p>
+            <p className={`text-xl font-semibold ${valueClass}`}>{value}</p>
         </div>
     );
 }
