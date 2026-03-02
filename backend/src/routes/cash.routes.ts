@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requireMinRole } from '../middleware/auth.middleware';
-import { recordMovement, injectCapital, withdrawFunds, getCashFlow, reconcile, forecastCash } from '../controllers/cash.controller';
-import { capitalValidators, flowValidators, forecastValidators, recordMovementValidators } from '../validators/cash.validators';
+import { recordMovement, injectCapital, withdrawFunds, getCashFlow, reconcile, forecastCash, createInternalTransfer } from '../controllers/cash.controller';
+import { capitalValidators, flowValidators, forecastValidators, recordMovementValidators, transferValidators } from '../validators/cash.validators';
 
 const router = Router();
 
@@ -13,6 +13,7 @@ router.post('/movements', requireMinRole('admin'), recordMovementValidators, rec
 // Inyección / retiro (solo admin)
 router.post('/inject', requireMinRole('admin'), capitalValidators, injectCapital);
 router.post('/withdraw', requireMinRole('admin'), capitalValidators, withdrawFunds);
+router.post('/transfer', requireMinRole('admin'), transferValidators, createInternalTransfer);
 
 // Flujo de caja y conciliación
 router.get('/flow', requireMinRole('user'), flowValidators, getCashFlow);

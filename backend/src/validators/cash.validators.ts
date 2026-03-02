@@ -7,6 +7,7 @@ const movementTypes = [
     'loan_disbursement',
     'payment_received',
     'interest_earned',
+    'internal_transfer',
 ];
 
 export const recordMovementValidators = [
@@ -33,4 +34,11 @@ export const flowValidators = [
 export const forecastValidators = [
     query('businessId').isUUID().withMessage('businessId inválido'),
     query('targetDate').isISO8601().withMessage('targetDate inválida'),
+];
+export const transferValidators = [
+    body('businessId').isUUID().withMessage('businessId inválido'),
+    body('amount').isFloat({ gt: 0 }).withMessage('El monto debe ser mayor a 0'),
+    body('fromMethod').notEmpty().withMessage('Debe especificar el método de origen'),
+    body('toMethod').notEmpty().withMessage('Debe especificar el método de destino'),
+    body('description').optional().isLength({ min: 3, max: 200 }).withMessage('Descripción inválida'),
 ];

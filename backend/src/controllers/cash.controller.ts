@@ -66,6 +66,28 @@ export const withdrawFunds = async (req: Request, res: Response) => {
     }
 };
 
+export const createInternalTransfer = async (req: Request, res: Response) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+        const userId = req.user!.userId;
+        const role = req.user!.role as UserRole;
+        const result = await cashService.createInternalTransfer({
+            businessId: req.body.businessId,
+            fromMethod: req.body.fromMethod,
+            toMethod: req.body.toMethod,
+            amount: Number(req.body.amount),
+            description: req.body.description,
+            userId,
+            role,
+        });
+        return res.status(201).json(result);
+    } catch (error: any) {
+        return res.status(400).json({ error: error.message || 'Error al realizar transferencia' });
+    }
+};
+
 export const getCashFlow = async (req: Request, res: Response) => {
     try {
         const userId = req.user!.userId;

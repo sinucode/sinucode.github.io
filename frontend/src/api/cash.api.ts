@@ -22,7 +22,21 @@ export const withdrawFunds = async (payload: { businessId: string; amount: numbe
 
 export const getCashFlow = async (params: { businessId: string; startDate?: string; endDate?: string }) => {
     const res = await api.get('/cash/flow', { params });
-    return res.data as { movements: any[]; summary: { totalIncome: number; totalExpenses: number; net: number } };
+    return res.data as {
+        movements: any[];
+        summary: {
+            totalIncome: number;
+            totalExpenses: number;
+            net: number;
+            cashBalance: number;
+            bankBalance: number;
+        }
+    };
+};
+
+export const transferFunds = async (payload: { businessId: string; amount: number; fromMethod: string; toMethod: string; description?: string }) => {
+    const res = await api.post('/cash/transfer', payload);
+    return res.data;
 };
 
 

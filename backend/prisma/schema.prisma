@@ -221,6 +221,7 @@ model CashMovement {
   description     String?
   relatedCreditId String?          @map("related_credit_id")
   relatedPaymentId String?         @map("related_payment_id")
+  paymentMethod   String           @default("efectivo") @map("payment_method")
   createdById     String           @map("created_by")
   createdAt       DateTime         @default(now()) @map("created_at")
 
@@ -241,6 +242,7 @@ enum CashMovementType {
   payment_received
   interest_earned
   credit_cancellation
+  internal_transfer
 
   @@map("cash_movement_type")
 }

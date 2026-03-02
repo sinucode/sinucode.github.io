@@ -8,6 +8,7 @@ interface CashMovementInput {
     description?: string;
     relatedCreditId?: string;
     relatedPaymentId?: string;
+    paymentMethod?: string;
 }
 
 interface CashFlowFilters {
@@ -19,40 +20,16 @@ interface CashFlowFilters {
 export class CashService {
     /**
      * Valida que el usuario tenga acceso al negocio solicitado
-     * Implementa Defense-in-Depth: validación a nivel de servicio
-     * OWASP: A01:2021 – Broken Access Control
-     * 
-     * @param businessId - ID del negocio a validar
-     * @param userId - ID del usuario que solicita acceso
-     * @param role - Rol del usuario (super_admin, admin, user)
-     * @throws Error si el usuario no tiene permisos
      */
     private async validateAccess(businessId: string, userId: string, role: UserRole): Promise<void> {
-        // Super admin tiene acceso irrestricto a todos los negocios
-        if (role === 'super_admin') {
-            return;
-        }
+        if (role === 'super_admin' || role === 'admin') return;
 
-        // Admin tiene acceso a todos los negocios (política definida)
-        // Si se desea restringir admins a negocios específicos, modificar aquí
-        if (role === 'admin') {
-            return;
-        }
-
-        // Usuario regular: DEBE estar asignado al negocio
         const userBusiness = await prisma.userBusiness.findFirst({
-            where: {
-                userId,
-                businessId,
-            },
-            select: {
-                businessId: true,
-            },
+            where: { userId, businessId },
+            select: { businessId: true },
         });
 
-        // Si no hay relación usuario-negocio, denegar acceso
         if (!userBusiness) {
-            // Log de intento de acceso no autorizado (para auditoría de seguridad)
             await prisma.auditLog.create({
                 data: {
                     userId,
@@ -61,15 +38,13 @@ export class CashService {
                     entityType: 'Business',
                     entityId: businessId,
                 },
-            }).catch(() => {
-                // Silenciar errores de auditoría para no revelar información
-            });
-
+            }).catch(() => { });
             throw new Error('No tiene permisos para acceder a los datos de este negocio');
         }
     }
 
-    private isIncome(type: CashMovementType) {
+    private isIncome(type: CashMovementType, amount: number) {
+        if (type === 'internal_transfer') return amount > 0;
         return ['payment_received', 'capital_injection', 'interest_earned'].includes(type);
     }
 
@@ -82,18 +57,17 @@ export class CashService {
         });
         if (!business) throw new Error('Negocio no encontrado');
 
-        const isIncome = this.isIncome(data.type);
+        const isIncome = this.isIncome(data.type, data.amount);
+        const affectAmount = new Prisma.Decimal(Math.abs(data.amount));
         const newBalance = isIncome
-            ? new Prisma.Decimal(business.currentBalance).plus(data.amount)
-            : new Prisma.Decimal(business.currentBalance).minus(data.amount);
+            ? new Prisma.Decimal(business.currentBalance).plus(affectAmount)
+            : new Prisma.Decimal(business.currentBalance).minus(affectAmount);
 
         if (newBalance.lt(0)) {
-            throw new Error(
-                `Fondos insuficientes. Saldo actual: ${business.currentBalance}, operación: ${data.amount}`
-            );
+            throw new Error(`Fondos insuficientes. Saldo actual: ${business.currentBalance}, operación: ${data.amount}`);
         }
 
-        const movement = await prisma.$transaction(async (tx) => {
+        return prisma.$transaction(async (tx) => {
             const mov = await tx.cashMovement.create({
                 data: {
                     businessId: data.businessId,
@@ -103,6 +77,7 @@ export class CashService {
                     description: data.description,
                     relatedCreditId: data.relatedCreditId,
                     relatedPaymentId: data.relatedPaymentId,
+                    paymentMethod: data.paymentMethod || 'efectivo',
                     createdById: userId,
                 },
             });
@@ -119,57 +94,101 @@ export class CashService {
                     action: 'cash_movement_recorded',
                     entityType: 'cash_movement',
                     entityId: mov.id,
-                    newValues: {
-                        type: data.type,
-                        amount: data.amount,
-                        balanceAfter: newBalance,
-                    },
+                    newValues: { type: data.type, amount: data.amount, balanceAfter: newBalance },
                 },
             });
 
             return mov;
         });
-
-        return movement;
     }
 
     async injectCapital(businessId: string, amount: number, description: string | undefined, userId: string, role: UserRole) {
-        if (!['admin', 'super_admin'].includes(role)) {
-            throw new Error('Solo administradores pueden inyectar capital');
-        }
-        return this.recordMovement(
-            {
-                businessId,
-                type: 'capital_injection',
-                amount,
-                description: description || 'Inyección de capital',
-            },
-            userId,
-            role
-        );
+        if (!['admin', 'super_admin'].includes(role)) throw new Error('Solo administradores pueden inyectar capital');
+        return this.recordMovement({
+            businessId,
+            type: 'capital_injection',
+            amount,
+            description: description || 'Inyección de capital',
+            paymentMethod: 'efectivo'
+        }, userId, role);
     }
 
     async withdrawFunds(businessId: string, amount: number, description: string | undefined, userId: string, role: UserRole) {
-        if (!['admin', 'super_admin'].includes(role)) {
-            throw new Error('Solo administradores pueden retirar fondos');
-        }
-        return this.recordMovement(
-            {
-                businessId,
-                type: 'withdrawal',
-                amount,
-                description: description || 'Retiro de fondos',
-            },
-            userId,
-            role
-        );
+        if (!['admin', 'super_admin'].includes(role)) throw new Error('Solo administradores pueden retirar fondos');
+        return this.recordMovement({
+            businessId,
+            type: 'withdrawal',
+            amount,
+            description: description || 'Retiro de fondos',
+            paymentMethod: 'efectivo'
+        }, userId, role);
+    }
+
+    async createInternalTransfer(params: {
+        businessId: string;
+        fromMethod: string;
+        toMethod: string;
+        amount: number;
+        description?: string;
+        userId: string;
+        role: UserRole;
+    }) {
+        const { businessId, fromMethod, toMethod, amount, description, userId, role } = params;
+        await this.validateAccess(businessId, userId, role);
+
+        if (fromMethod === toMethod) throw new Error('El origen y destino deben ser diferentes');
+        if (amount <= 0) throw new Error('El monto debe ser mayor a 0');
+
+        return prisma.$transaction(async (tx) => {
+            const business = await tx.business.findUnique({
+                where: { id: businessId },
+                select: { currentBalance: true },
+            });
+            if (!business) throw new Error('Negocio no encontrado');
+
+            const movOut = await tx.cashMovement.create({
+                data: {
+                    businessId,
+                    type: 'internal_transfer',
+                    amount: new Prisma.Decimal(-amount),
+                    balanceAfter: business.currentBalance,
+                    description: description || `Transferencia interna de ${fromMethod} a ${toMethod}`,
+                    paymentMethod: fromMethod,
+                    createdById: userId,
+                },
+            });
+
+            const movIn = await tx.cashMovement.create({
+                data: {
+                    businessId,
+                    type: 'internal_transfer',
+                    amount: new Prisma.Decimal(amount),
+                    balanceAfter: business.currentBalance,
+                    description: description || `Transferencia interna de ${fromMethod} a ${toMethod}`,
+                    paymentMethod: toMethod,
+                    createdById: userId,
+                },
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    userId,
+                    businessId,
+                    action: 'internal_transfer_recorded',
+                    entityType: 'cash_movement',
+                    entityId: `${movOut.id},${movIn.id}`,
+                    newValues: { fromMethod, toMethod, amount },
+                },
+            });
+
+            return { movOut, movIn };
+        });
     }
 
     async getCashFlow(filters: CashFlowFilters, userId: string, role: UserRole) {
         await this.validateAccess(filters.businessId, userId, role);
-        const where: Prisma.CashMovementWhereInput = {
-            businessId: filters.businessId,
-        };
+        const where: Prisma.CashMovementWhereInput = { businessId: filters.businessId };
+
         if (filters.startDate || filters.endDate) {
             where.createdAt = {
                 ...(filters.startDate && { gte: new Date(filters.startDate) }),
@@ -189,13 +208,21 @@ export class CashService {
 
         const summary = movements.reduce(
             (acc, mov) => {
-                const income = this.isIncome(mov.type);
-                if (income) acc.totalIncome += Number(mov.amount);
-                else acc.totalExpenses += Number(mov.amount);
-                acc.net = acc.totalIncome - acc.totalExpenses;
+                const amount = Number(mov.amount);
+                const isInc = this.isIncome(mov.type, amount);
+
+                if (mov.type !== 'internal_transfer') {
+                    if (isInc) acc.totalIncome += amount;
+                    else acc.totalExpenses += Math.abs(amount);
+                }
+
+                if (mov.paymentMethod === 'efectivo') acc.cashBalance += amount;
+                else acc.bankBalance += amount;
+
+                acc.net = acc.cashBalance + acc.bankBalance;
                 return acc;
             },
-            { totalIncome: 0, totalExpenses: 0, net: 0 }
+            { totalIncome: 0, totalExpenses: 0, net: 0, cashBalance: 0, bankBalance: 0 }
         );
 
         return { movements, summary };

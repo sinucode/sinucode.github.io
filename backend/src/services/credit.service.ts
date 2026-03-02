@@ -120,6 +120,7 @@ export class CreditService {
                     balanceAfter: newBalance,
                     description: `Desembolso crédito a ${client.fullName}`,
                     relatedCreditId: credit.id,
+                    paymentMethod: 'efectivo', // Desembolso por defecto en efectivo
                     createdById: userId,
                 },
             });
@@ -368,6 +369,7 @@ export class CreditService {
                     description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}`,
                     relatedCreditId: credit.id,
                     relatedPaymentId: payment.id,
+                    paymentMethod: paymentMethod || 'efectivo',
                     createdById: userId,
                 },
             });
@@ -402,6 +404,7 @@ export class CreditService {
                             balanceAfter: newBusinessBalance, // ya incluido en el pago
                             description: `Ganancia crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total cobrado: $${totalPaid.toLocaleString('es-CO')}`,
                             relatedCreditId: credit.id,
+                            paymentMethod: 'efectivo',
                             createdById: userId,
                         },
                     });
@@ -417,6 +420,7 @@ export class CreditService {
                             balanceAfter: newBusinessBalance,
                             description: `Excedente de pago crédito - ${credit.client.fullName}`,
                             relatedCreditId: credit.id,
+                            paymentMethod: 'efectivo',
                             createdById: userId,
                         },
                     });
