@@ -30,7 +30,8 @@ export default function DashboardHome() {
 
     const { data: credits } = useQuery({
         queryKey: ['credits-dashboard', businessId],
-        queryFn: () => getCredits({ ...(businessId ? { businessId } : {}) }),
+        queryFn: () => getCredits({ businessId }),
+        enabled: !!businessId,
     });
 
     const { data: cashFlow } = useQuery({
