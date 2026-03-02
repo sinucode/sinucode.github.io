@@ -27,6 +27,18 @@ const gapDaysMap: Record<PaymentFrequency, number> = {
 };
 const DAYS_PER_MONTH = 30; // 1 mes = 30 días (alineado con backend)
 
+const getDayOfWeek = (dateString: string | undefined | null) => {
+    if (!dateString) return '-';
+    try {
+        return new Intl.DateTimeFormat('es-CO', {
+            weekday: 'short',
+            timeZone: 'America/Bogota'
+        }).format(new Date(dateString));
+    } catch (e) {
+        return '-';
+    }
+};
+
 export default function CreditDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -347,6 +359,7 @@ export default function CreditDetailPage() {
                             <thead className="bg-white text-primary-900">
                                 <tr>
                                     <th className="px-3 py-2">#</th>
+                                    <th className="px-3 py-2 hidden sm:table-cell">Día</th>
                                     <th className="px-3 py-2">Fecha</th>
                                     <th className="px-3 py-2">Monto</th>
                                     <th className="px-3 py-2">Pagado</th>
@@ -357,6 +370,7 @@ export default function CreditDetailPage() {
                                 {credit.paymentSchedule.map((p: any, idx: number) => (
                                     <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-white'}>
                                         <td className="px-3 py-2 text-gray-900">{p.installmentNumber}</td>
+                                        <td className="px-3 py-2 text-gray-900 capitalize hidden sm:table-cell">{getDayOfWeek(p.dueDate)}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatDate(p.dueDate)}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatMoney(p.scheduledAmount)}</td>
                                         <td className="px-3 py-2 text-gray-900">{formatMoney(p.paidAmount)}</td>
@@ -377,7 +391,7 @@ export default function CreditDetailPage() {
                                 ))}
                                 {credit.paymentSchedule.length === 0 && (
                                     <tr>
-                                        <td className="px-3 py-3 text-primary-600" colSpan={5}>Sin cuotas registradas</td>
+                                        <td className="px-3 py-3 text-primary-600" colSpan={6}>Sin cuotas registradas</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -691,6 +705,7 @@ export default function CreditDetailPage() {
                                     <thead className="bg-white text-gray-600">
                                         <tr>
                                             <th className="px-3 py-2">#</th>
+                                            <th className="px-3 py-2 hidden sm:table-cell">Día</th>
                                             <th className="px-3 py-2">Fecha</th>
                                             <th className="px-3 py-2">Monto</th>
                                             <th className="px-3 py-2">Pagado</th>
@@ -701,6 +716,7 @@ export default function CreditDetailPage() {
                                         {editRows.map((row, idx) => (
                                             <tr key={row.id || idx} className="text-gray-800">
                                                 <td className="px-3 py-2 text-gray-900 font-medium">{row.installmentNumber ?? idx + 1}</td>
+                                                <td className="px-3 py-2 text-gray-900 capitalize hidden sm:table-cell">{getDayOfWeek(row.dueDate)}</td>
                                                 <td className="px-3 py-2">
                                                     <input
                                                         type="date"
@@ -737,14 +753,14 @@ export default function CreditDetailPage() {
                                     </tbody>
                                     <tfoot className="border-t-2 border-primary-200 bg-white font-semibold">
                                         <tr>
-                                            <td colSpan={2} className="px-3 py-3 text-right text-primary-900">Total de cuotas:</td>
+                                            <td colSpan={3} className="px-3 py-3 text-right text-primary-900">Total de cuotas:</td>
                                             <td className="px-3 py-3 text-gray-900">
                                                 {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.scheduledAmount || 0), 0))}
                                             </td>
                                             <td></td>
                                         </tr>
                                         <tr>
-                                            <td colSpan={2} className="px-3 py-3 text-right text-primary-900">Total pagado:</td>
+                                            <td colSpan={3} className="px-3 py-3 text-right text-primary-900">Total pagado:</td>
                                             <td className="px-3 py-3 text-gray-900">
                                                 {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.paidAmount || 0), 0))}
                                             </td>
