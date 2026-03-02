@@ -31,13 +31,13 @@ export default function DashboardHome() {
     const { data: credits } = useQuery({
         queryKey: ['credits-dashboard', businessId],
         queryFn: () => getCredits({ businessId }),
-        enabled: !!businessId,
+        enabled: isAdmin ? !!businessId : true,
     });
 
     const { data: cashFlow } = useQuery({
         queryKey: ['cash-dashboard', businessId],
-        queryFn: () => getCashFlow({ businessId }),
-        enabled: !!businessId,
+        queryFn: () => getCashFlow({ businessId: businessId || '' }),
+        enabled: isAdmin ? !!businessId : true,
     });
 
     const stats = useMemo(() => {
