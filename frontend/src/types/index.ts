@@ -47,7 +47,7 @@ export interface Client {
 }
 
 // Tipos de crédito
-export type PaymentFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+export type PaymentFrequency = 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly';
 export type CreditStatus = 'active' | 'paid' | 'overdue' | 'cancelled';
 
 export interface Credit {

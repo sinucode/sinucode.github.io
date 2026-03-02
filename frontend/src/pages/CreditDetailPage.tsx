@@ -22,7 +22,8 @@ const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString
 const gapDaysMap: Record<PaymentFrequency, number> = {
     daily: 1,
     weekly: 7,
-    biweekly: 15,
+    bisemanal: 14,
+    quincenal: 15,
     monthly: 30,
 };
 const DAYS_PER_MONTH = 30; // 1 mes = 30 días (alineado con backend)
@@ -141,7 +142,7 @@ export default function CreditDetailPage() {
         // Calcular interés por cuota según frecuencia
         let paymentsPerMonth = 1;
         if (frequency === 'weekly') paymentsPerMonth = 4;
-        else if (frequency === 'biweekly') paymentsPerMonth = 2;
+        else if (frequency === 'bisemanal' || frequency === 'quincenal') paymentsPerMonth = 2;
         else if (frequency === 'daily') paymentsPerMonth = 30;
 
         const interestPerPayment = rateDecimal / paymentsPerMonth;
@@ -170,7 +171,7 @@ export default function CreditDetailPage() {
             // 1 mes = 4 semanas, 2 quincenas, o 1 mensualidad
             let paymentsPerMonth = 1;
             if (frequency === 'weekly') paymentsPerMonth = 4;
-            else if (frequency === 'biweekly') paymentsPerMonth = 2;
+            else if (frequency === 'bisemanal' || frequency === 'quincenal') paymentsPerMonth = 2;
             else if (frequency === 'daily') paymentsPerMonth = 30;
 
             const totalPayments = value * paymentsPerMonth;
@@ -208,7 +209,7 @@ export default function CreditDetailPage() {
             const rateDecimal = interestRate / 100;
             let paymentsPerMonth = 1;
             if (editForm.frequency === 'weekly') paymentsPerMonth = 4;
-            else if (editForm.frequency === 'biweekly') paymentsPerMonth = 2;
+            else if (editForm.frequency === 'bisemanal' || editForm.frequency === 'quincenal') paymentsPerMonth = 2;
             else if (editForm.frequency === 'daily') paymentsPerMonth = 30;
 
             const interestPerPayment = rateDecimal / paymentsPerMonth;
@@ -245,7 +246,7 @@ export default function CreditDetailPage() {
         const rateDecimal = interestRate / 100;
         let paymentsPerMonth = 1;
         if (editForm.frequency === 'weekly') paymentsPerMonth = 4;
-        else if (editForm.frequency === 'biweekly') paymentsPerMonth = 2;
+        else if (editForm.frequency === 'bisemanal' || editForm.frequency === 'quincenal') paymentsPerMonth = 2;
         else if (editForm.frequency === 'daily') paymentsPerMonth = 30;
 
         const interestPerPayment = rateDecimal / paymentsPerMonth;
@@ -654,7 +655,8 @@ export default function CreditDetailPage() {
                                     >
                                         <option value="daily">Diario</option>
                                         <option value="weekly">Semanal</option>
-                                        <option value="biweekly">Quincenal</option>
+                                        <option value="bisemanal">Bisemanal (14 días)</option>
+                                        <option value="quincenal">Quincenal (15 y 30)</option>
                                         <option value="monthly">Mensual</option>
                                     </select>
                                 </div>

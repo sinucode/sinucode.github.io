@@ -19,7 +19,8 @@ interface CreditFormProps {
 const frequencies: { value: PaymentFrequency; label: string }[] = [
     { value: 'daily', label: 'Diario' },
     { value: 'weekly', label: 'Semanal' },
-    { value: 'biweekly', label: 'Quincenal' },
+    { value: 'bisemanal', label: 'Bisemanal (Cada 14 días)' },
+    { value: 'quincenal', label: 'Quincenal (Días 15 y 30)' },
     { value: 'monthly', label: 'Mensual' },
 ];
 
@@ -27,7 +28,8 @@ const formatMoney = (value: any) => Math.ceil(Number(value || 0)).toLocaleString
 const gapDaysMap: Record<PaymentFrequency, number> = {
     daily: 1,
     weekly: 7,
-    biweekly: 15,
+    bisemanal: 14,
+    quincenal: 15,
     monthly: 30,
 };
 const DAYS_PER_MONTH = 28;
@@ -95,8 +97,20 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 
     const estimateTermDays = (amount: number, interestRate: number, installment: number, frequency: PaymentFrequency) => {
         const gap = gapDaysMap[frequency] || 7;
-        const estimatedTotal = amount + amount * (interestRate / 100);
-        const payments = Math.max(1, Math.ceil(estimatedTotal / installment));
+        const rateDecimal = interestRate / 100;
+
+        // Calcular pagos por mes para estimar interés por cuota
+        let paymentsPerMonth = 1;
+        if (frequency === 'weekly') paymentsPerMonth = 4;
+        else if (frequency === 'bisemanal' || frequency === 'quincenal') paymentsPerMonth = 2;
+        else if (frequency === 'daily') paymentsPerMonth = 30;
+
+        const interestPerPayment = rateDecimal / paymentsPerMonth;
+
+        // n = amount / (installment - amount * interestPerPayment)
+        const denominator = installment - (amount * interestPerPayment);
+        const payments = denominator > 0 ? Math.max(1, Math.ceil(amount / denominator)) : 365 / gap;
+
         return payments * gap;
     };
 
