@@ -347,17 +347,17 @@ export default function CreditDetailPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className={`grid gap-4 ${credit.status === 'paid' ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-5' : 'grid-cols-2 md:grid-cols-4'}`}>
                 <SummaryCard title="Total Prestado" value={formatMoney(credit.amount)} />
                 <SummaryCard title="Intereses a pagar" value={formatMoney(expectedInterest)} />
                 <SummaryCard title="Total Pagado" value={formatMoney(totalPaid)} />
                 <SummaryCard title="Saldo Pendiente" value={formatMoney(credit.remainingBalance)} />
+
                 {credit.status === 'paid' && (
-                    <SummaryCard
-                        title="Ganancia del crédito"
-                        value={formatMoney(actualProfit)}
-                        valueClass="text-green-600"
-                    />
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 shadow-sm flex flex-col justify-center">
+                        <p className="text-sm font-medium text-emerald-700">Ganancia del crédito</p>
+                        <p className="text-2xl font-bold text-emerald-600">{formatMoney(actualProfit)}</p>
+                    </div>
                 )}
             </div>
 
