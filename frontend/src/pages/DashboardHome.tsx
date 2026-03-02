@@ -61,15 +61,36 @@ export default function DashboardHome() {
             ?.reduce((sum: number, c: any) => sum + Number(c.totalWithInterest || c.amount || 0), 0) || 0;
 
         const activeCredits = credits?.filter((c: any) => c.status === 'active').length || 0;
-        const overdueCredits = credits?.filter((c: any) => c.status === 'overdue').length || 0;
+
+        let overdueCredits = 0;
+        let pagosHoy = 0;
         const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-        const pagosHoy = credits?.reduce((acc: number, c: any) => {
-            if (!c.paymentSchedule) return acc;
-            return acc + c.paymentSchedule.filter((p: any) => {
+
+        credits?.forEach((c: any) => {
+            if (c.status === 'paid' || c.status === 'cancelled') return;
+
+            // Check if overdue (status is overdue OR any unpaid schedule item is past today)
+            const isOverdue = c.status === 'overdue' || (c.paymentSchedule && c.paymentSchedule.some((p: any) => {
+                if (p.status === 'paid') return false;
                 const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-                return dStr === todayStr && p.status !== 'paid';
-            }).length;
-        }, 0) || 0;
+                return dStr < todayStr;
+            }));
+
+            if (isOverdue) {
+                overdueCredits++;
+            }
+
+            // Check if due today (any unpaid schedule item is exactly today)
+            const isDueToday = c.paymentSchedule && c.paymentSchedule.some((p: any) => {
+                if (p.status === 'paid') return false;
+                const dStr = new Date(p.dueDate).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+                return dStr === todayStr;
+            });
+
+            if (isDueToday) {
+                pagosHoy++;
+            }
+        });
 
         const gananciaEsperada = credits
             ?.filter((c: any) => c.status === 'active' || c.status === 'overdue')
