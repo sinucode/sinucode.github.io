@@ -168,7 +168,7 @@ export class CreditService {
             where.paymentSchedule = {
                 some: {
                     dueDate: { gte: startOfBogotaToday, lt: endOfBogotaToday },
-                    status: { in: ['pending', 'partial'] }
+                    status: { in: ['pending', 'partial', 'overdue'] }
                 }
             };
         }

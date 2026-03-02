@@ -89,7 +89,7 @@ export default function DashboardHome() {
             // Check if due today (exact match with backend logic)
             const isDueToday = c.paymentSchedule && c.paymentSchedule.some((p: any) => {
                 const pDate = new Date(p.dueDate).getTime();
-                return pDate >= startOfBogotaToday && pDate < endOfBogotaToday && (p.status === 'pending' || p.status === 'partial');
+                return pDate >= startOfBogotaToday && pDate < endOfBogotaToday && (p.status === 'pending' || p.status === 'partial' || p.status === 'overdue');
             });
 
             if (isDueToday) {
