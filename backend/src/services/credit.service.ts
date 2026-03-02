@@ -43,22 +43,15 @@ export class CreditService {
             data.termDays,
             data.frequency
         );
-
-        return {
-            ...plan,
-            endDate: calculateEndDate(start, data.termDays),
-        };
+        return { ...plan, endDate: calculateEndDate(start, data.termDays) };
     }
 
     async createCredit(data: CreateCreditInput, userId: string, role: UserRole, ipAddress = '') {
         const start = this.normalizeDate(data.startDate);
 
-        // Determinar negocio objetivo
         let targetBusinessId: string;
         if (role === 'super_admin') {
-            if (!data.businessId) {
-                throw new Error('businessId es requerido para super_admin');
-            }
+            if (!data.businessId) throw new Error('businessId es requerido para super_admin');
             targetBusinessId = data.businessId;
         } else {
             const userBusinessId = await this.getUserBusiness(userId);
@@ -66,32 +59,23 @@ export class CreditService {
             targetBusinessId = userBusinessId;
         }
 
-        // Validar cliente pertenece al negocio
         const client = await prisma.client.findUnique({
             where: { id: data.clientId },
             select: { id: true, fullName: true, businessId: true },
         });
         if (!client) throw new Error('Cliente no encontrado');
-        if (client.businessId !== targetBusinessId) {
-            throw new Error('El cliente no pertenece al negocio seleccionado');
-        }
+        if (client.businessId !== targetBusinessId) throw new Error('El cliente no pertenece al negocio seleccionado');
 
-        // Obtener saldo del negocio
         const business = await prisma.business.findUnique({
             where: { id: targetBusinessId },
             select: { id: true, currentBalance: true, name: true },
         });
         if (!business) throw new Error('Negocio no encontrado');
+        if (Number(business.currentBalance) < data.amount) throw new Error('El monto excede el saldo disponible en caja');
 
-        if (Number(business.currentBalance) < data.amount) {
-            throw new Error('El monto excede el saldo disponible en caja');
-        }
-
-        // Simular plan
         const simulation = await this.simulateCredit(data);
 
         const result = await prisma.$transaction(async (tx) => {
-            // Crear crédito
             const credit = await tx.credit.create({
                 data: {
                     businessId: targetBusinessId,
@@ -108,25 +92,13 @@ export class CreditService {
                     createdById: userId,
                 },
                 select: {
-                    id: true,
-                    businessId: true,
-                    clientId: true,
-                    amount: true,
-                    interestRate: true,
-                    totalWithInterest: true,
-                    paymentFrequency: true,
-                    startDate: true,
-                    endDate: true,
-                    termDays: true,
-                    remainingBalance: true,
-                    status: true,
-                    createdById: true,
-                    createdAt: true,
-                    updatedAt: true,
+                    id: true, businessId: true, clientId: true, amount: true,
+                    interestRate: true, totalWithInterest: true, paymentFrequency: true,
+                    startDate: true, endDate: true, termDays: true, remainingBalance: true,
+                    status: true, createdById: true, createdAt: true, updatedAt: true,
                 },
             });
 
-            // Crear cuotas
             await tx.paymentSchedule.createMany({
                 data: simulation.paymentPlan.map((p) => ({
                     creditId: credit.id,
@@ -138,7 +110,6 @@ export class CreditService {
                 })),
             });
 
-            // Movimiento de caja
             const newBalance = new Prisma.Decimal(business.currentBalance).minus(data.amount);
             await tx.cashMovement.create({
                 data: {
@@ -152,21 +123,17 @@ export class CreditService {
                 },
             });
 
-            // Actualizar saldo del negocio
             await tx.business.update({
                 where: { id: targetBusinessId },
                 data: { currentBalance: newBalance },
             });
 
-            // Auditoría básica
             await tx.auditLog.create({
                 data: {
-                    userId,
-                    businessId: targetBusinessId,
+                    userId, businessId: targetBusinessId,
                     action: 'CREATE_CREDIT',
                     description: `Creó crédito para ${client.fullName} por ${data.amount}`,
-                    entityType: 'Credit',
-                    entityId: credit.id,
+                    entityType: 'Credit', entityId: credit.id,
                     newValues: { credit, scheduleCount: simulation.paymentPlan.length },
                     ipAddress,
                 },
@@ -183,12 +150,8 @@ export class CreditService {
 
         if (role === 'user') {
             const userBusinessId = await this.getUserBusiness(userId);
-            if (!userBusinessId) {
-                throw new Error('No tiene negocio asignado');
-            }
-            if (businessId && businessId !== userBusinessId) {
-                throw new Error('No tiene permisos para ver créditos de otro negocio');
-            }
+            if (!userBusinessId) throw new Error('No tiene negocio asignado');
+            if (businessId && businessId !== userBusinessId) throw new Error('No tiene permisos para ver créditos de otro negocio');
             businessId = userBusinessId;
         }
 
@@ -202,32 +165,18 @@ export class CreditService {
             today.setHours(0, 0, 0, 0);
             const tomorrow = new Date(today);
             tomorrow.setDate(today.getDate() + 1);
-            where.paymentSchedule = {
-                some: {
-                    dueDate: { gte: today, lt: tomorrow },
-                    status: { in: ['pending', 'partial'] },
-                },
-            };
+            where.paymentSchedule = { some: { dueDate: { gte: today, lt: tomorrow }, status: { in: ['pending', 'partial'] } } };
         }
 
         if (filters.overdue) {
-            where.paymentSchedule = {
-                some: {
-                    status: 'overdue',
-                },
-            };
+            where.paymentSchedule = { some: { status: 'overdue' } };
         }
 
-        const credits = await prisma.credit.findMany({
+        return prisma.credit.findMany({
             where,
-            include: {
-                client: true,
-                paymentSchedule: true,
-            },
+            include: { client: true, paymentSchedule: true },
             orderBy: { createdAt: 'desc' },
         });
-
-        return credits;
     }
 
     async getCreditById(creditId: string, userId: string, role: UserRole) {
@@ -235,18 +184,13 @@ export class CreditService {
             where: { id: creditId },
             include: {
                 client: true,
-                paymentSchedule: {
-                    orderBy: { dueDate: 'asc' },
-                },
-                payments: {
-                    orderBy: { paymentDate: 'desc' },
-                },
+                paymentSchedule: { orderBy: { dueDate: 'asc' } },
+                payments: { orderBy: { paymentDate: 'desc' } },
             },
         });
 
         if (!credit) throw new Error('Crédito no encontrado');
 
-        // Autorización
         if (role === 'user') {
             const userBusinessId = await this.getUserBusiness(userId);
             if (!userBusinessId || userBusinessId !== credit.businessId) {
@@ -270,9 +214,7 @@ export class CreditService {
     }) {
         const { creditId, amount, paymentDate, paymentMethod, notes, scheduleId, userId, role, ipAddress } = params;
         const payDate = paymentDate ? new Date(paymentDate) : new Date();
-        if (payDate > new Date()) {
-            throw new Error('La fecha de pago no puede ser futura');
-        }
+        if (payDate > new Date()) throw new Error('La fecha de pago no puede ser futura');
 
         return prisma.$transaction(async (tx) => {
             const credit = await tx.credit.findUnique({
@@ -293,73 +235,105 @@ export class CreditService {
             }
 
             if (credit.status === 'paid') throw new Error('El crédito ya está pagado');
-            if (Number(credit.remainingBalance) < amount) {
-                throw new Error('El monto supera el saldo pendiente');
-            }
+            if (amount <= 0) throw new Error('El monto debe ser mayor a 0');
+
+            const currentRemaining = Number(credit.remainingBalance);
+
+            // Determinar cuánto va al crédito y cuánto es excedente (ganancias)
+            const appliedAmount = Math.min(amount, currentRemaining);
+            const excessAmount = Math.max(0, amount - currentRemaining);
 
             if (scheduleId) {
+                // ── Pago con cuota específica: soporta monto mayor o menor ──
                 const target = credit.paymentSchedule.find((s) => s.id === scheduleId);
                 if (!target) throw new Error('La cuota seleccionada no pertenece a este crédito');
-                const pending = Number(target.scheduledAmount) - Number(target.paidAmount);
-                if (pending <= 0) throw new Error('La cuota ya está pagada');
-                if (amount > pending) throw new Error('El monto supera lo pendiente en la cuota seleccionada');
-                const newPaid = Number(target.paidAmount) + amount;
-                const newStatus =
-                    newPaid >= Number(target.scheduledAmount)
-                        ? 'paid'
-                        : target.dueDate < payDate
-                            ? 'overdue'
-                            : 'partial';
+                const scheduledPending = Number(target.scheduledAmount) - Number(target.paidAmount);
+                if (scheduledPending <= 0) throw new Error('La cuota ya está pagada');
+
+                const newPaid = Number(target.paidAmount) + appliedAmount;
+                const isPaidFull = newPaid >= Number(target.scheduledAmount);
 
                 await tx.paymentSchedule.update({
                     where: { id: scheduleId },
                     data: {
-                        paidAmount: new Prisma.Decimal(newPaid),
-                        status: newStatus,
+                        paidAmount: new Prisma.Decimal(Math.min(newPaid, Number(target.scheduledAmount))),
+                        status: isPaidFull ? 'paid' : (target.dueDate < payDate ? 'overdue' : 'partial'),
                     },
                 });
+
+                // Diferencia: positivo = sobrepago del crédito, negativo = subpago
+                const difference = appliedAmount - scheduledPending;
+
+                if (Math.abs(difference) > 0.01) {
+                    const futurePending = credit.paymentSchedule.filter(
+                        (s) => s.id !== scheduleId && Number(s.scheduledAmount) - Number(s.paidAmount) > 0
+                    );
+
+                    if (futurePending.length > 0) {
+                        const totalFuturePending = futurePending.reduce(
+                            (sum, s) => sum + Number(s.scheduledAmount) - Number(s.paidAmount), 0
+                        );
+                        const newTotalFuture = totalFuturePending - difference;
+
+                        if (newTotalFuture <= 0) {
+                            // Sobrepago cubrió todo: marcar cuotas restantes como pagadas
+                            for (const s of futurePending) {
+                                await tx.paymentSchedule.update({
+                                    where: { id: s.id },
+                                    data: { paidAmount: s.scheduledAmount, status: 'paid' },
+                                });
+                            }
+                        } else {
+                            // Redistribuir balance restante entre cuotas futuras en partes iguales
+                            const perInstallment = Math.ceil(newTotalFuture / futurePending.length);
+                            for (let i = 0; i < futurePending.length; i++) {
+                                const s = futurePending[i];
+                                const newScheduled = i === futurePending.length - 1
+                                    ? Math.max(1, newTotalFuture - perInstallment * (futurePending.length - 1))
+                                    : perInstallment;
+                                const due = new Date(s.dueDate);
+                                const newStatus =
+                                    Number(s.paidAmount) >= newScheduled ? 'paid'
+                                        : due < payDate ? 'overdue'
+                                            : 'pending';
+                                await tx.paymentSchedule.update({
+                                    where: { id: s.id },
+                                    data: {
+                                        scheduledAmount: new Prisma.Decimal(newScheduled),
+                                        status: newStatus,
+                                    },
+                                });
+                            }
+                        }
+                    }
+                }
             } else {
-                const distribution = this.calculatePaymentDistribution(amount, credit.paymentSchedule, payDate);
-
-                let remainingPayment = amount;
-                const updates: Prisma.PaymentScheduleUpdateArgs[] = [];
-
+                // ── Sin cuota específica: distribución automática ──
+                const distribution = this.calculatePaymentDistribution(appliedAmount, credit.paymentSchedule, payDate);
                 for (const item of distribution.affectedSchedules) {
-                    updates.push({
+                    await tx.paymentSchedule.update({
                         where: { id: item.id },
                         data: {
                             paidAmount: new Prisma.Decimal(item.newPaidAmount),
                             status: item.newStatus,
                         },
                     });
-                    remainingPayment -= Number(item.applied);
-                }
-
-                for (const u of updates) {
-                    await tx.paymentSchedule.update(u);
                 }
             }
 
-            const newRemaining = new Prisma.Decimal(credit.remainingBalance).minus(amount);
+            const newRemaining = new Prisma.Decimal(currentRemaining).minus(appliedAmount);
+            const isCreditFullyPaid = Number(newRemaining) <= 0;
 
-            // Determinar estado del crédito
-            const anyOverdue = await tx.paymentSchedule.count({
-                where: {
-                    creditId,
-                    status: 'overdue',
-                },
-            });
+            const anyOverdue = await tx.paymentSchedule.count({ where: { creditId, status: 'overdue' } });
+            const creditStatus = isCreditFullyPaid ? 'paid' : anyOverdue > 0 ? 'overdue' : 'active';
 
-            const creditStatus =
-                Number(newRemaining) <= 0 ? 'paid' : anyOverdue > 0 ? 'overdue' : 'active';
-
-            // Registrar pago
+            // ── Registrar pago ──
             const payment = await tx.payment.create({
                 data: {
                     creditId,
                     amount: new Prisma.Decimal(amount),
                     paymentDate: payDate,
-                    amountToPrincipal: new Prisma.Decimal(amount),
+                    amountToPrincipal: new Prisma.Decimal(appliedAmount),
                     amountToInterest: new Prisma.Decimal(0),
                     remainingBalanceAfter: newRemaining,
                     paymentMethod,
@@ -368,7 +342,7 @@ export class CreditService {
                 },
             });
 
-            // Movimiento de caja
+            // ── Caja: entrada del pago recibido ──
             const newBusinessBalance = new Prisma.Decimal(credit.business.currentBalance).plus(amount);
             await tx.cashMovement.create({
                 data: {
@@ -376,39 +350,74 @@ export class CreditService {
                     type: 'payment_received',
                     amount: new Prisma.Decimal(amount),
                     balanceAfter: newBusinessBalance,
-                    description: `Pago de crédito ${credit.id}`,
+                    description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}`,
                     relatedCreditId: credit.id,
                     relatedPaymentId: payment.id,
                     createdById: userId,
                 },
             });
 
-            // Actualizar negocio saldo
             await tx.business.update({
                 where: { id: credit.businessId },
                 data: { currentBalance: newBusinessBalance },
             });
 
-            // Actualizar crédito
             await tx.credit.update({
                 where: { id: creditId },
-                data: {
-                    remainingBalance: newRemaining,
-                    status: creditStatus,
-                },
+                data: { remainingBalance: newRemaining, status: creditStatus },
             });
 
-            // Auditoría básica
+            // ── Si el crédito se paga completamente: calcular y registrar ganancia ──
+            if (isCreditFullyPaid) {
+                const allPayments = await tx.payment.findMany({
+                    where: { creditId },
+                    select: { amount: true },
+                });
+                const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+                const originalAmount = Number(credit.amount);
+                const profit = totalPaid - originalAmount;
+
+                if (profit > 0) {
+                    // Registrar la ganancia como movimiento de caja separado (informativo)
+                    await tx.cashMovement.create({
+                        data: {
+                            businessId: credit.businessId,
+                            type: 'interest_earned',
+                            amount: new Prisma.Decimal(profit),
+                            balanceAfter: newBusinessBalance, // ya incluido en el pago
+                            description: `Ganancia crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total cobrado: $${totalPaid.toLocaleString('es-CO')}`,
+                            relatedCreditId: credit.id,
+                            createdById: userId,
+                        },
+                    });
+                }
+
+                // Si pagó de más (exceso sobre el total del crédito)
+                if (excessAmount > 0) {
+                    await tx.cashMovement.create({
+                        data: {
+                            businessId: credit.businessId,
+                            type: 'interest_earned',
+                            amount: new Prisma.Decimal(excessAmount),
+                            balanceAfter: newBusinessBalance,
+                            description: `Excedente de pago crédito - ${credit.client.fullName}`,
+                            relatedCreditId: credit.id,
+                            createdById: userId,
+                        },
+                    });
+                }
+            }
+
             await tx.auditLog.create({
                 data: {
                     userId,
                     businessId: credit.businessId,
                     action: 'REGISTER_PAYMENT',
-                    description: `Pago de ${amount} para crédito ${credit.id}`,
+                    description: `Pago de $${amount.toLocaleString('es-CO')} para crédito de ${credit.client.fullName}`,
                     entityType: 'Payment',
                     entityId: payment.id,
                     oldValues: { remainingBalance: credit.remainingBalance },
-                    newValues: { remainingBalance: newRemaining, paymentAmount: amount },
+                    newValues: { remainingBalance: newRemaining, paymentAmount: amount, creditPaid: isCreditFullyPaid },
                     ipAddress,
                 },
             });
@@ -439,7 +448,7 @@ export class CreditService {
         const sorted = [...schedules].sort((a, b) => {
             const aOverdue = a.dueDate < payDate ? 1 : 0;
             const bOverdue = b.dueDate < payDate ? 1 : 0;
-            if (aOverdue !== bOverdue) return bOverdue - aOverdue; // vencidos primero
+            if (aOverdue !== bOverdue) return bOverdue - aOverdue;
             return a.dueDate.getTime() - b.dueDate.getTime();
         });
 
@@ -450,17 +459,10 @@ export class CreditService {
             const apply = Math.min(remaining, pending);
             const newPaid = Number(s.paidAmount) + apply;
             const newStatus =
-                newPaid >= Number(s.scheduledAmount)
-                    ? 'paid'
-                    : s.dueDate < payDate
-                        ? 'overdue'
+                newPaid >= Number(s.scheduledAmount) ? 'paid'
+                    : s.dueDate < payDate ? 'overdue'
                         : 'partial';
-            affectedSchedules.push({
-                id: s.id,
-                applied: apply,
-                newPaidAmount: newPaid,
-                newStatus,
-            });
+            affectedSchedules.push({ id: s.id, applied: apply, newPaidAmount: newPaid, newStatus });
             remaining -= apply;
         }
 
@@ -473,17 +475,11 @@ export class CreditService {
         userId: string,
         role: UserRole
     ) {
-        if (role !== 'super_admin') {
-            throw new Error('No tiene permisos para editar créditos');
-        }
+        if (role !== 'super_admin') throw new Error('No tiene permisos para editar créditos');
 
         const credit = await prisma.credit.findUnique({
             where: { id: creditId },
-            include: {
-                paymentSchedule: true,
-                payments: true,
-                client: true,
-            },
+            include: { paymentSchedule: true, payments: true, client: true },
         });
         if (!credit) throw new Error('Crédito no encontrado');
 
@@ -496,9 +492,7 @@ export class CreditService {
         let totalScheduled = 0;
         let totalPaid = 0;
 
-        for (const s of credit.paymentSchedule) {
-            totalPaid += Number(s.paidAmount);
-        }
+        for (const s of credit.paymentSchedule) { totalPaid += Number(s.paidAmount); }
 
         const now = new Date();
         let updates: {
@@ -511,57 +505,28 @@ export class CreditService {
         }[];
 
         if (schedules.length !== credit.paymentSchedule.length && !hasPaid) {
-            // Reemplazar todas las cuotas (solo si no hay pagos)
             updates = schedules.map((incoming, idx) => {
                 const paidAmount = 0;
                 const due = new Date(incoming.dueDate);
-                const status =
-                    incoming.scheduledAmount <= paidAmount
-                        ? 'paid'
-                        : due < now
-                            ? 'overdue'
-                            : 'pending';
+                const status = incoming.scheduledAmount <= paidAmount ? 'paid' : due < now ? 'overdue' : 'pending';
                 totalScheduled += incoming.scheduledAmount;
-                return {
-                    id: incoming.id,
-                    dueDate: due,
-                    scheduledAmount: incoming.scheduledAmount,
-                    status,
-                    paidAmount,
-                    installmentNumber: incoming.installmentNumber ?? idx + 1,
-                };
+                return { id: incoming.id, dueDate: due, scheduledAmount: incoming.scheduledAmount, status, paidAmount, installmentNumber: incoming.installmentNumber ?? idx + 1 };
             });
         } else {
             updates = schedules.map((incoming, idx) => {
                 const current = incoming.id ? map.get(incoming.id) : undefined;
                 if (!current) throw new Error('Una de las cuotas no pertenece al crédito');
                 const pendingPaid = Number(current.paidAmount);
-                if (incoming.scheduledAmount < pendingPaid) {
-                    throw new Error('El monto de una cuota no puede ser menor a lo ya pagado');
-                }
+                if (incoming.scheduledAmount < pendingPaid) throw new Error('El monto de una cuota no puede ser menor a lo ya pagado');
                 totalScheduled += incoming.scheduledAmount;
                 const due = new Date(incoming.dueDate);
-                const newStatus =
-                    incoming.scheduledAmount <= pendingPaid
-                        ? 'paid'
-                        : due < now
-                            ? 'overdue'
-                            : 'pending';
-                return {
-                    id: incoming.id,
-                    dueDate: due,
-                    scheduledAmount: incoming.scheduledAmount,
-                    status: newStatus,
-                    paidAmount: pendingPaid,
-                    installmentNumber: incoming.installmentNumber ?? current.installmentNumber ?? idx + 1,
-                };
+                const newStatus = incoming.scheduledAmount <= pendingPaid ? 'paid' : due < now ? 'overdue' : 'pending';
+                return { id: incoming.id, dueDate: due, scheduledAmount: incoming.scheduledAmount, status: newStatus, paidAmount: pendingPaid, installmentNumber: incoming.installmentNumber ?? current.installmentNumber ?? idx + 1 };
             });
         }
 
         const newRemaining = totalScheduled - totalPaid;
-        if (newRemaining < 0) {
-            throw new Error('Los pagos existentes superan el nuevo total del crédito');
-        }
+        if (newRemaining < 0) throw new Error('Los pagos existentes superan el nuevo total del crédito');
 
         const anyOverdue = updates.some((u) => u.status === 'overdue');
         const newStatus = newRemaining <= 0 ? 'paid' : anyOverdue ? 'overdue' : 'active';
@@ -596,11 +561,7 @@ export class CreditService {
 
             await tx.credit.update({
                 where: { id: creditId },
-                data: {
-                    // No modificar el monto principal; solo el saldo restante
-                    remainingBalance: new Prisma.Decimal(newRemaining),
-                    status: newStatus,
-                },
+                data: { remainingBalance: new Prisma.Decimal(newRemaining), status: newStatus },
             });
 
             await tx.auditLog.create({
@@ -610,72 +571,44 @@ export class CreditService {
                     action: 'UPDATE_CREDIT_SCHEDULE',
                     entityType: 'Credit',
                     entityId: credit.id,
-                    description: `Editó el plan de pagos del crédito ${credit.id.slice(0, 8)}... (Cliente: ${credit.client?.fullName || 'N/A'}). Modificó ${schedules.length} cuotas. Total programado: $${totalScheduled.toLocaleString('es-CO')}, Saldo restante: $${newRemaining.toLocaleString('es-CO')}`,
+                    description: `Editó el plan de pagos del crédito ${credit.id.slice(0, 8)}... (Cliente: ${credit.client?.fullName || 'N/A'}). Modificó ${schedules.length} cuotas.`,
                     oldValues: {
                         scheduleCount: credit.paymentSchedule.length,
                         totalScheduled: credit.paymentSchedule.reduce((sum, s) => sum + Number(s.scheduledAmount), 0),
                         remainingBalance: Number(credit.remainingBalance),
                         status: credit.status,
                     },
-                    newValues: {
-                        scheduleCount: schedules.length,
-                        totalScheduled,
-                        remainingBalance: newRemaining,
-                        status: newStatus,
-                    },
+                    newValues: { scheduleCount: schedules.length, totalScheduled, remainingBalance: newRemaining, status: newStatus },
                 },
             });
-
         });
 
         const refreshed = await prisma.credit.findUnique({
             where: { id: creditId },
-            include: {
-                client: true,
-                paymentSchedule: { orderBy: { dueDate: 'asc' } },
-                payments: { orderBy: { paymentDate: 'desc' } },
-            },
+            include: { client: true, paymentSchedule: { orderBy: { dueDate: 'asc' } }, payments: { orderBy: { paymentDate: 'desc' } } },
         });
-
         if (!refreshed) throw new Error('No se pudo actualizar el crédito');
         return refreshed;
     }
 
-    /**
-     * Eliminar múltiples créditos de manera masiva (Solo admin / super_admin)
-     */
-    async bulkDeleteCredits(
-        creditIds: string[],
-        requestingUserId: string,
-        userRole: UserRole,
-        ipAddress: string = ''
-    ) {
-        if (userRole === 'user') {
-            throw new Error('No tiene permisos para eliminar créditos en lote');
-        }
+    async bulkDeleteCredits(creditIds: string[], requestingUserId: string, userRole: UserRole, ipAddress: string = '') {
+        if (userRole === 'user') throw new Error('No tiene permisos para eliminar créditos en lote');
 
         const creditsToDelete = await prisma.credit.findMany({
             where: { id: { in: creditIds } },
             include: { client: { select: { fullName: true } } }
         });
 
-        if (creditsToDelete.length === 0) {
-            return { message: 'No se encontraron créditos para eliminar', deletedCount: 0 };
-        }
+        if (creditsToDelete.length === 0) return { message: 'No se encontraron créditos para eliminar', deletedCount: 0 };
 
         if (userRole === 'admin') {
             const userBusinessId = await this.getUserBusiness(requestingUserId);
             const invalidCredits = creditsToDelete.filter(c => c.businessId !== userBusinessId);
-            if (invalidCredits.length > 0) {
-                throw new Error('No tiene permisos para eliminar uno o más créditos seleccionados');
-            }
+            if (invalidCredits.length > 0) throw new Error('No tiene permisos para eliminar uno o más créditos seleccionados');
         }
 
         const validIds = creditsToDelete.map(c => c.id);
-
-        const { count } = await prisma.credit.deleteMany({
-            where: { id: { in: validIds } }
-        });
+        const { count } = await prisma.credit.deleteMany({ where: { id: { in: validIds } } });
 
         const auditLogs = creditsToDelete.map(c => ({
             userId: requestingUserId,
