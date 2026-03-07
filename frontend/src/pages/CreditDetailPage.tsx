@@ -147,7 +147,6 @@ export default function CreditDetailPage() {
 
     const parseMoney = (val: string) => Number(val.replace(/[^0-9]/g, '')) || 0;
     const estimateTermDays = (amount: number, interestRate: number, installment: number, frequency: PaymentFrequency) => {
-        const gap = gapDaysMap[frequency] || 7;
         const rateDecimal = interestRate / 100;
 
         // Calcular interés por cuota según frecuencia
@@ -174,7 +173,7 @@ export default function CreditDetailPage() {
         return Math.ceil((payments / paymentsPerMonth) * 30);
     };
 
-    const termDaysFromUnit = (value: number, unit: 'daily' | 'weekly' | 'monthly', frequency: PaymentFrequency) => {
+    const termDaysFromUnit = (value: number, unit: 'daily' | 'weekly' | 'monthly') => {
         if (Number.isNaN(value) || value <= 0) return 0;
 
         // Si la unidad es meses, multiplicar por 30 (para luego sacar 4 cuotas/mes si es semanal en el backend)
@@ -196,7 +195,7 @@ export default function CreditDetailPage() {
         const installment = parseMoney(editForm.installmentAmount);
         const gapDays = gapDaysMap[editForm.frequency] || 7;
         const termValueNum = Number(editForm.termValue);
-        let termDays = termDaysFromUnit(termValueNum, editForm.termUnit, editForm.frequency);
+        let termDays = termDaysFromUnit(termValueNum, editForm.termUnit);
         const paidCount = credit.paymentSchedule.filter((s: any) => Number(s.paidAmount) > 0).length;
 
         if (editForm.useFixedInstallment && installment > 0) {
@@ -831,7 +830,7 @@ export default function CreditDetailPage() {
                                         }));
                                         const calculatedTermDays = editForm.useFixedInstallment && parseMoney(editForm.installmentAmount) > 0
                                             ? estimateTermDays(parseMoney(editForm.amount), Number(editForm.interestRate), parseMoney(editForm.installmentAmount), editForm.frequency)
-                                            : termDaysFromUnit(Number(editForm.termValue), editForm.termUnit, editForm.frequency);
+                                            : termDaysFromUnit(Number(editForm.termValue), editForm.termUnit);
 
                                         updateMutation.mutate({
                                             schedules: payload,
