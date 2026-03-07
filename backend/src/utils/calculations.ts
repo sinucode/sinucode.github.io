@@ -68,15 +68,15 @@ export const calculateCreditPlan = (
             break;
         case 'weekly':
             daysBetweenPayments = 7;
-            numberOfPayments = Math.ceil(termDays / 7);
+            numberOfPayments = Math.ceil((termDays / 30) * 4);
             break;
         case 'bisemanal':
             daysBetweenPayments = 14;
-            numberOfPayments = Math.ceil(termDays / 14);
+            numberOfPayments = Math.ceil((termDays / 30) * 2);
             break;
         case 'quincenal':
             daysBetweenPayments = 15; // Promedio para cálculo de número de cuotas
-            numberOfPayments = Math.ceil(termDays / 15);
+            numberOfPayments = Math.ceil((termDays / 30) * 2);
             break;
         case 'monthly':
             daysBetweenPayments = 30;

@@ -171,22 +171,15 @@ export default function CreditDetailPage() {
         }
 
         const payments = Math.max(1, Math.ceil(numerator / denominator));
-        return payments * gap;
+        return Math.ceil((payments / paymentsPerMonth) * 30);
     };
 
     const termDaysFromUnit = (value: number, unit: 'daily' | 'weekly' | 'monthly', frequency: PaymentFrequency) => {
         if (Number.isNaN(value) || value <= 0) return 0;
 
-        // Si la unidad es meses, calcular basado en la frecuencia de pago
+        // Si la unidad es meses, multiplicar por 30 (para luego sacar 4 cuotas/mes si es semanal en el backend)
         if (unit === 'monthly') {
-            // 1 mes = 4 semanas, 2 quincenas, o 1 mensualidad
-            let paymentsPerMonth = 1;
-            if (frequency === 'weekly') paymentsPerMonth = 4;
-            else if (frequency === 'bisemanal' || frequency === 'quincenal') paymentsPerMonth = 2;
-            else if (frequency === 'daily') paymentsPerMonth = 30;
-
-            const totalPayments = value * paymentsPerMonth;
-            return totalPayments * gapDaysMap[frequency];
+            return value * 30;
         }
 
         // Para otras unidades, conversión directa
@@ -214,7 +207,12 @@ export default function CreditDetailPage() {
         }
 
         // Calcular el número de cuotas objetivo
-        let targetCount = Math.max(paidCount, Math.max(1, Math.ceil(termDays / gapDays)));
+        let countPaymentsPerMonth = 1;
+        if (editForm.frequency === 'weekly') countPaymentsPerMonth = 4;
+        else if (editForm.frequency === 'bisemanal' || editForm.frequency === 'quincenal') countPaymentsPerMonth = 2;
+        else if (editForm.frequency === 'daily') countPaymentsPerMonth = 30;
+
+        let targetCount = Math.max(paidCount, Math.max(1, Math.ceil((termDays / 30) * countPaymentsPerMonth)));
         if (editForm.useFixedInstallment && installment > 0) {
             // Calcular interés por cuota con nueva fórmula
             const rateDecimal = interestRate / 100;
