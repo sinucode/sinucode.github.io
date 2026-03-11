@@ -37,7 +37,6 @@ model User {
   paymentsCreated   Payment[]       @relation("PaymentCreator")
   cashMovements     CashMovement[]  @relation("CashMovementCreator")
   auditLogs         AuditLog[]
-
   @@map("users")
 }
 
