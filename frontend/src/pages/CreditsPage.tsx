@@ -26,6 +26,7 @@ export default function CreditsPage() {
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [filter, setFilter] = useState<'all' | 'dueToday' | 'overdue'>(initialFilter);
+    const [searchQuery, setSearchQuery] = useState('');
     const { selectedBusinessId, setSelectedBusiness } = useBusinessStore();
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
@@ -51,6 +52,19 @@ export default function CreditsPage() {
         refetch();
         navigate(`/credits/${id}`);
     };
+
+    const filteredCredits = credits?.filter((credit) => {
+        if (!searchQuery) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+            credit.client?.fullName.toLowerCase().includes(query) ||
+            credit.client?.phone.includes(query) ||
+            credit.client?.cedula?.includes(query) ||
+            credit.amount.toString().includes(query) ||
+            credit.status.toLowerCase().includes(query) ||
+            frequencyLabels[credit.paymentFrequency as PaymentFrequency].toLowerCase().includes(query)
+        );
+    });
 
     return (
         <div className="space-y-4">
@@ -96,6 +110,15 @@ export default function CreditsPage() {
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="p-4 border-b border-gray-200">
+                    <input
+                        type="text"
+                        placeholder="Buscar por cliente, documento, monto, estado..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                    />
+                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-white text-xs uppercase text-primary-600">
@@ -106,24 +129,26 @@ export default function CreditsPage() {
                                 <th className="px-4 py-3">Saldo</th>
                                 <th className="px-4 py-3">Estado</th>
                                 <th className="px-4 py-3">Próximo venc.</th>
+                                <th className="px-4 py-3">Finalización</th>
+                                <th className="px-4 py-3">Rentabilidad</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {isLoading && (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-6 text-center text-primary-600">
+                                    <td colSpan={8} className="px-4 py-6 text-center text-primary-600">
                                         Cargando...
                                     </td>
                                 </tr>
                             )}
                             {!isLoading && credits?.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-6 text-center text-primary-600">
+                                    <td colSpan={8} className="px-4 py-6 text-center text-primary-600">
                                         No hay créditos registrados
                                     </td>
                                 </tr>
                             )}
-                            {credits?.map((credit) => {
+                            {filteredCredits?.map((credit) => {
                                 const nextDue = credit.paymentSchedule
                                     ? credit.paymentSchedule.find((p: any) => p.status !== 'paid')
                                     : null;
@@ -140,6 +165,11 @@ export default function CreditsPage() {
                                     displayStatus = 'En mora';
                                     statusColor = 'bg-red-100 text-red-800';
                                 }
+
+                                const isCompleted = credit.status === 'paid';
+                                const rentabilidad = isCompleted && credit.earnedInterest 
+                                    ? Number(credit.earnedInterest) 
+                                    : 0;
 
                                 return (
                                     <tr
@@ -165,6 +195,12 @@ export default function CreditsPage() {
                                         </td>
                                         <td className="px-4 py-3 text-primary-900">
                                             {nextDue ? formatDate((nextDue as any).dueDate) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-primary-900">
+                                            {isCompleted && credit.completionDate ? formatDate(credit.completionDate) : '-'}
+                                        </td>
+                                        <td className="px-4 py-3 font-semibold text-emerald-700">
+                                            {isCompleted ? `$${rentabilidad.toLocaleString('es-CO', { maximumFractionDigits: 0 })}` : '$0'}
                                         </td>
                                     </tr>
                                 );

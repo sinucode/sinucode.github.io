@@ -379,12 +379,8 @@ export class CreditService {
                 data: { currentBalance: newBusinessBalance },
             });
 
-            await tx.credit.update({
-                where: { id: creditId },
-                data: { remainingBalance: newRemaining, status: creditStatus },
-            });
-
             // ── Si el crédito se paga completamente: calcular y registrar ganancia ──
+            let profit = 0;
             if (isCreditFullyPaid) {
                 const allPayments = await tx.payment.findMany({
                     where: { creditId },
@@ -392,7 +388,7 @@ export class CreditService {
                 });
                 const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
                 const originalAmount = Number(credit.amount);
-                const profit = totalPaid - originalAmount;
+                profit = totalPaid - originalAmount;
 
                 if (profit > 0) {
                     // Registrar la ganancia como movimiento de caja separado (informativo)
@@ -426,6 +422,18 @@ export class CreditService {
                     });
                 }
             }
+
+            await tx.credit.update({
+                where: { id: creditId },
+                data: { 
+                    remainingBalance: newRemaining, 
+                    status: creditStatus,
+                    ...(isCreditFullyPaid ? { 
+                        completionDate: payDate,
+                        earnedInterest: new Prisma.Decimal(profit > 0 ? profit : 0)
+                    } : {})
+                },
+            });
 
             await tx.auditLog.create({
                 data: {
@@ -779,7 +787,9 @@ export class CreditService {
                 where: { id: creditId },
                 data: {
                     remainingBalance: newRemaining,
-                    status: 'active'
+                    status: 'active',
+                    completionDate: null,
+                    earnedInterest: null
                 }
             });
 

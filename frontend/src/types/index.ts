@@ -61,6 +61,8 @@ export interface Credit {
     paymentFrequency: PaymentFrequency;
     startDate: string;
     endDate: string;
+    completionDate?: string | null;
+    earnedInterest?: number | string | null;
     termDays: number;
     remainingBalance: number;
     status: CreditStatus;

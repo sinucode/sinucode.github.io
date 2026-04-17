@@ -354,7 +354,7 @@ export default function CreditDetailPage() {
 
                 {credit.status === 'paid' && (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 shadow-sm flex flex-col justify-center">
-                        <p className="text-sm font-medium text-emerald-700">Ganancia del crédito</p>
+                        <p className="text-sm font-medium text-emerald-700">Rentabilidad</p>
                         <p className="text-2xl font-bold text-emerald-600">{formatMoney(actualProfit)}</p>
                     </div>
                 )}
@@ -367,6 +367,9 @@ export default function CreditDetailPage() {
                     <span><strong>Frecuencia:</strong> {frequencyLabels[credit.paymentFrequency as PaymentFrequency] || credit.paymentFrequency}</span>
                     <span><strong>Próximo vencimiento:</strong> {nextDue ? formatDate(nextDue.dueDate) : '-'}</span>
                     <span><strong>Estado:</strong> {credit.status}</span>
+                    {(credit.status === 'paid' && credit.completionDate) && (
+                        <span><strong>Finalización:</strong> {formatDate(credit.completionDate)}</span>
+                    )}
                 </div>
 
                 <div>

@@ -124,6 +124,8 @@ model Credit {
   paymentFrequency   PaymentFrequency @map("payment_frequency")
   startDate          DateTime         @map("start_date")
   endDate            DateTime         @map("end_date")
+  completionDate     DateTime?        @map("completion_date")
+  earnedInterest     Decimal?         @map("earned_interest") @db.Decimal(15, 2)
   termDays           Int              @map("term_days")
   remainingBalance   Decimal          @map("remaining_balance") @db.Decimal(15, 2)
   status             CreditStatus     @default(active)
