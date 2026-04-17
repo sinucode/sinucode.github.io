@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getCredits } from '../api/credits.api';
 import CreditForm from '../components/credits/CreditForm';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
@@ -27,6 +27,8 @@ export default function CreditsPage() {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [filter, setFilter] = useState<'all' | 'dueToday' | 'overdue'>(initialFilter);
     const [searchQuery, setSearchQuery] = useState('');
+    const [filterAttribute, setFilterAttribute] = useState('clientFullName');
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'createdAt', direction: 'desc' });
     const { selectedBusinessId, setSelectedBusiness } = useBusinessStore();
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
@@ -56,15 +58,51 @@ export default function CreditsPage() {
     const filteredCredits = credits?.filter((credit) => {
         if (!searchQuery) return true;
         const query = searchQuery.toLowerCase();
-        return (
-            credit.client?.fullName.toLowerCase().includes(query) ||
-            credit.client?.phone.includes(query) ||
-            credit.client?.cedula?.includes(query) ||
-            credit.amount.toString().includes(query) ||
-            credit.status.toLowerCase().includes(query) ||
-            frequencyLabels[credit.paymentFrequency as PaymentFrequency].toLowerCase().includes(query)
-        );
+        switch (filterAttribute) {
+            case 'clientFullName':
+                return credit.client?.fullName.toLowerCase().includes(query) || false;
+            case 'clientCedula':
+                return credit.client?.cedula?.toLowerCase().includes(query) || false;
+            case 'clientPhone':
+                return credit.client?.phone?.includes(query) || false;
+            case 'amount':
+                return credit.amount.toString().includes(query);
+            case 'status':
+                return credit.status.toLowerCase().includes(query);
+            default:
+                return true;
+        }
+    }).sort((a, b) => {
+        let aValue: any = a[sortConfig.key as keyof Credit];
+        let bValue: any = b[sortConfig.key as keyof Credit];
+
+        if (sortConfig.key === 'clientFullName') {
+            aValue = a.client?.fullName || '';
+            bValue = b.client?.fullName || '';
+        } else if (sortConfig.key === 'nextDueDate') {
+            const nextA = a.paymentSchedule?.find((p: any) => p.status !== 'paid');
+            const nextB = b.paymentSchedule?.find((p: any) => p.status !== 'paid');
+            aValue = nextA ? new Date((nextA as any).dueDate).getTime() : 0;
+            bValue = nextB ? new Date((nextB as any).dueDate).getTime() : 0;
+        }
+
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
     });
+
+    const requestSort = (key: string) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const SortIcon = ({ columnKey }: { columnKey: string }) => {
+        if (sortConfig.key !== columnKey) return null;
+        return sortConfig.direction === 'asc' ? <ChevronUp size={16} className="inline ml-1" /> : <ChevronDown size={16} className="inline ml-1" />;
+    };
 
     return (
         <div className="space-y-4">
@@ -110,27 +148,57 @@ export default function CreditsPage() {
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div className="p-4 border-b border-gray-200">
+                <div className="p-4 border-b border-gray-200 flex flex-col md:flex-row gap-4 items-center bg-gray-50">
+                    <select
+                        value={filterAttribute}
+                        onChange={(e) => {
+                            setFilterAttribute(e.target.value);
+                            setSearchQuery('');
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:outline-none min-w-[200px]"
+                    >
+                        <option value="clientFullName">Nombre del Cliente</option>
+                        <option value="clientCedula">Cédula del Cliente</option>
+                        <option value="clientPhone">Teléfono del Cliente</option>
+                        <option value="amount">Monto del Préstamo</option>
+                        <option value="status">Estado del Crédito</option>
+                    </select>
                     <input
                         type="text"
-                        placeholder="Buscar por cliente, documento, monto, estado..."
+                        placeholder="Escribe aquí para filtrar resultados..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                        className="flex-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:outline-none"
                     />
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-white text-xs uppercase text-primary-600">
                             <tr>
-                                <th className="px-4 py-3">Cliente</th>
-                                <th className="px-4 py-3">Monto</th>
-                                <th className="px-4 py-3">Frecuencia</th>
-                                <th className="px-4 py-3">Saldo</th>
-                                <th className="px-4 py-3">Estado</th>
-                                <th className="px-4 py-3">Próximo venc.</th>
-                                <th className="px-4 py-3">Finalización</th>
-                                <th className="px-4 py-3">Rentabilidad</th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('clientFullName')}>
+                                    Cliente <SortIcon columnKey="clientFullName" />
+                                </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('amount')}>
+                                    Monto <SortIcon columnKey="amount" />
+                                </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('paymentFrequency')}>
+                                    Frecuencia <SortIcon columnKey="paymentFrequency" />
+                                </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('remainingBalance')}>
+                                    Saldo <SortIcon columnKey="remainingBalance" />
+                                </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('status')}>
+                                    Estado <SortIcon columnKey="status" />
+                                </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('nextDueDate')}>
+                                    Próximo venc. <SortIcon columnKey="nextDueDate" />
+                                </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('completionDate')}>
+                                    Finalización <SortIcon columnKey="completionDate" />
+                                </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('earnedInterest')}>
+                                    Rentabilidad <SortIcon columnKey="earnedInterest" />
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
