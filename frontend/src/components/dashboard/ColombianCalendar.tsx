@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, AlertCircle, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { todayBogota } from '../../utils/dates';
 
 interface PaymentScheduleItem {
     id: string;
@@ -101,9 +102,12 @@ const toKey = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}
 
 export default function ColombianCalendar({ credits = [] }: ColombianCalendarProps) {
     const navigate = useNavigate();
-    const today = new Date();
-    const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-    const [selectedDay, setSelectedDay] = useState<string | null>(today.toISOString().slice(0, 10));
+    const todayKeyStr = todayBogota();
+    const [viewDate, setViewDate] = useState(() => {
+        const d = new Date(`${todayKeyStr}T12:00:00-05:00`);
+        return new Date(d.getFullYear(), d.getMonth(), 1);
+    });
+    const [selectedDay, setSelectedDay] = useState<string | null>(todayKeyStr);
 
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
@@ -130,7 +134,7 @@ export default function ColombianCalendar({ credits = [] }: ColombianCalendarPro
                     installmentNumber: s.installmentNumber,
                     amount: Number(s.scheduledAmount) - Number(s.paidAmount || 0),
                     scheduleId: s.id,
-                    isOverdue: new Date(s.dueDate) < today,
+                    isOverdue: s.dueDate.slice(0, 10) < todayKeyStr,
                 });
             });
         });
@@ -145,7 +149,7 @@ export default function ColombianCalendar({ credits = [] }: ColombianCalendarPro
     const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
 
     const selectedPayments = selectedDay ? dueMap[selectedDay] || [] : [];
-    const todayKey = today.toISOString().slice(0, 10);
+    const todayKey = todayKeyStr;
 
     const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
