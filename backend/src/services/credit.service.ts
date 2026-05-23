@@ -344,24 +344,24 @@ export class CreditService {
             // Esto evita que queden cuotas en estado pending/overdue después de que el crédito
             // ya se pagó (común cuando hubo sobrepagos previos que cubrieron cuotas futuras).
             if (isCreditFullyPaid) {
-                await tx.paymentSchedule.updateMany({
+                // Traer cuotas que están pendientes/parciales/overdue para actualizar una por una
+                const pendingSchedules = await tx.paymentSchedule.findMany({
                     where: {
                         creditId,
                         status: { in: ['pending', 'partial', 'overdue'] }
                     },
-                    data: {
-                        status: 'paid'
-                    }
+                    select: { id: true, scheduledAmount: true }
                 });
-                // Asegurar que paidAmount = scheduledAmount en las cuotas que quedaron como paid
-                // (no se puede hacer en updateMany con referencia a otra columna, se hace con raw)
-                await tx.$executeRaw`
-                    UPDATE payment_schedule
-                    SET paid_amount = scheduled_amount
-                    WHERE credit_id = ${creditId}::uuid
-                      AND paid_amount < scheduled_amount
-                      AND status = 'paid'
-                `;
+
+                for (const s of pendingSchedules) {
+                    await tx.paymentSchedule.update({
+                        where: { id: s.id },
+                        data: {
+                            status: 'paid',
+                            paidAmount: s.scheduledAmount
+                        }
+                    });
+                }
             }
 
             const anyOverdue = await tx.paymentSchedule.count({ where: { creditId, status: 'overdue' } });
