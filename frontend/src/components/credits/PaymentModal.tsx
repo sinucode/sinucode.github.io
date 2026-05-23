@@ -101,33 +101,43 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     const overpayment = totalSelected > scheduledTotal ? totalSelected - scheduledTotal : 0;
     const underpayment = totalSelected < scheduledTotal ? scheduledTotal - totalSelected : 0;
 
-    const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
-        e?.preventDefault();
-        setError('');
+    // Modal interno para elegir qué hacer con sobrepagos por cuota
+    const [excessChoiceState, setExcessChoiceState] = useState<{
+        open: boolean;
+        cuotasConExceso: { id: string; installmentNumber: number; pending: number; pago: number; exceso: number }[];
+    }>({ open: false, cuotasConExceso: [] });
 
-        if (selectedIds.size === 0) return setError('Selecciona al menos una cuota a pagar');
-        if (totalSelected <= 0) return setError('El monto total debe ser mayor a 0');
-
-        // Handle overpayment: usar 0.01% del saldo como tolerancia de punto flotante (mínimo $1)
-        const tolerance = Math.max(1, remainingBalance * 0.0001);
-        if (totalSelected > remainingBalance + tolerance) {
-            const excess = totalSelected - remainingBalance;
-            const confirmExcess = window.confirm(
-                `El pago supera el valor de la deuda por ${formatMoney(excess)}. \n\n¿Deseas aceptar y registrar este excedente como ganancia por interés para el negocio?`
-            );
-            if (!confirmExcess) {
-                return;
+    // Detectar cuotas con sobrepago individual (monto pagado > monto pendiente de esa cuota)
+    const detectarExcesos = () => {
+        const conExceso: { id: string; installmentNumber: number; pending: number; pago: number; exceso: number }[] = [];
+        const schedulesToPay = pendingSchedules.filter((s) => selectedIds.has(s.id));
+        for (const s of schedulesToPay) {
+            const pago = getAmount(s);
+            const pending = Number(s.scheduledAmount) - Number(s.paidAmount || 0);
+            if (pago > pending + 0.01) {
+                conExceso.push({
+                    id: s.id,
+                    installmentNumber: s.installmentNumber,
+                    pending,
+                    pago,
+                    exceso: pago - pending,
+                });
             }
         }
+        return conExceso;
+    };
 
+    const ejecutarPagos = async (excessAction?: 'next_cuota' | 'donate') => {
+        setError('');
         const schedulesToPay = pendingSchedules.filter((s) => selectedIds.has(s.id));
         setIsSubmitting(true);
-
         const successful: string[] = [];
         try {
             for (const s of schedulesToPay) {
                 const amount = getAmount(s);
                 if (amount <= 0) continue;
+                const pending = Number(s.scheduledAmount) - Number(s.paidAmount || 0);
+                const tieneExceso = amount > pending + 0.01;
                 await registerPayment({
                     creditId,
                     amount,
@@ -135,6 +145,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                     paymentMethod: formData.paymentMethod || undefined,
                     notes: formData.notes || undefined,
                     scheduleId: s.id,
+                    excessAction: tieneExceso ? excessAction : undefined,
                 });
                 successful.push(s.id);
             }
@@ -142,7 +153,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             queryClient.invalidateQueries({ queryKey: ['credits'] });
             onSuccess();
         } catch (err: any) {
-            // Si algún pago ya se registró antes del error, refrescar datos para reflejar estado real
             if (successful.length > 0) {
                 queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
                 queryClient.invalidateQueries({ queryKey: ['credits'] });
@@ -159,6 +169,34 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+        e?.preventDefault();
+        setError('');
+
+        if (selectedIds.size === 0) return setError('Selecciona al menos una cuota a pagar');
+        if (totalSelected <= 0) return setError('El monto total debe ser mayor a 0');
+
+        // Validar que no se supere la deuda total
+        const tolerance = Math.max(1, remainingBalance * 0.0001);
+        if (totalSelected > remainingBalance + tolerance) {
+            setError(
+                `El pago total ($${Math.ceil(totalSelected).toLocaleString('es-CO')}) supera la deuda pendiente ($${Math.ceil(remainingBalance).toLocaleString('es-CO')}). ` +
+                `Si el cliente desea donar el exceso, ajusta los montos por cuota y se preguntará cómo manejar el excedente.`
+            );
+            return;
+        }
+
+        // Detectar sobrepagos por cuota individual
+        const excesos = detectarExcesos();
+        if (excesos.length > 0) {
+            setExcessChoiceState({ open: true, cuotasConExceso: excesos });
+            return;
+        }
+
+        // No hay excesos: ejecutar pago normal
+        await ejecutarPagos();
     };
 
     return createPortal(
@@ -381,6 +419,79 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                     </button>
                 </div>
             </div>
+
+            {/* ── MODAL: elección de qué hacer con el excedente ── */}
+            {excessChoiceState.open && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5">
+                        <div className="flex items-start gap-3 mb-4">
+                            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={22} />
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Pago supera la cuota</h3>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    El cliente está pagando más de lo programado en {excessChoiceState.cuotasConExceso.length === 1 ? 'una cuota' : `${excessChoiceState.cuotasConExceso.length} cuotas`}.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-xl p-3 mb-4 space-y-1 max-h-40 overflow-y-auto">
+                            {excessChoiceState.cuotasConExceso.map((c) => (
+                                <div key={c.id} className="flex justify-between text-xs text-gray-700">
+                                    <span>Cuota #{c.installmentNumber}</span>
+                                    <span className="font-semibold">
+                                        Paga {formatMoney(c.pago)} (cuota: {formatMoney(c.pending)}, excedente: <span className="text-amber-700">{formatMoney(c.exceso)}</span>)
+                                    </span>
+                                </div>
+                            ))}
+                            <div className="border-t border-gray-300 pt-1 mt-1 flex justify-between text-sm font-bold text-gray-900">
+                                <span>Excedente total</span>
+                                <span className="text-amber-700">
+                                    {formatMoney(excessChoiceState.cuotasConExceso.reduce((s, c) => s + c.exceso, 0))}
+                                </span>
+                            </div>
+                        </div>
+
+                        <p className="text-sm font-semibold text-gray-800 mb-3">¿Qué deseas hacer con el excedente?</p>
+
+                        <div className="space-y-2">
+                            <button
+                                type="button"
+                                disabled={isSubmitting}
+                                onClick={async () => {
+                                    setExcessChoiceState({ open: false, cuotasConExceso: [] });
+                                    await ejecutarPagos('next_cuota');
+                                }}
+                                className="w-full text-left p-3 border border-primary-200 bg-primary-50 hover:bg-primary-100 rounded-xl transition disabled:opacity-50"
+                            >
+                                <div className="font-semibold text-primary-900 text-sm">Abonar a la siguiente cuota</div>
+                                <div className="text-xs text-primary-700 mt-0.5">El excedente queda como abono parcial de la próxima cuota pendiente. Reduce el saldo total.</div>
+                            </button>
+
+                            <button
+                                type="button"
+                                disabled={isSubmitting}
+                                onClick={async () => {
+                                    setExcessChoiceState({ open: false, cuotasConExceso: [] });
+                                    await ejecutarPagos('donate');
+                                }}
+                                className="w-full text-left p-3 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition disabled:opacity-50"
+                            >
+                                <div className="font-semibold text-emerald-900 text-sm">Donar al negocio (ganancia)</div>
+                                <div className="text-xs text-emerald-700 mt-0.5">El excedente se registra como ganancia del negocio. NO reduce el saldo del crédito.</div>
+                            </button>
+
+                            <button
+                                type="button"
+                                disabled={isSubmitting}
+                                onClick={() => setExcessChoiceState({ open: false, cuotasConExceso: [] })}
+                                className="w-full p-3 text-gray-600 hover:bg-gray-100 rounded-xl transition text-sm"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
         , document.body);
 };

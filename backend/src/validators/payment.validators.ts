@@ -23,6 +23,10 @@ export const registerPaymentValidators = [
         .optional({ nullable: true, checkFalsy: true })
         .isLength({ max: 300 })
         .withMessage('Las notas no pueden superar 300 caracteres'),
+    body('excessAction')
+        .optional({ nullable: true, checkFalsy: true })
+        .isIn(['next_cuota', 'donate'])
+        .withMessage('excessAction debe ser "next_cuota" o "donate"'),
 ];
 
 export const listPaymentsValidators = [

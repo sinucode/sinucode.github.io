@@ -8,6 +8,7 @@ export interface RegisterPaymentPayload {
     paymentMethod?: string;
     notes?: string;
     scheduleId?: string;
+    excessAction?: 'next_cuota' | 'donate';
 }
 
 export const registerPayment = async (payload: RegisterPaymentPayload): Promise<Payment> => {

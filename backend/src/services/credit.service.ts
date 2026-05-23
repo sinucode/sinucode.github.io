@@ -224,11 +224,12 @@ export class CreditService {
         paymentMethod?: string;
         notes?: string;
         scheduleId?: string;
+        excessAction?: 'next_cuota' | 'donate';
         userId: string;
         role: UserRole;
         ipAddress?: string;
     }) {
-        const { creditId, amount, paymentDate, paymentMethod, notes, scheduleId, userId, role, ipAddress } = params;
+        const { creditId, amount, paymentDate, paymentMethod, notes, scheduleId, excessAction, userId, role, ipAddress } = params;
         const payDate = paymentDate ? new Date(paymentDate) : new Date();
         if (payDate > new Date()) throw new Error('La fecha de pago no puede ser futura');
 
@@ -255,77 +256,83 @@ export class CreditService {
 
             const currentRemaining = Number(credit.remainingBalance);
 
-            // Determinar cuánto va al crédito (lo que exceda al saldo se contabilizará como ganancia
-            // dentro del cálculo de profit al cerrar el crédito).
-            const appliedAmount = Math.min(amount, currentRemaining);
+            // appliedToCredit: monto que efectivamente reduce remainingBalance
+            // donationAmount: excedente que el usuario decidió donar (no reduce saldo)
+            let appliedToCredit = Math.min(amount, currentRemaining);
+            let donationAmount = 0;
 
             if (scheduleId) {
-                // ── Pago con cuota específica: soporta monto mayor o menor ──
+                // ── Pago con cuota específica ──
                 const target = credit.paymentSchedule.find((s) => s.id === scheduleId);
                 if (!target) throw new Error('La cuota seleccionada no pertenece a este crédito');
                 const scheduledPending = Number(target.scheduledAmount) - Number(target.paidAmount);
                 if (scheduledPending <= 0) throw new Error('La cuota ya está pagada');
 
-                const newPaid = Number(target.paidAmount) + appliedAmount;
-                const isPaidFull = newPaid >= Number(target.scheduledAmount);
-
-                await tx.paymentSchedule.update({
-                    where: { id: scheduleId },
-                    data: {
-                        paidAmount: new Prisma.Decimal(Math.min(newPaid, Number(target.scheduledAmount))),
-                        status: isPaidFull ? 'paid' : (target.dueDate < payDate ? 'overdue' : 'partial'),
-                    },
-                });
-
-                // Diferencia: positivo = sobrepago del crédito, negativo = subpago
-                const difference = appliedAmount - scheduledPending;
-
-                if (Math.abs(difference) > 0.01) {
-                    const futurePending = credit.paymentSchedule.filter(
-                        (s) => s.id !== scheduleId && Number(s.scheduledAmount) - Number(s.paidAmount) > 0
-                    );
-
-                    if (futurePending.length > 0) {
-                        const totalFuturePending = futurePending.reduce(
-                            (sum, s) => sum + Number(s.scheduledAmount) - Number(s.paidAmount), 0
+                if (amount > scheduledPending + 0.01) {
+                    // ── Hay sobrepago: requiere acción explícita ──
+                    if (!excessAction) {
+                        throw new Error(
+                            `El pago de $${amount} supera el monto pendiente de la cuota ($${scheduledPending}). ` +
+                            `Debe especificar excessAction: "next_cuota" (abonar a la siguiente cuota) o "donate" (donar al negocio).`
                         );
-                        const newTotalFuture = totalFuturePending - difference;
-
-                        if (newTotalFuture <= 0) {
-                            // Sobrepago cubrió todo: marcar cuotas restantes como pagadas
-                            for (const s of futurePending) {
-                                await tx.paymentSchedule.update({
-                                    where: { id: s.id },
-                                    data: { paidAmount: s.scheduledAmount, status: 'paid' },
-                                });
-                            }
-                        } else {
-                            // Redistribuir balance restante entre cuotas futuras en partes iguales
-                            const perInstallment = Math.ceil(newTotalFuture / futurePending.length);
-                            for (let i = 0; i < futurePending.length; i++) {
-                                const s = futurePending[i];
-                                const newScheduled = i === futurePending.length - 1
-                                    ? Math.max(1, newTotalFuture - perInstallment * (futurePending.length - 1))
-                                    : perInstallment;
-                                const due = new Date(s.dueDate);
-                                const newStatus =
-                                    Number(s.paidAmount) >= newScheduled ? 'paid'
-                                        : due < payDate ? 'overdue'
-                                            : 'pending';
-                                await tx.paymentSchedule.update({
-                                    where: { id: s.id },
-                                    data: {
-                                        scheduledAmount: new Prisma.Decimal(newScheduled),
-                                        status: newStatus,
-                                    },
-                                });
-                            }
-                        }
                     }
+
+                    const excess = amount - scheduledPending;
+
+                    // Marcar la cuota actual como pagada completa
+                    await tx.paymentSchedule.update({
+                        where: { id: scheduleId },
+                        data: {
+                            paidAmount: target.scheduledAmount,
+                            status: 'paid',
+                        },
+                    });
+
+                    if (excessAction === 'donate') {
+                        // El excedente NO reduce saldo; queda como donación/ganancia para el negocio
+                        appliedToCredit = scheduledPending;
+                        donationAmount = excess;
+                    } else if (excessAction === 'next_cuota') {
+                        // Aplicar el excedente a la siguiente cuota pendiente
+                        const sortedByDate = [...credit.paymentSchedule].sort(
+                            (a, b) => a.dueDate.getTime() - b.dueDate.getTime()
+                        );
+                        const targetIdx = sortedByDate.findIndex(s => s.id === scheduleId);
+                        const nextPending = sortedByDate
+                            .slice(targetIdx + 1)
+                            .find(s => Number(s.scheduledAmount) > Number(s.paidAmount));
+
+                        if (nextPending) {
+                            const nextScheduled = Number(nextPending.scheduledAmount);
+                            const newPaidNext = Math.min(Number(nextPending.paidAmount) + excess, nextScheduled);
+                            const isNextFull = newPaidNext >= nextScheduled;
+                            await tx.paymentSchedule.update({
+                                where: { id: nextPending.id },
+                                data: {
+                                    paidAmount: new Prisma.Decimal(newPaidNext),
+                                    status: isNextFull
+                                        ? 'paid'
+                                        : (nextPending.dueDate < payDate ? 'overdue' : 'partial'),
+                                },
+                            });
+                        }
+                        // appliedToCredit ya es min(amount, currentRemaining) — reduce saldo completo
+                    }
+                } else {
+                    // ── No hay sobrepago: aplicación normal a la cuota ──
+                    const newPaid = Number(target.paidAmount) + appliedToCredit;
+                    const isPaidFull = newPaid >= Number(target.scheduledAmount);
+                    await tx.paymentSchedule.update({
+                        where: { id: scheduleId },
+                        data: {
+                            paidAmount: new Prisma.Decimal(Math.min(newPaid, Number(target.scheduledAmount))),
+                            status: isPaidFull ? 'paid' : (target.dueDate < payDate ? 'overdue' : 'partial'),
+                        },
+                    });
                 }
             } else {
                 // ── Sin cuota específica: distribución automática ──
-                const distribution = this.calculatePaymentDistribution(appliedAmount, credit.paymentSchedule, payDate);
+                const distribution = this.calculatePaymentDistribution(appliedToCredit, credit.paymentSchedule, payDate);
                 for (const item of distribution.affectedSchedules) {
                     await tx.paymentSchedule.update({
                         where: { id: item.id },
@@ -337,7 +344,7 @@ export class CreditService {
                 }
             }
 
-            const newRemaining = new Prisma.Decimal(currentRemaining).minus(appliedAmount);
+            const newRemaining = new Prisma.Decimal(currentRemaining).minus(appliedToCredit);
             const isCreditFullyPaid = Number(newRemaining) <= 0;
 
             // Si el crédito se completó, marcar TODAS las cuotas restantes como pagadas.
@@ -368,16 +375,21 @@ export class CreditService {
             const creditStatus = isCreditFullyPaid ? 'paid' : anyOverdue > 0 ? 'overdue' : 'active';
 
             // ── Registrar pago ──
+            // amountToPrincipal = lo que reduce el saldo del crédito
+            // amountToInterest = lo donado al negocio (ganancia explícita por sobrepago)
+            const noteWithDonation = donationAmount > 0
+                ? `[DONACIÓN: $${donationAmount.toLocaleString('es-CO')}]${notes ? ' ' + notes : ''}`
+                : notes;
             const payment = await tx.payment.create({
                 data: {
                     creditId,
                     amount: new Prisma.Decimal(amount),
                     paymentDate: payDate,
-                    amountToPrincipal: new Prisma.Decimal(appliedAmount),
-                    amountToInterest: new Prisma.Decimal(0),
+                    amountToPrincipal: new Prisma.Decimal(appliedToCredit),
+                    amountToInterest: new Prisma.Decimal(donationAmount),
                     remainingBalanceAfter: newRemaining,
                     paymentMethod,
-                    notes,
+                    notes: noteWithDonation,
                     createdById: userId,
                 },
             });
