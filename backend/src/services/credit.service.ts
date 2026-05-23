@@ -255,9 +255,9 @@ export class CreditService {
 
             const currentRemaining = Number(credit.remainingBalance);
 
-            // Determinar cuánto va al crédito y cuánto es excedente (ganancias)
+            // Determinar cuánto va al crédito (lo que exceda al saldo se contabilizará como ganancia
+            // dentro del cálculo de profit al cerrar el crédito).
             const appliedAmount = Math.min(amount, currentRemaining);
-            const excessAmount = Math.max(0, amount - currentRemaining);
 
             if (scheduleId) {
                 // ── Pago con cuota específica: soporta monto mayor o menor ──
@@ -391,7 +391,9 @@ export class CreditService {
                 profit = totalPaid - originalAmount;
 
                 if (profit > 0) {
-                    // Registrar la ganancia como movimiento de caja separado (informativo)
+                    // Registrar la ganancia como movimiento de caja separado (informativo).
+                    // profit = totalPaid - originalAmount ya incluye cualquier excedente, por lo que
+                    // NO se registra un movimiento adicional por excessAmount para evitar doble conteo.
                     await tx.cashMovement.create({
                         data: {
                             businessId: credit.businessId,
@@ -399,22 +401,6 @@ export class CreditService {
                             amount: new Prisma.Decimal(profit),
                             balanceAfter: newBusinessBalance, // ya incluido en el pago
                             description: `Ganancia crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total cobrado: $${totalPaid.toLocaleString('es-CO')}`,
-                            relatedCreditId: credit.id,
-                            paymentMethod: 'efectivo',
-                            createdById: userId,
-                        },
-                    });
-                }
-
-                // Si pagó de más (exceso sobre el total del crédito)
-                if (excessAmount > 0) {
-                    await tx.cashMovement.create({
-                        data: {
-                            businessId: credit.businessId,
-                            type: 'interest_earned',
-                            amount: new Prisma.Decimal(excessAmount),
-                            balanceAfter: newBusinessBalance,
-                            description: `Excedente de pago crédito - ${credit.client.fullName}`,
                             relatedCreditId: credit.id,
                             paymentMethod: 'efectivo',
                             createdById: userId,
@@ -690,11 +676,22 @@ export class CreditService {
             where: { id: creditId },
             include: {
                 business: { select: { id: true, currentBalance: true } },
-                client: { select: { fullName: true } }
+                client: { select: { fullName: true } },
+                payments: { select: { id: true } }
             }
         });
 
         if (!credit) throw new Error('Crédito no encontrado');
+
+        // Validar: si el crédito tiene pagos registrados, no permitir eliminación directa.
+        // El admin debe revertir los pagos primero (usando revertInstallment) para mantener
+        // la consistencia del balance de caja.
+        if (credit.payments.length > 0) {
+            throw new Error(
+                `No se puede eliminar el crédito porque tiene ${credit.payments.length} pago(s) registrado(s). ` +
+                `Revierta los pagos individualmente antes de eliminar el crédito.`
+            );
+        }
 
         const amountToRevert = Number(credit.amount);
         const businessId = credit.businessId;
@@ -770,7 +767,10 @@ export class CreditService {
 
             // 1. Actualizar la cuota
             const newPaidAmount = new Prisma.Decimal(schedule.paidAmount).minus(amountToRevert);
-            const newStatus = Number(newPaidAmount) <= 0 ? 'pending' : 'partial';
+            const isPastDue = schedule.dueDate < new Date();
+            const newStatus = Number(newPaidAmount) <= 0
+                ? (isPastDue ? 'overdue' : 'pending')
+                : (isPastDue ? 'overdue' : 'partial');
 
             await tx.paymentSchedule.update({
                 where: { id: scheduleId },
@@ -782,12 +782,18 @@ export class CreditService {
 
             // 2. Actualizar el crédito
             const newRemaining = new Prisma.Decimal(credit.remainingBalance).plus(amountToRevert);
-            // Aseguramos que el crédito vuelva a estar activo si estaba pagado
+
+            // Determinar nuevo estado: si la cuota revertida u otra está overdue, el crédito queda overdue
+            const overdueCount = await tx.paymentSchedule.count({
+                where: { creditId, status: 'overdue' }
+            });
+            const newCreditStatus = (newStatus === 'overdue' || overdueCount > 0) ? 'overdue' : 'active';
+
             await tx.credit.update({
                 where: { id: creditId },
                 data: {
                     remainingBalance: newRemaining,
-                    status: 'active',
+                    status: newCreditStatus,
                     completionDate: null,
                     earnedInterest: null
                 }

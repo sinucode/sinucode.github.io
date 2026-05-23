@@ -222,6 +222,11 @@ export class CashService {
 
         if (Math.abs(declaredTotal - calculatedTotal) > 0.01) {
             const diff = declaredTotal - calculatedTotal;
+            console.warn(
+                `[CashService] Discrepancia de balance detectada en negocio ${filters.businessId}: ` +
+                `declarado=${declaredTotal}, calculado=${calculatedTotal}, diff=${diff}. ` +
+                `Se ajusta el saldo en efectivo temporalmente.`
+            );
             cashBalance += diff; // asume que cualquier discrepancia de base está en efectivo
         }
 

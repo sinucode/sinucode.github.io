@@ -116,7 +116,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         const interestPerPayment = rateDecimal / paymentsPerMonth;
 
         const denominator = installment - (amount * interestPerPayment);
-        const payments = denominator > 0 ? Math.max(1, Math.ceil(amount / denominator)) : 365 / gap;
+        const payments = denominator > 0 ? Math.max(1, Math.ceil(amount / denominator)) : Math.ceil(365 / gap);
 
         return Math.ceil((payments / paymentsPerMonth) * 30);
     };

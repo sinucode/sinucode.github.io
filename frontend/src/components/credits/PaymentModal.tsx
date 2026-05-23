@@ -108,20 +108,22 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         if (selectedIds.size === 0) return setError('Selecciona al menos una cuota a pagar');
         if (totalSelected <= 0) return setError('El monto total debe ser mayor a 0');
 
-        // Handle overpayment relative to totally remaining balance
-        if (totalSelected > remainingBalance + 1) {
+        // Handle overpayment: usar 0.01% del saldo como tolerancia de punto flotante (mínimo $1)
+        const tolerance = Math.max(1, remainingBalance * 0.0001);
+        if (totalSelected > remainingBalance + tolerance) {
             const excess = totalSelected - remainingBalance;
             const confirmExcess = window.confirm(
                 `El pago supera el valor de la deuda por ${formatMoney(excess)}. \n\n¿Deseas aceptar y registrar este excedente como ganancia por interés para el negocio?`
             );
             if (!confirmExcess) {
-                return; // User cancelled
+                return;
             }
         }
 
         const schedulesToPay = pendingSchedules.filter((s) => selectedIds.has(s.id));
         setIsSubmitting(true);
 
+        const successful: string[] = [];
         try {
             for (const s of schedulesToPay) {
                 const amount = getAmount(s);
@@ -134,16 +136,26 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                     notes: formData.notes || undefined,
                     scheduleId: s.id,
                 });
+                successful.push(s.id);
             }
             queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
             queryClient.invalidateQueries({ queryKey: ['credits'] });
             onSuccess();
         } catch (err: any) {
+            // Si algún pago ya se registró antes del error, refrescar datos para reflejar estado real
+            if (successful.length > 0) {
+                queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
+                queryClient.invalidateQueries({ queryKey: ['credits'] });
+            }
             const msg =
                 err.response?.data?.errors?.[0]?.msg ||
                 err.response?.data?.error ||
                 'Error al registrar pago';
-            setError(msg);
+            setError(
+                successful.length > 0
+                    ? `${msg}. Se registraron ${successful.length} cuota(s) antes del error. Revisa el estado del crédito.`
+                    : msg
+            );
         } finally {
             setIsSubmitting(false);
         }

@@ -7,7 +7,10 @@
  * Si recibe un string YYYY-MM-DD, le concatena la zona horaria antes de crear el objeto Date.
  */
 export const normalizeToNoon = (date?: string | Date | null): Date => {
-    if (!date) return new Date();
+    if (!date) {
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+        return new Date(`${todayStr}T12:00:00.000-05:00`);
+    }
 
     if (date instanceof Date) {
         const d = new Date(date);
