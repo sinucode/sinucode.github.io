@@ -457,17 +457,12 @@ export default function CreditDetailPage() {
                                         })
                                         .sort((a: any, b: any) => a.installmentNumber - b.installmentNumber);
 
-                                    // 2. Obtener pagos válidos ordenados por fecha
-                                    let validPayments = (credit.payments || [])
+                                    // 2. Obtener TODOS los pagos válidos ordenados por fecha (incluyendo abonos parciales).
+                                    // No se limitan ni filtran: cada pago registrado representa un evento real
+                                    // de dinero recibido y debe mostrarse en el historial.
+                                    const validPayments = (credit.payments || [])
                                         .filter((p: any) => p && p.id && p.paymentDate && p.amount)
                                         .sort((a: any, b: any) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime());
-
-                                    // 3. Lógica de corrección para duplicados:
-                                    // Si hay cuotas pagadas, limitar estrictamente.
-                                    if (paidSchedules.length > 0) {
-                                        const limit = Math.min(validPayments.length, paidSchedules.length);
-                                        validPayments = validPayments.slice(0, limit);
-                                    }
 
                                     const totalInstallments = credit.paymentSchedule?.length || 0;
                                     const paidInstallmentsCount = paidSchedules.length;
