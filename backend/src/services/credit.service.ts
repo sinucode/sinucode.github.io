@@ -348,31 +348,33 @@ export class CreditService {
             const isCreditFullyPaid = Number(newRemaining) <= 0;
 
             // Si el crédito se completó, marcar TODAS las cuotas restantes como pagadas.
-            // Esto evita que queden cuotas en estado pending/overdue después de que el crédito
-            // ya se pagó (común cuando hubo sobrepagos previos que cubrieron cuotas futuras).
+            // Optimización: usar las cuotas ya cargadas en memoria (credit.paymentSchedule) y
+            // ejecutar todas las actualizaciones en paralelo con Promise.all.
+            let creditStatus: 'paid' | 'overdue' | 'active';
             if (isCreditFullyPaid) {
-                // Traer cuotas que están pendientes/parciales/overdue para actualizar una por una
-                const pendingSchedules = await tx.paymentSchedule.findMany({
-                    where: {
-                        creditId,
-                        status: { in: ['pending', 'partial', 'overdue'] }
-                    },
-                    select: { id: true, scheduledAmount: true }
-                });
-
-                for (const s of pendingSchedules) {
-                    await tx.paymentSchedule.update({
-                        where: { id: s.id },
-                        data: {
-                            status: 'paid',
-                            paidAmount: s.scheduledAmount
-                        }
-                    });
+                const pendingFromMemory = credit.paymentSchedule.filter(
+                    s => s.status !== 'paid' && s.id !== scheduleId
+                );
+                if (pendingFromMemory.length > 0) {
+                    await Promise.all(pendingFromMemory.map(s =>
+                        tx.paymentSchedule.update({
+                            where: { id: s.id },
+                            data: { status: 'paid', paidAmount: s.scheduledAmount }
+                        })
+                    ));
                 }
+                creditStatus = 'paid';
+            } else {
+                // Calcular si hay alguna cuota overdue desde memoria (evita query extra).
+                // Una cuota está overdue si: dueDate < hoy AND status != paid AND tiene saldo pendiente.
+                const hasOverdue = credit.paymentSchedule.some(s =>
+                    s.dueDate < payDate &&
+                    s.status !== 'paid' &&
+                    s.id !== scheduleId && // la actual ya se manejó
+                    Number(s.scheduledAmount) > Number(s.paidAmount)
+                );
+                creditStatus = hasOverdue ? 'overdue' : 'active';
             }
-
-            const anyOverdue = await tx.paymentSchedule.count({ where: { creditId, status: 'overdue' } });
-            const creditStatus = isCreditFullyPaid ? 'paid' : anyOverdue > 0 ? 'overdue' : 'active';
 
             // ── Registrar pago ──
             // amountToPrincipal = lo que reduce el saldo del crédito
@@ -395,14 +397,21 @@ export class CreditService {
             });
 
             // ── Caja: entrada del pago recibido ──
-            const newBusinessBalance = new Prisma.Decimal(credit.business.currentBalance).plus(amount);
+            // Si hay donación, se divide en 2 movimientos para mantener cuadre contable:
+            //   payment_received: el monto que efectivamente reduce el saldo del crédito
+            //   interest_earned:  la donación al negocio (ganancia inmediata)
+            // Total = amount (lo que pagó el cliente). business.currentBalance se actualiza una vez.
+            const principalForCash = amount - donationAmount;
+            const balanceAfterPrincipal = new Prisma.Decimal(credit.business.currentBalance).plus(principalForCash);
+            const newBusinessBalance = balanceAfterPrincipal.plus(donationAmount);
+
             await tx.cashMovement.create({
                 data: {
                     businessId: credit.businessId,
                     type: 'payment_received',
-                    amount: new Prisma.Decimal(amount),
-                    balanceAfter: newBusinessBalance,
-                    description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}`,
+                    amount: new Prisma.Decimal(principalForCash),
+                    balanceAfter: balanceAfterPrincipal,
+                    description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}${donationAmount > 0 ? ` (pago $${amount.toLocaleString('es-CO')}, donación $${donationAmount.toLocaleString('es-CO')} aparte)` : ''}`,
                     relatedCreditId: credit.id,
                     relatedPaymentId: payment.id,
                     paymentMethod: paymentMethod || 'efectivo',
@@ -410,33 +419,53 @@ export class CreditService {
                 },
             });
 
+            // Movimiento de ganancia inmediata por la donación (si aplica)
+            if (donationAmount > 0) {
+                await tx.cashMovement.create({
+                    data: {
+                        businessId: credit.businessId,
+                        type: 'interest_earned',
+                        amount: new Prisma.Decimal(donationAmount),
+                        balanceAfter: newBusinessBalance,
+                        description: `Donación al negocio - ${credit.client.fullName} (excedente sobre cuota)`,
+                        relatedCreditId: credit.id,
+                        relatedPaymentId: payment.id,
+                        paymentMethod: paymentMethod || 'efectivo',
+                        createdById: userId,
+                    },
+                });
+            }
+
             await tx.business.update({
                 where: { id: credit.businessId },
                 data: { currentBalance: newBusinessBalance },
             });
 
-            // ── Si el crédito se paga completamente: calcular y registrar ganancia ──
+            // ── Si el crédito se paga completamente: calcular ganancia restante ──
+            // La ganancia total = sum(payments.amount) - capital. Pero parte de eso ya fue
+            // registrada como donaciones (interest_earned) durante el crédito. Solo registramos
+            // la parte adicional (interés según términos del crédito).
             let profit = 0;
             if (isCreditFullyPaid) {
                 const allPayments = await tx.payment.findMany({
                     where: { creditId },
-                    select: { amount: true },
+                    select: { amount: true, amountToInterest: true },
                 });
                 const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+                const totalDonatedAlready = allPayments.reduce((sum, p) => sum + Number(p.amountToInterest), 0)
+                    + donationAmount; // incluye el pago actual aún no committed
                 const originalAmount = Number(credit.amount);
                 profit = totalPaid - originalAmount;
+                const remainingProfitToRecord = profit - totalDonatedAlready;
 
-                if (profit > 0) {
-                    // Registrar la ganancia como movimiento de caja separado (informativo).
-                    // profit = totalPaid - originalAmount ya incluye cualquier excedente, por lo que
-                    // NO se registra un movimiento adicional por excessAmount para evitar doble conteo.
+                if (remainingProfitToRecord > 0.01) {
                     await tx.cashMovement.create({
                         data: {
                             businessId: credit.businessId,
                             type: 'interest_earned',
-                            amount: new Prisma.Decimal(profit),
-                            balanceAfter: newBusinessBalance, // ya incluido en el pago
-                            description: `Ganancia crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total cobrado: $${totalPaid.toLocaleString('es-CO')}`,
+                            amount: new Prisma.Decimal(remainingProfitToRecord),
+                            balanceAfter: newBusinessBalance,
+                            description: `Interés crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total: $${totalPaid.toLocaleString('es-CO')} | Donaciones previas: $${totalDonatedAlready.toLocaleString('es-CO')}`,
                             relatedCreditId: credit.id,
                             paymentMethod: 'efectivo',
                             createdById: userId,
