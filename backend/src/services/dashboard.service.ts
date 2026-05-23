@@ -136,10 +136,12 @@ export class DashboardService {
         ]);
 
         // ── Cálculo de KPIs ──
+        // totalAdeudado: suma del saldo total de todos los créditos activos/vencidos
+        // carteraVencida: SOLO la suma de cuotas YA VENCIDAS y no pagadas (no futuras)
+        // carteraAlDia: saldo que aún no está vencido (totalAdeudado - carteraVencida)
         const activeCredits = credits.filter(c => c.status === 'active' || c.status === 'overdue');
 
         let totalAdeudado = 0;
-        let carteraAlDia = 0;
         let carteraVencida = 0;
         let creditosActivos = 0;
         let creditosVencidos = 0;
@@ -149,17 +151,21 @@ export class DashboardService {
             const saldo = Number(credit.remainingBalance);
             totalAdeudado += saldo;
 
-            const hasOverdueCuota = credit.paymentSchedule.some(s =>
-                s.dueDate < startOfBogotaToday &&
-                s.status !== 'paid' &&
-                Number(s.scheduledAmount) > Number(s.paidAmount)
-            );
+            // Sumar solo el pendiente de cuotas vencidas (no el saldo completo del crédito)
+            let montoVencidoDeEsteCredito = 0;
+            for (const s of credit.paymentSchedule) {
+                if (s.dueDate < startOfBogotaToday &&
+                    s.status !== 'paid' &&
+                    Number(s.scheduledAmount) > Number(s.paidAmount)) {
+                    montoVencidoDeEsteCredito += Number(s.scheduledAmount) - Number(s.paidAmount);
+                }
+            }
+            carteraVencida += montoVencidoDeEsteCredito;
 
-            if (hasOverdueCuota || credit.status === 'overdue') {
-                carteraVencida += saldo;
+            // Contar créditos por estado (en mora si tiene al menos una cuota vencida)
+            if (montoVencidoDeEsteCredito > 0 || credit.status === 'overdue') {
                 creditosVencidos++;
             } else {
-                carteraAlDia += saldo;
                 creditosActivos++;
             }
 
@@ -172,6 +178,9 @@ export class DashboardService {
             );
             if (hasDueToday) cobrosHoy++;
         }
+
+        // Cartera al día = lo que aún no está vencido (todo el saldo menos lo ya vencido)
+        const carteraAlDia = totalAdeudado - carteraVencida;
 
         // Pagos y donaciones en el período
         let pagosRecibidos = 0;
