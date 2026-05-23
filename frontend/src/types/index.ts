@@ -100,6 +100,15 @@ export interface Payment {
     notes?: string;
     createdById: string;
     createdAt: string;
+    credit?: {
+        id: string;
+        businessId: string;
+        amount: number | string;
+        totalWithInterest: number | string;
+        client: { fullName: string; phone?: string; cedula?: string };
+        paymentSchedule?: PaymentSchedule[];
+    };
+    createdBy?: { fullName: string };
 }
 
 // Tipos de movimientos de caja

@@ -50,9 +50,16 @@ export class PaymentService {
                     select: {
                         id: true,
                         businessId: true,
-                        client: { select: { fullName: true, phone: true } },
+                        amount: true,
+                        totalWithInterest: true,
+                        client: { select: { fullName: true, phone: true, cedula: true } },
+                        paymentSchedule: {
+                            select: { id: true, installmentNumber: true, dueDate: true, scheduledAmount: true, paidAmount: true, status: true },
+                            orderBy: { installmentNumber: 'asc' },
+                        },
                     },
                 },
+                createdBy: { select: { fullName: true } },
             },
         });
 
