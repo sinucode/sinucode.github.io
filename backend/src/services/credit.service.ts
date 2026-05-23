@@ -340,6 +340,30 @@ export class CreditService {
             const newRemaining = new Prisma.Decimal(currentRemaining).minus(appliedAmount);
             const isCreditFullyPaid = Number(newRemaining) <= 0;
 
+            // Si el crédito se completó, marcar TODAS las cuotas restantes como pagadas.
+            // Esto evita que queden cuotas en estado pending/overdue después de que el crédito
+            // ya se pagó (común cuando hubo sobrepagos previos que cubrieron cuotas futuras).
+            if (isCreditFullyPaid) {
+                await tx.paymentSchedule.updateMany({
+                    where: {
+                        creditId,
+                        status: { in: ['pending', 'partial', 'overdue'] }
+                    },
+                    data: {
+                        status: 'paid'
+                    }
+                });
+                // Asegurar que paidAmount = scheduledAmount en las cuotas que quedaron como paid
+                // (no se puede hacer en updateMany con referencia a otra columna, se hace con raw)
+                await tx.$executeRaw`
+                    UPDATE payment_schedule
+                    SET paid_amount = scheduled_amount
+                    WHERE credit_id = ${creditId}::uuid
+                      AND paid_amount < scheduled_amount
+                      AND status = 'paid'
+                `;
+            }
+
             const anyOverdue = await tx.paymentSchedule.count({ where: { creditId, status: 'overdue' } });
             const creditStatus = isCreditFullyPaid ? 'paid' : anyOverdue > 0 ? 'overdue' : 'active';
 
