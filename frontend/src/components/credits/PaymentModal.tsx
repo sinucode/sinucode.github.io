@@ -105,7 +105,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     const [excessChoiceState, setExcessChoiceState] = useState<{
         open: boolean;
         cuotasConExceso: { id: string; installmentNumber: number; pending: number; pago: number; exceso: number }[];
-    }>({ open: false, cuotasConExceso: [] });
+        tieneCuotaSiguiente: boolean;
+    }>({ open: false, cuotasConExceso: [], tieneCuotaSiguiente: false });
 
     // Detectar cuotas con sobrepago individual (monto pagado > monto pendiente de esa cuota)
     const detectarExcesos = () => {
@@ -125,6 +126,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             }
         }
         return conExceso;
+    };
+
+    // Verificar si existe cuota pendiente DESPUÉS de las cuotas con exceso (para habilitar "abonar a siguiente")
+    const tieneCuotaSiguiente = (cuotasConExceso: { id: string; installmentNumber: number }[]): boolean => {
+        if (cuotasConExceso.length === 0) return false;
+        const maxInstallment = Math.max(...cuotasConExceso.map(c => c.installmentNumber));
+        return (paymentSchedule || []).some(s =>
+            s.installmentNumber > maxInstallment &&
+            Number(s.scheduledAmount) > Number(s.paidAmount || 0)
+        );
     };
 
     const ejecutarPagos = async (excessAction?: 'next_cuota' | 'donate') => {
@@ -178,20 +189,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         if (selectedIds.size === 0) return setError('Selecciona al menos una cuota a pagar');
         if (totalSelected <= 0) return setError('El monto total debe ser mayor a 0');
 
-        // Validar que no se supere la deuda total
-        const tolerance = Math.max(1, remainingBalance * 0.0001);
-        if (totalSelected > remainingBalance + tolerance) {
-            setError(
-                `El pago total ($${Math.ceil(totalSelected).toLocaleString('es-CO')}) supera la deuda pendiente ($${Math.ceil(remainingBalance).toLocaleString('es-CO')}). ` +
-                `Si el cliente desea donar el exceso, ajusta los montos por cuota y se preguntará cómo manejar el excedente.`
-            );
-            return;
-        }
-
-        // Detectar sobrepagos por cuota individual
+        // Detectar sobrepagos por cuota individual.
+        // Si hay sobrepago, SIEMPRE se muestra el modal de elección (incluso si supera
+        // la deuda total — ese es exactamente el caso de "donar el excedente al negocio").
         const excesos = detectarExcesos();
         if (excesos.length > 0) {
-            setExcessChoiceState({ open: true, cuotasConExceso: excesos });
+            setExcessChoiceState({
+                open: true,
+                cuotasConExceso: excesos,
+                tieneCuotaSiguiente: tieneCuotaSiguiente(excesos)
+            });
             return;
         }
 
@@ -454,24 +461,31 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                         <p className="text-sm font-semibold text-gray-800 mb-3">¿Qué deseas hacer con el excedente?</p>
 
                         <div className="space-y-2">
-                            <button
-                                type="button"
-                                disabled={isSubmitting}
-                                onClick={async () => {
-                                    setExcessChoiceState({ open: false, cuotasConExceso: [] });
-                                    await ejecutarPagos('next_cuota');
-                                }}
-                                className="w-full text-left p-3 border border-primary-200 bg-primary-50 hover:bg-primary-100 rounded-xl transition disabled:opacity-50"
-                            >
-                                <div className="font-semibold text-primary-900 text-sm">Abonar a la siguiente cuota</div>
-                                <div className="text-xs text-primary-700 mt-0.5">El excedente queda como abono parcial de la próxima cuota pendiente. Reduce el saldo total.</div>
-                            </button>
+                            {excessChoiceState.tieneCuotaSiguiente ? (
+                                <button
+                                    type="button"
+                                    disabled={isSubmitting}
+                                    onClick={async () => {
+                                        setExcessChoiceState({ open: false, cuotasConExceso: [], tieneCuotaSiguiente: false });
+                                        await ejecutarPagos('next_cuota');
+                                    }}
+                                    className="w-full text-left p-3 border border-primary-200 bg-primary-50 hover:bg-primary-100 rounded-xl transition disabled:opacity-50"
+                                >
+                                    <div className="font-semibold text-primary-900 text-sm">Abonar a la siguiente cuota</div>
+                                    <div className="text-xs text-primary-700 mt-0.5">El excedente queda como abono parcial de la próxima cuota pendiente. Reduce el saldo total.</div>
+                                </button>
+                            ) : (
+                                <div className="w-full text-left p-3 border border-gray-200 bg-gray-50 rounded-xl">
+                                    <div className="font-semibold text-gray-500 text-sm">Abonar a la siguiente cuota</div>
+                                    <div className="text-xs text-gray-500 mt-0.5">⚠️ No hay cuotas siguientes en este crédito. Solo aplica donación.</div>
+                                </div>
+                            )}
 
                             <button
                                 type="button"
                                 disabled={isSubmitting}
                                 onClick={async () => {
-                                    setExcessChoiceState({ open: false, cuotasConExceso: [] });
+                                    setExcessChoiceState({ open: false, cuotasConExceso: [], tieneCuotaSiguiente: false });
                                     await ejecutarPagos('donate');
                                 }}
                                 className="w-full text-left p-3 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition disabled:opacity-50"
@@ -483,8 +497,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                             <button
                                 type="button"
                                 disabled={isSubmitting}
-                                onClick={() => setExcessChoiceState({ open: false, cuotasConExceso: [] })}
-                                className="w-full p-3 text-gray-600 hover:bg-gray-100 rounded-xl transition text-sm"
+                                onClick={() => setExcessChoiceState({ open: false, cuotasConExceso: [], tieneCuotaSiguiente: false })}
+                                className="w-full p-3 text-gray-600 hover:bg-gray-100 rounded-xl transition text-sm border border-gray-200"
                             >
                                 Cancelar
                             </button>
