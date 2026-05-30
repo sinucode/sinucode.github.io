@@ -56,7 +56,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         interestRate: '',
         termMonths: '',
         termUnit: 'months' as 'months' | 'weeks',
-        frequency: 'weekly' as PaymentFrequency,
+        frequency: 'monthly' as PaymentFrequency,
         startDate: todayBogota(),
         businessId: selectedBusinessId || '',
     });
