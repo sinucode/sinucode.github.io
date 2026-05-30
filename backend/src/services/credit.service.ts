@@ -392,6 +392,10 @@ export class CreditService {
                     remainingBalanceAfter: newRemaining,
                     paymentMethod,
                     notes: noteWithDonation,
+                    // Vincular el pago a la cuota seleccionada (si la hay). En el caso
+                    // excessAction='next_cuota' el pago se liga a la cuota target original;
+                    // la siguiente cuota solo recibe el abono parcial en su paidAmount.
+                    scheduleId: scheduleId || null,
                     createdById: userId,
                 },
             });
@@ -614,6 +618,22 @@ export class CreditService {
 
         const newRemaining = totalScheduled - totalPaid;
         if (newRemaining < 0) throw new Error('Los pagos existentes superan el nuevo total del crédito');
+
+        // ── Blindaje de integridad del schedule ──
+        // Si NO se están cambiando los términos del crédito (amount/interestRate/termDays),
+        // la suma de las cuotas DEBE seguir cuadrando con el total del crédito. Esto evita
+        // que el editor infle el schedule silenciosamente (bug que dejó cuotas descuadradas).
+        const cambiaTerminos = amount !== undefined || interestRate !== undefined || termDays !== undefined;
+        if (!cambiaTerminos) {
+            const totalEsperado = Number(credit.totalWithInterest);
+            if (Math.abs(totalScheduled - totalEsperado) > 1) {
+                throw new Error(
+                    `La suma de las cuotas ($${Math.round(totalScheduled).toLocaleString('es-CO')}) no coincide ` +
+                    `con el total del crédito ($${Math.round(totalEsperado).toLocaleString('es-CO')}). ` +
+                    `Ajusta los montos para que sumen exactamente el total, o modifica los términos del crédito.`
+                );
+            }
+        }
 
         const anyOverdue = updates.some((u) => u.status === 'overdue');
         const newStatus = newRemaining <= 0 ? 'paid' : anyOverdue ? 'overdue' : 'active';

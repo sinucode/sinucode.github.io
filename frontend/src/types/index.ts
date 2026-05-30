@@ -98,6 +98,7 @@ export interface Payment {
     remainingBalanceAfter: number;
     paymentMethod?: string;
     notes?: string;
+    scheduleId?: string | null;
     createdById: string;
     createdAt: string;
     credit?: {

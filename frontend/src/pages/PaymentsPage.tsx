@@ -52,9 +52,12 @@ const typeBadge = (type: PaymentType) => {
 const getCuotaInfo = (p: Payment): string => {
     const credit = p.credit;
     if (!credit?.paymentSchedule) return '—';
-    // Buscar la cuota que tiene paidAmount aproximado al amount del pago
-    // Es heurístico: idealmente Payment tendría scheduleId
     const total = credit.paymentSchedule.length;
+    // Si el pago está vinculado a una cuota específica, mostrar el número
+    if (p.scheduleId) {
+        const cuota = credit.paymentSchedule.find(s => s.id === p.scheduleId);
+        if (cuota) return `Cuota #${cuota.installmentNumber} de ${total}`;
+    }
     return `de ${total}`;
 };
 

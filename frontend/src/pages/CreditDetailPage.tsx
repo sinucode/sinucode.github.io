@@ -440,6 +440,7 @@ export default function CreditDetailPage() {
                             <thead>
                                 <tr className="bg-white">
                                     <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Fecha</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Cuota</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Monto</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Método</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">Notas</th>
@@ -481,9 +482,24 @@ export default function CreditDetailPage() {
                                             relatedSchedule = paidSchedules[index];
                                         }
 
+                                        const donacion = Number(p.amountToInterest || 0) > 0;
                                         return (
                                             <tr key={p.id}>
                                                 <td className="px-3 py-2">{formatDateTime(p.paymentDate)}</td>
+                                                <td className="px-3 py-2">
+                                                    {relatedSchedule ? (
+                                                        <span className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-primary-50 text-primary-700 border border-primary-200">
+                                                            #{relatedSchedule.installmentNumber} de {totalInstallments}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400">—</span>
+                                                    )}
+                                                    {donacion && (
+                                                        <span className="ml-1 inline-block px-2 py-0.5 text-xs font-medium rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                            +Donación {formatMoney(p.amountToInterest)}
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-3 py-2">{formatMoney(p.amount)}</td>
                                                 <td className="px-3 py-2">{p.paymentMethod || '-'}</td>
                                                 <td className="px-3 py-2">{p.notes || '-'}</td>
@@ -572,7 +588,7 @@ export default function CreditDetailPage() {
                                 })()}
                                 {(!credit.payments || credit.payments.filter((p: any) => p && p.id && p.paymentDate && p.amount).length === 0) && (
                                     <tr>
-                                        <td className="px-3 py-3 text-primary-600" colSpan={5}>Sin pagos registrados</td>
+                                        <td className="px-3 py-3 text-primary-600" colSpan={6}>Sin pagos registrados</td>
                                     </tr>
                                 )}
                             </tbody>

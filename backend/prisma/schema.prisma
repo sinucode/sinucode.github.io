@@ -177,7 +177,8 @@ model PaymentSchedule {
   updatedAt         DateTime            @updatedAt @map("updated_at")
 
   // Relaciones
-  credit Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  credit   Credit    @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  payments Payment[]
 
   @@map("payment_schedule")
 }
@@ -202,12 +203,14 @@ model Payment {
   remainingBalanceAfter Decimal  @map("remaining_balance_after") @db.Decimal(15, 2)
   paymentMethod         String?  @map("payment_method")
   notes                 String?
+  scheduleId            String?  @map("schedule_id")
   createdById           String   @map("created_by")
   createdAt             DateTime @default(now()) @map("created_at")
 
   // Relaciones
-  credit        Credit         @relation(fields: [creditId], references: [id], onDelete: Cascade)
-  createdBy     User           @relation("PaymentCreator", fields: [createdById], references: [id])
+  credit        Credit           @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  schedule      PaymentSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  createdBy     User             @relation("PaymentCreator", fields: [createdById], references: [id])
   cashMovements CashMovement[]
 
   @@map("payments")
