@@ -142,6 +142,10 @@ model Credit {
   cashMovements    CashMovement[]
   emailReminders   EmailReminder[]
 
+  @@index([businessId])
+  @@index([clientId])
+  @@index([status])
+  @@index([businessId, status])
   @@map("credits")
 }
 
@@ -180,6 +184,9 @@ model PaymentSchedule {
   credit   Credit    @relation(fields: [creditId], references: [id], onDelete: Cascade)
   payments Payment[]
 
+  @@index([creditId])
+  @@index([dueDate])
+  @@index([status])
   @@map("payment_schedule")
 }
 
@@ -213,6 +220,9 @@ model Payment {
   createdBy     User             @relation("PaymentCreator", fields: [createdById], references: [id])
   cashMovements CashMovement[]
 
+  @@index([creditId])
+  @@index([scheduleId])
+  @@index([paymentDate])
   @@map("payments")
 }
 
@@ -236,6 +246,10 @@ model CashMovement {
   relatedPayment Payment? @relation(fields: [relatedPaymentId], references: [id], onDelete: SetNull)
   createdBy      User     @relation("CashMovementCreator", fields: [createdById], references: [id])
 
+  @@index([businessId])
+  @@index([relatedCreditId])
+  @@index([createdAt])
+  @@index([businessId, createdAt])
   @@map("cash_movements")
 }
 

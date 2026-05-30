@@ -293,30 +293,37 @@ export class CreditService {
                         appliedToCredit = scheduledPending;
                         donationAmount = excess;
                     } else if (excessAction === 'next_cuota') {
-                        // Aplicar el excedente a la siguiente cuota pendiente
+                        // Aplicar el excedente en cascada a las cuotas siguientes (en orden de fecha)
+                        // hasta agotarlo. Esto evita descuadre entre el saldo y el schedule cuando el
+                        // excedente supera la capacidad de una sola cuota.
                         const sortedByDate = [...credit.paymentSchedule].sort(
                             (a, b) => a.dueDate.getTime() - b.dueDate.getTime()
                         );
                         const targetIdx = sortedByDate.findIndex(s => s.id === scheduleId);
-                        const nextPending = sortedByDate
-                            .slice(targetIdx + 1)
-                            .find(s => Number(s.scheduledAmount) > Number(s.paidAmount));
-
-                        if (nextPending) {
-                            const nextScheduled = Number(nextPending.scheduledAmount);
-                            const newPaidNext = Math.min(Number(nextPending.paidAmount) + excess, nextScheduled);
-                            const isNextFull = newPaidNext >= nextScheduled;
+                        let restante = excess;
+                        for (const s of sortedByDate.slice(targetIdx + 1)) {
+                            if (restante <= 0.01) break;
+                            const pendiente = Number(s.scheduledAmount) - Number(s.paidAmount);
+                            if (pendiente <= 0) continue;
+                            const aplicar = Math.min(restante, pendiente);
+                            const nuevoPaid = Number(s.paidAmount) + aplicar;
+                            const fullPaid = nuevoPaid >= Number(s.scheduledAmount) - 0.01;
                             await tx.paymentSchedule.update({
-                                where: { id: nextPending.id },
+                                where: { id: s.id },
                                 data: {
-                                    paidAmount: new Prisma.Decimal(newPaidNext),
-                                    status: isNextFull
-                                        ? 'paid'
-                                        : (nextPending.dueDate < payDate ? 'overdue' : 'partial'),
+                                    paidAmount: new Prisma.Decimal(nuevoPaid),
+                                    status: fullPaid ? 'paid' : (s.dueDate < payDate ? 'overdue' : 'partial'),
                                 },
                             });
+                            restante -= aplicar;
                         }
-                        // appliedToCredit ya es min(amount, currentRemaining) — reduce saldo completo
+                        // Si sobró excedente que ninguna cuota pudo absorber (pagó más que toda la
+                        // deuda restante), ese remanente se trata como donación para no descuadrar.
+                        if (restante > 0.01) {
+                            appliedToCredit = scheduledPending + (excess - restante);
+                            donationAmount = restante;
+                        }
+                        // Si no sobró, appliedToCredit = min(amount, currentRemaining) reduce el saldo completo.
                     }
                 } else {
                     // ── No hay sobrepago: aplicación normal a la cuota ──
@@ -409,102 +416,113 @@ export class CreditService {
             const balanceAfterPrincipal = new Prisma.Decimal(credit.business.currentBalance).plus(principalForCash);
             const newBusinessBalance = balanceAfterPrincipal.plus(donationAmount);
 
-            await tx.cashMovement.create({
-                data: {
-                    businessId: credit.businessId,
-                    type: 'payment_received',
-                    amount: new Prisma.Decimal(principalForCash),
-                    balanceAfter: balanceAfterPrincipal,
-                    description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}${donationAmount > 0 ? ` (pago $${amount.toLocaleString('es-CO')}, donación $${donationAmount.toLocaleString('es-CO')} aparte)` : ''}`,
-                    relatedCreditId: credit.id,
-                    relatedPaymentId: payment.id,
-                    paymentMethod: paymentMethod || 'efectivo',
-                    createdById: userId,
-                },
-            });
-
-            // Movimiento de ganancia inmediata por la donación (si aplica)
-            if (donationAmount > 0) {
-                await tx.cashMovement.create({
-                    data: {
-                        businessId: credit.businessId,
-                        type: 'interest_earned',
-                        amount: new Prisma.Decimal(donationAmount),
-                        balanceAfter: newBusinessBalance,
-                        description: `Donación al negocio - ${credit.client.fullName} (excedente sobre cuota)`,
-                        relatedCreditId: credit.id,
-                        relatedPaymentId: payment.id,
-                        paymentMethod: paymentMethod || 'efectivo',
-                        createdById: userId,
-                    },
-                });
-            }
-
-            await tx.business.update({
-                where: { id: credit.businessId },
-                data: { currentBalance: newBusinessBalance },
-            });
-
             // ── Si el crédito se paga completamente: calcular ganancia restante ──
-            // La ganancia total = sum(payments.amount) - capital. Pero parte de eso ya fue
-            // registrada como donaciones (interest_earned) durante el crédito. Solo registramos
-            // la parte adicional (interés según términos del crédito).
+            // profit total = sum(payments.amount) - capital. Parte ya se registró como donaciones
+            // (interest_earned) durante el crédito; solo registramos la parte adicional.
+            // NOTA: allPayments YA incluye el pago recién creado (lectura ve escrituras de la misma
+            // transacción), por lo que su amountToInterest ya cuenta la donación actual — NO se suma aparte.
             let profit = 0;
+            let interestMovementData: Prisma.CashMovementCreateInput | null = null;
             if (isCreditFullyPaid) {
                 const allPayments = await tx.payment.findMany({
                     where: { creditId },
                     select: { amount: true, amountToInterest: true },
                 });
                 const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-                const totalDonatedAlready = allPayments.reduce((sum, p) => sum + Number(p.amountToInterest), 0)
-                    + donationAmount; // incluye el pago actual aún no committed
+                const totalDonatedAlready = allPayments.reduce((sum, p) => sum + Number(p.amountToInterest), 0);
                 const originalAmount = Number(credit.amount);
                 profit = totalPaid - originalAmount;
                 const remainingProfitToRecord = profit - totalDonatedAlready;
 
                 if (remainingProfitToRecord > 0.01) {
-                    await tx.cashMovement.create({
-                        data: {
-                            businessId: credit.businessId,
-                            type: 'interest_earned',
-                            amount: new Prisma.Decimal(remainingProfitToRecord),
-                            balanceAfter: newBusinessBalance,
-                            description: `Interés crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total: $${totalPaid.toLocaleString('es-CO')} | Donaciones previas: $${totalDonatedAlready.toLocaleString('es-CO')}`,
-                            relatedCreditId: credit.id,
-                            paymentMethod: 'efectivo',
-                            createdById: userId,
-                        },
-                    });
+                    interestMovementData = {
+                        business: { connect: { id: credit.businessId } },
+                        type: 'interest_earned',
+                        amount: new Prisma.Decimal(remainingProfitToRecord),
+                        balanceAfter: newBusinessBalance,
+                        description: `Interés crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total: $${totalPaid.toLocaleString('es-CO')} | Donaciones previas: $${totalDonatedAlready.toLocaleString('es-CO')}`,
+                        relatedCredit: { connect: { id: credit.id } },
+                        paymentMethod: 'efectivo',
+                        createdBy: { connect: { id: userId } },
+                    };
                 }
             }
 
-            await tx.credit.update({
-                where: { id: creditId },
-                data: { 
-                    remainingBalance: newRemaining, 
-                    status: creditStatus,
-                    ...(isCreditFullyPaid ? { 
-                        completionDate: payDate,
-                        earnedInterest: new Prisma.Decimal(profit > 0 ? profit : 0)
-                    } : {})
-                },
-            });
-
-            await tx.auditLog.create({
-                data: {
-                    userId,
-                    businessId: credit.businessId,
-                    action: 'REGISTER_PAYMENT',
-                    description: `Pago de $${amount.toLocaleString('es-CO')} para crédito de ${credit.client.fullName}`,
-                    entityType: 'Payment',
-                    entityId: payment.id,
-                    oldValues: { remainingBalance: credit.remainingBalance },
-                    newValues: { remainingBalance: newRemaining, paymentAmount: amount, creditPaid: isCreditFullyPaid },
-                    ipAddress,
-                },
-            });
+            // ── Escrituras independientes en paralelo (reducen round-trips a la DB) ──
+            // Todas referencian payment.id / valores ya calculados, no dependen entre sí.
+            await Promise.all([
+                // Movimiento de caja: pago recibido
+                tx.cashMovement.create({
+                    data: {
+                        businessId: credit.businessId,
+                        type: 'payment_received',
+                        amount: new Prisma.Decimal(principalForCash),
+                        balanceAfter: balanceAfterPrincipal,
+                        description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}${donationAmount > 0 ? ` (pago $${amount.toLocaleString('es-CO')}, donación $${donationAmount.toLocaleString('es-CO')} aparte)` : ''}`,
+                        relatedCreditId: credit.id,
+                        relatedPaymentId: payment.id,
+                        paymentMethod: paymentMethod || 'efectivo',
+                        createdById: userId,
+                    },
+                }),
+                // Movimiento de ganancia inmediata por donación (si aplica)
+                donationAmount > 0
+                    ? tx.cashMovement.create({
+                        data: {
+                            businessId: credit.businessId,
+                            type: 'interest_earned',
+                            amount: new Prisma.Decimal(donationAmount),
+                            balanceAfter: newBusinessBalance,
+                            description: `Donación al negocio - ${credit.client.fullName} (excedente sobre cuota)`,
+                            relatedCreditId: credit.id,
+                            relatedPaymentId: payment.id,
+                            paymentMethod: paymentMethod || 'efectivo',
+                            createdById: userId,
+                        },
+                    })
+                    : Promise.resolve(),
+                // Movimiento de interés al cerrar el crédito (si aplica)
+                interestMovementData
+                    ? tx.cashMovement.create({ data: interestMovementData })
+                    : Promise.resolve(),
+                // Actualizar saldo del negocio
+                tx.business.update({
+                    where: { id: credit.businessId },
+                    data: { currentBalance: newBusinessBalance },
+                }),
+                // Actualizar el crédito
+                tx.credit.update({
+                    where: { id: creditId },
+                    data: {
+                        remainingBalance: newRemaining,
+                        status: creditStatus,
+                        ...(isCreditFullyPaid ? {
+                            completionDate: payDate,
+                            earnedInterest: new Prisma.Decimal(profit > 0 ? profit : 0)
+                        } : {})
+                    },
+                }),
+                // Auditoría
+                tx.auditLog.create({
+                    data: {
+                        userId,
+                        businessId: credit.businessId,
+                        action: 'REGISTER_PAYMENT',
+                        description: `Pago de $${amount.toLocaleString('es-CO')} para crédito de ${credit.client.fullName}`,
+                        entityType: 'Payment',
+                        entityId: payment.id,
+                        oldValues: { remainingBalance: credit.remainingBalance },
+                        newValues: { remainingBalance: newRemaining, paymentAmount: amount, creditPaid: isCreditFullyPaid },
+                        ipAddress,
+                    },
+                }),
+            ]);
 
             return payment;
+        }, {
+            // Margen para conexiones cross-region / cold starts de serverless.
+            maxWait: 10000,   // espera máx. por una conexión del pool
+            timeout: 20000,   // tiempo máx. de la transacción interactiva
         });
     }
 
