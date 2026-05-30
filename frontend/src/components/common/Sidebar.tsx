@@ -10,6 +10,7 @@ import {
     Settings,
     LogOut,
     Building2,
+    Church,
     X,
 } from 'lucide-react';
 
@@ -35,6 +36,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         { to: '/credits', icon: <CreditCard size={20} />, label: 'Créditos', show: true },
         { to: '/payments', icon: <DollarSign size={20} />, label: 'Pagos', show: true },
         { to: '/cash', icon: <Wallet size={20} />, label: 'Caja', show: true },
+        { to: '/tithe', icon: <Church size={20} />, label: 'Diezmo', show: user?.role === 'super_admin' },
         { to: '/whatsapp', icon: <Settings size={20} />, label: 'Bot WhatsApp', show: user?.role === 'super_admin' || user?.role === 'admin' },
         { to: '/settings', icon: <Settings size={20} />, label: 'Configuración', show: true },
     ].filter(l => l.show);

@@ -37,6 +37,7 @@ model User {
   paymentsCreated   Payment[]       @relation("PaymentCreator")
   cashMovements     CashMovement[]  @relation("CashMovementCreator")
   auditLogs         AuditLog[]
+  titheApprovals    TithePayment[]  @relation("TitheApprover")
   @@map("users")
 }
 
@@ -67,6 +68,7 @@ model Business {
   credits        Credit[]
   cashMovements  CashMovement[]
   auditLogs      AuditLog[]
+  tithePayments  TithePayment[]
 
   @@map("businesses")
 }
@@ -129,6 +131,9 @@ model Credit {
   termDays           Int              @map("term_days")
   remainingBalance   Decimal          @map("remaining_balance") @db.Decimal(15, 2)
   status             CreditStatus     @default(active)
+  tithePaid          Boolean          @default(false) @map("tithe_paid")
+  tithePaidAt        DateTime?        @map("tithe_paid_at")
+  tithePaymentId     String?          @map("tithe_payment_id")
   createdById        String           @map("created_by")
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
@@ -141,12 +146,32 @@ model Credit {
   payments         Payment[]
   cashMovements    CashMovement[]
   emailReminders   EmailReminder[]
+  tithePayment     TithePayment?     @relation(fields: [tithePaymentId], references: [id], onDelete: SetNull)
 
   @@index([businessId])
   @@index([clientId])
   @@index([status])
   @@index([businessId, status])
+  @@index([tithePaid])
   @@map("credits")
+}
+
+// PAGOS DE DIEZMO (módulo solo super_admin)
+model TithePayment {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  totalProfit  Decimal  @map("total_profit") @db.Decimal(15, 2)
+  titheAmount  Decimal  @map("tithe_amount") @db.Decimal(15, 2)
+  creditCount  Int      @map("credit_count")
+  approvedById String   @map("approved_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  approvedBy User     @relation("TitheApprover", fields: [approvedById], references: [id])
+  credits    Credit[]
+
+  @@index([businessId])
+  @@map("tithe_payments")
 }
 
 enum PaymentFrequency {
@@ -263,6 +288,7 @@ enum CashMovementType {
   payment_reversion
   credit_cancellation
   internal_transfer
+  tithe
 
   @@map("cash_movement_type")
 }
