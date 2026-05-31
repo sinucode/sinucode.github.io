@@ -243,7 +243,7 @@ export class AccountService {
         const dayEnd   = new Date(`${dateStr}T23:59:59.999-05:00`);
         const nextDay  = new Date(dayStart.getTime() + 24 * 3600 * 1000);
 
-        const [accounts, cashClose, preMovements, dayMovements, dayPayments, business] = await Promise.all([
+        const [accounts, cashClose, preMovements, dayMovements, dayPayments, business, allMovements] = await Promise.all([
             // Todas las cuentas (incluidas inactivas que pudieron tener movimientos)
             prisma.paymentAccount.findMany({
                 where: { businessId },
@@ -281,7 +281,13 @@ export class AccountService {
                 },
                 orderBy: { createdAt: 'asc' },
             }),
-            prisma.business.findUnique({ where: { id: businessId }, select: { name: true } }),
+            // Negocio: currentBalance para reconciliar capital inicial no registrado como movimiento
+            prisma.business.findUnique({ where: { id: businessId }, select: { name: true, currentBalance: true } }),
+            // Todos los movimientos históricos (tipo + monto) para calcular el offset del capital inicial
+            prisma.cashMovement.findMany({
+                where: { businessId },
+                select: { type: true, amount: true },
+            }),
         ]);
 
         const defaultAcc = accounts.find(a => a.isDefault) || accounts[0];
@@ -303,6 +309,18 @@ export class AccountService {
             const accId = (mov.accountId && aperturaByAcc[mov.accountId] !== undefined)
                 ? mov.accountId : defaultAcc?.id;
             if (accId) aperturaByAcc[accId] = (aperturaByAcc[accId] || 0) + eff;
+        }
+
+        // Reconciliar el capital inicial: createBusiness guarda currentBalance pero no registra
+        // un cashMovement de tipo 'initial_capital'. El offset absorbe esa diferencia igual que
+        // getBalances() y deja la apertura cuadrada con el saldo real.
+        if (defaultAcc && business) {
+            const rawSumAll = allMovements.reduce(
+                (s, m) => s + this.signedEffect(m.type as CashMovementType, Number(m.amount)), 0);
+            const offset = Number(business.currentBalance) - rawSumAll;
+            if (Math.abs(offset) > 0.01) {
+                aperturaByAcc[defaultAcc.id] = (aperturaByAcc[defaultAcc.id] || 0) + offset;
+            }
         }
 
         // Ingresos/Egresos del día
