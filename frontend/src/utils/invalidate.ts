@@ -24,6 +24,9 @@ const MONEY_KEYS = [
     'tithe',
     'business',
     'businesses',
+    'close-today',
+    'close-history',
+    'close-report',
 ];
 
 export function invalidateMoney(qc: QueryClient) {

@@ -92,15 +92,17 @@ Recomendación: **valor mensual fijo escalonado por rangos de clientes**
 - Helper frontend/src/utils/invalidate.ts (invalidateMoney) conectado en TODAS las mutaciones → UI se actualiza sin recargar.
 - Backfill hecho: 0 movimientos/pagos sin cuenta; saldos cuadran.
 
-### Sprint 2 EN PROGRESO — Cierre diario
-- HECHO: modelo CashClose (status closed/reopened, closeMode manual/auto, totalBalance, accountBalances Json, closedBy/At, reopenedBy/At/Reason, @@unique([businessId,closeDate])). Relación en Business. **db push aplicado + generate hecho.**
-- FALTA:
-  1. account.service: assertDayOpen(businessId,date), createClose (admin/super, upsert por businessId+día, snapshot getBalances), reopenClose (solo super_admin), autoCloseAll (cron), listCloses, getClose, getTodayClose.
-  2. Bloqueo: llamar assertDayOpen en credit.service.registerPayment (vs paymentDate) y cash.service recordMovement/createInternalTransfer (vs hoy Bogotá).
-  3. Routes: POST /api/accounts/closes (admin), POST /closes/:id/reopen (super_admin), GET /closes, GET /closes/:id, POST /closes/auto-run (header x-cron-secret = env CRON_SECRET).
-  4. vercel.json: cron "59 4 * * *" (UTC = 23:59 Bogotá) path /api/accounts/closes/auto-run.
-  5. Frontend: CashPage nueva pestaña "Cierre": estado hoy (abierto/cerrado manual|auto), botón "Cerrar caja" (admin/super, opcional contado por cuenta→diferencia), historial, botón "Reabrir" (motivo) solo super_admin.
-- Día Bogotá: Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota'}); closeDate normalizado a `${dayStr}T00:00:00.000-05:00`.
-- SUPER_ADMIN_ID=d89e4a01-d642-40a8-bb56-cc02fee4ee71. Negocio Demo Clientes existe con cuentas Efectivo/Transferencia/Nequi.
+### Sprint 2 COMPLETO y desplegado (commit 747ab8c)
+- CashClose (status closed/reopened, mode manual/auto, snapshot accountBalances JSON, unique negocio+dia). db push aplicado.
+- account.service: assertDayOpen, createClose (admin/super, upsert por dia), reopenClose (solo super_admin), autoCloseAll (cron), listCloses, getTodayClose.
+- Bloqueo de dia cerrado en registerPayment + cash.service recordMovement/createInternalTransfer.
+- Rutas /api/accounts/closes: GET today, GET lista, POST cerrar (admin), POST :id/reopen (super), GET/POST closes/auto-run (CRON_SECRET via header x-cron-secret o Authorization Bearer).
+- vercel.json cron "59 4 * * *" (UTC=23:59 Bogota).
+- Frontend: CashPage pestana "Cierre" (components/cash/CashCloseTab.tsx): estado hoy, Cerrar caja, saldo por cuenta, historial, Reabrir (solo super).
+- PENDIENTE DEPLOY: agregar env CRON_SECRET en Vercel para el cron automatico.
 
-### Sprint 3 PENDIENTE — Cierre interactivo + export PDF/Excel (ver plan).
+### Sprint 3 COMPLETO (commit por confirmar)
+- Backend: `getCloseReport(businessId, dateStr, userId, role)` en account.service — calcula apertura/ingresos/egresos/esperado por cuenta, tabla de pagos (hora/cliente/cuota/monto/cuenta/cobrador), tabla de operaciones (todos los movimientos excepto payment_received), KPIs totales. Ruta GET `/api/accounts/closes/report?businessId=&date=YYYY-MM-DD`.
+- Frontend: tipos `CloseReport` en accounts.api.ts; `utils/generateCloseReportPdf.ts` (jsPDF A4 con header, KPIs, tabla de cuentas, pagos, operaciones, pie de página multi-hoja); `CashCloseTab.tsx` completamente rehecho: selector de fecha (default hoy Bogotá), badge estado, acciones hoy (cerrar/reabrir), 4 KPI cards, tabla saldo por cuenta (apertura/ingresos/egresos/esperado/contado/diferencia), tabla pagos del día, operaciones colapsables, botones Descargar PDF + Excel (CSV multi-sección BOM), historial colapsable con clic para cambiar fecha.
+- invalidateMoney ahora invalida también close-today, close-history y close-report.
+- El historial es colapsable y al hacer clic en una fila carga el reporte de ese día.

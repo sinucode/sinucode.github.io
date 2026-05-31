@@ -78,3 +78,69 @@ export const reopenClose = async (id: string, reason: string): Promise<CashClose
     const res = await api.post(`/accounts/closes/${id}/reopen`, { reason });
     return res.data;
 };
+
+// ─── Reporte de cierre interactivo ───
+export interface CloseReportAccount {
+    accountId: string;
+    name: string;
+    type: string;
+    apertura: number;
+    ingresos: number;
+    egresos: number;
+    esperado: number;
+    contado: number | null;
+    diferencia: number | null;
+}
+
+export interface CloseReportPayment {
+    id: string;
+    hora: string;
+    clienteNombre: string;
+    creditId: string;
+    cuotaNumero: number | null;
+    monto: number;
+    cuenta: string;
+    cobrador: string;
+}
+
+export interface CloseReportOperation {
+    id: string;
+    hora: string;
+    tipo: string;
+    cuenta: string;
+    monto: number;
+    efectoSignado: number;
+    descripcion: string;
+    usuario: string;
+}
+
+export interface CloseReport {
+    meta: {
+        businessId: string;
+        businessName: string;
+        date: string;
+        close: {
+            id: string;
+            status: 'closed' | 'reopened';
+            closeMode: 'manual' | 'auto';
+            closedAt: string;
+            totalBalance: number;
+            notes?: string | null;
+        } | null;
+    };
+    accounts: CloseReportAccount[];
+    payments: CloseReportPayment[];
+    operations: CloseReportOperation[];
+    totals: {
+        totalCobrado: number;
+        numPagos: number;
+        totalIngresos: number;
+        totalEgresos: number;
+        neto: number;
+    };
+}
+
+export const getCloseReport = async (businessId: string, date: string): Promise<CloseReport> => {
+    const res = await api.get('/accounts/closes/report', { params: { businessId, date } });
+    return res.data;
+};

@@ -90,6 +90,20 @@ export const reopenClose = async (req: Request, res: Response) => {
     } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
 };
 
+export const getCloseReport = async (req: Request, res: Response) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const report = await accountService.getCloseReport(
+            req.query.businessId as string,
+            req.query.date as string,
+            req.user!.userId,
+            req.user!.role as UserRole,
+        );
+        return res.json(report);
+    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+};
+
 export const autoCloseRun = async (req: Request, res: Response) => {
     try {
         const secret = process.env.CRON_SECRET;

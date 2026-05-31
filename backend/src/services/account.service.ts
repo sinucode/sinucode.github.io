@@ -227,6 +227,179 @@ export class AccountService {
         return prisma.cashClose.findMany({ where: { businessId }, orderBy: { closeDate: 'desc' }, take: 90 });
     }
 
+    // ───────────────────────── REPORTE DE CIERRE ──────────────────────────
+
+    /**
+     * Genera el reporte de cierre para una fecha dada (YYYY-MM-DD).
+     * Devuelve KPIs, saldo por cuenta, pagos del día y operaciones del día.
+     */
+    async getCloseReport(businessId: string, dateStr: string, userId: string, role: UserRole) {
+        await this.validateAccess(businessId, userId, role);
+
+        // Validar formato
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) throw new Error('Fecha inválida. Use YYYY-MM-DD');
+
+        const dayStart = new Date(`${dateStr}T00:00:00.000-05:00`);
+        const dayEnd   = new Date(`${dateStr}T23:59:59.999-05:00`);
+        const nextDay  = new Date(dayStart.getTime() + 24 * 3600 * 1000);
+
+        const [accounts, cashClose, preMovements, dayMovements, dayPayments, business] = await Promise.all([
+            // Todas las cuentas (incluidas inactivas que pudieron tener movimientos)
+            prisma.paymentAccount.findMany({
+                where: { businessId },
+                orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+            }),
+            // Cierre del día (si existe)
+            prisma.cashClose.findFirst({
+                where: { businessId, closeDate: { gte: dayStart, lt: nextDay } },
+            }),
+            // Movimientos ANTES del día (para calcular apertura)
+            prisma.cashMovement.findMany({
+                where: { businessId, createdAt: { lt: dayStart } },
+                select: { type: true, amount: true, accountId: true },
+            }),
+            // Movimientos DEL día
+            prisma.cashMovement.findMany({
+                where: { businessId, createdAt: { gte: dayStart, lte: dayEnd } },
+                include: {
+                    createdBy: { select: { fullName: true } },
+                    account:   { select: { name: true } },
+                },
+                orderBy: { createdAt: 'asc' },
+            }),
+            // Pagos registrados DEL día
+            prisma.payment.findMany({
+                where: {
+                    credit: { businessId },
+                    createdAt: { gte: dayStart, lte: dayEnd },
+                },
+                include: {
+                    credit: { include: { client: { select: { fullName: true } } } },
+                    schedule:  { select: { installmentNumber: true } },
+                    account:   { select: { name: true } },
+                    createdBy: { select: { fullName: true } },
+                },
+                orderBy: { createdAt: 'asc' },
+            }),
+            prisma.business.findUnique({ where: { id: businessId }, select: { name: true } }),
+        ]);
+
+        const defaultAcc = accounts.find(a => a.isDefault) || accounts[0];
+        const activeAccounts = accounts.filter(a => a.active);
+
+        // ─── Cálculo de saldos por cuenta ───
+        const aperturaByAcc: Record<string, number> = {};
+        const ingresosByAcc: Record<string, number> = {};
+        const egresosByAcc:  Record<string, number> = {};
+        accounts.forEach(a => {
+            aperturaByAcc[a.id] = 0;
+            ingresosByAcc[a.id] = 0;
+            egresosByAcc[a.id]  = 0;
+        });
+
+        // Apertura: suma de movimientos ANTES del día
+        for (const mov of preMovements) {
+            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
+            const accId = (mov.accountId && aperturaByAcc[mov.accountId] !== undefined)
+                ? mov.accountId : defaultAcc?.id;
+            if (accId) aperturaByAcc[accId] = (aperturaByAcc[accId] || 0) + eff;
+        }
+
+        // Ingresos/Egresos del día
+        for (const mov of dayMovements) {
+            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
+            const accId = (mov.accountId && ingresosByAcc[mov.accountId] !== undefined)
+                ? mov.accountId : defaultAcc?.id;
+            if (accId) {
+                if (eff >= 0) ingresosByAcc[accId] = (ingresosByAcc[accId] || 0) + eff;
+                else          egresosByAcc[accId]  = (egresosByAcc[accId]  || 0) + eff;
+            }
+        }
+
+        // Tabla de cuentas
+        const accountsTable = activeAccounts.map(a => {
+            const apertura = Math.round((aperturaByAcc[a.id] || 0) * 100) / 100;
+            const ingresos = Math.round((ingresosByAcc[a.id] || 0) * 100) / 100;
+            const egresos  = Math.round((egresosByAcc[a.id]  || 0) * 100) / 100;
+            const esperado = Math.round((apertura + ingresos + egresos) * 100) / 100;
+            const snapshot = (cashClose?.accountBalances as any[] | null)
+                ?.find((ab: any) => ab.accountId === a.id);
+            return {
+                accountId: a.id,
+                name:      a.name,
+                type:      a.type,
+                apertura,
+                ingresos,
+                egresos,
+                esperado,
+                contado:    snapshot?.countedBalance   ?? null,
+                diferencia: snapshot?.difference       ?? null,
+            };
+        });
+
+        // Tabla de pagos
+        const paymentsTable = dayPayments.map(p => ({
+            id:            p.id,
+            hora:          p.createdAt,
+            clienteNombre: p.credit.client.fullName,
+            creditId:      p.creditId,
+            cuotaNumero:   p.schedule?.installmentNumber ?? null,
+            monto:         Math.round(Number(p.amount) * 100) / 100,
+            cuenta:        p.account?.name ?? '—',
+            cobrador:      p.createdBy.fullName,
+        }));
+
+        // Tabla de operaciones (todo excepto payment_received — esos van en pagos)
+        const operationsTable = dayMovements
+            .filter(m => m.type !== 'payment_received')
+            .map(m => ({
+                id:           m.id,
+                hora:         m.createdAt,
+                tipo:         m.type as string,
+                cuenta:       m.account?.name ?? '—',
+                monto:        Math.round(Number(m.amount) * 100) / 100,
+                efectoSignado: this.signedEffect(m.type as CashMovementType, Number(m.amount)),
+                descripcion:  m.description || '',
+                usuario:      m.createdBy.fullName,
+            }));
+
+        // Totales
+        let totalIngresos = 0;
+        let totalEgresos  = 0;
+        for (const mov of dayMovements) {
+            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
+            if (eff >= 0) totalIngresos += eff;
+            else          totalEgresos  += eff;
+        }
+        const totalCobrado = dayPayments.reduce((s, p) => s + Number(p.amount), 0);
+
+        return {
+            meta: {
+                businessId,
+                businessName: business?.name ?? '',
+                date: dateStr,
+                close: cashClose ? {
+                    id:           cashClose.id,
+                    status:       cashClose.status,
+                    closeMode:    cashClose.closeMode,
+                    closedAt:     cashClose.closedAt,
+                    totalBalance: Number(cashClose.totalBalance),
+                    notes:        cashClose.notes,
+                } : null,
+            },
+            accounts: accountsTable,
+            payments: paymentsTable,
+            operations: operationsTable,
+            totals: {
+                totalCobrado:  Math.round(totalCobrado   * 100) / 100,
+                numPagos:      dayPayments.length,
+                totalIngresos: Math.round(totalIngresos  * 100) / 100,
+                totalEgresos:  Math.round(Math.abs(totalEgresos) * 100) / 100,
+                neto:          Math.round((totalIngresos + totalEgresos) * 100) / 100,
+            },
+        };
+    }
+
     /** Cierre automático de todos los negocios con actividad del día y sin cierre. Para el cron. */
     async autoCloseAll() {
         const start = this.dayStart(new Date());
