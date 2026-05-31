@@ -62,20 +62,12 @@ export default function UserManagement() {
         }
     };
 
-    const canManageUser = (targetRole: string) => {
-        if (currentUser?.role === 'super_admin') return true;
-        if (currentUser?.role === 'admin' && targetRole === 'user') return true;
-        return false;
-    };
+    const canManageUser = (_targetRole: string) => currentUser?.role === 'super_admin';
 
-    const canCreateUsers = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+    const canCreateUsers = currentUser?.role === 'super_admin';
 
-    // Filtrar usuarios para admin (solo ver users)
-    const filteredUsers = users?.filter((user) => {
-        if (currentUser?.role === 'super_admin') return true;
-        if (currentUser?.role === 'admin') return user.role === 'user';
-        return false;
-    });
+    // Solo super_admin ve usuarios
+    const filteredUsers = users?.filter(() => currentUser?.role === 'super_admin');
 
     // Funciones para manejo de selección múltiple
     const handleSelectAll = () => {

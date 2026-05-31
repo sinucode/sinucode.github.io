@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body, query } from 'express-validator';
-import { authenticate, requirePermission } from '../middleware/auth.middleware';
+import { authenticate } from '../middleware/auth.middleware';
 import { requireMinRole } from '../middleware/roleHierarchy.middleware';
 import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount, getTodayClose, listCloses, createClose, reopenClose, autoCloseRun, getCloseReport } from '../controllers/account.controller';
 
@@ -40,8 +40,8 @@ router.get('/closes/report', requireMinRole('user'), [
     query('businessId').isUUID().withMessage('businessId inválido'),
     query('date').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('date debe ser YYYY-MM-DD'),
 ], getCloseReport);
-// Cerrar caja — admin o usuario con permiso canCloseCash
-router.post('/closes', requirePermission('canCloseCash'), [body('businessId').isUUID().withMessage('businessId inválido')], createClose);
+// Cerrar caja — solo admin y super_admin
+router.post('/closes', requireMinRole('admin'), [body('businessId').isUUID().withMessage('businessId inválido')], createClose);
 router.post('/closes/:id/reopen', requireMinRole('super_admin'), reopenClose);
 
 export default router;

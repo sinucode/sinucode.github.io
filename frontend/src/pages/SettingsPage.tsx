@@ -74,7 +74,7 @@ export default function SettingsPage() {
                     <path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
                 </svg>
             ),
-            show: user?.role === 'super_admin' || user?.role === 'admin',
+            show: user?.role === 'super_admin',        // solo super_admin gestiona usuarios
         },
         {
             id: 'audit' as Tab,
@@ -92,7 +92,7 @@ export default function SettingsPage() {
                     <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                 </svg>
             ),
-            show: user?.role === 'super_admin',
+            show: user?.role === 'super_admin' || user?.role === 'admin', // admin ve su negocio
         },
     ];
 
@@ -192,7 +192,13 @@ export default function SettingsPage() {
 
                 {activeTab === 'users' && <UserManagement />}
 
-                {activeTab === 'audit' && <AuditLogsViewer />}
+                {activeTab === 'audit' && (
+                    <AuditLogsViewer
+                        // Admin solo ve logs de su propio negocio (read-only)
+                        restrictToBusinessId={user?.role === 'admin' ? (user as any)?.assignedBusiness?.id : undefined}
+                        readOnly={user?.role === 'admin'}
+                    />
+                )}
             </div>
         </div>
     );

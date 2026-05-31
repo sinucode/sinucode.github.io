@@ -209,26 +209,6 @@ export class UserController {
             });
         }
     }
-    /**
-     * PATCH /api/users/:id/permissions
-     * Actualizar permisos granulares (solo super_admin)
-     */
-    async updatePermissions(req: Request, res: Response): Promise<void> {
-        try {
-            const result = await userService.updatePermissions(
-                req.params.id,
-                req.body.permissions || {},
-                req.user!.role as UserRole,
-                req.user!.userId,
-            );
-            res.json({ success: true, data: result });
-        } catch (error) {
-            const msg = error instanceof Error ? error.message : 'Error al actualizar permisos';
-            const status = msg.includes('Solo el Super') || msg.includes('Super Admin') ? 403
-                : msg.includes('no encontrado') ? 404 : 500;
-            res.status(status).json({ success: false, error: msg });
-        }
-    }
 }
 
 export const userController = new UserController();

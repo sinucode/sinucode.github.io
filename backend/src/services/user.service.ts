@@ -41,7 +41,6 @@ export class UserService {
                 fullName: true,
                 role: true,
                 isActive: true,
-                permissions: true,
                 createdAt: true,
                 updatedAt: true,
                 userBusinesses: {
@@ -66,7 +65,6 @@ export class UserService {
             fullName: user.fullName,
             role: user.role,
             isActive: user.isActive,
-            permissions: (user.permissions as Record<string, boolean>) || {},
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
             businessId: user.userBusinesses[0]?.business?.id || null,
@@ -468,55 +466,6 @@ export class UserService {
         };
     }
 
-    /**
-     * Actualizar permisos granulares de un usuario. Solo super_admin.
-     * permissions: { canOperateCash?, canCloseCash?, canTransferFunds? }
-     */
-    async updatePermissions(
-        targetUserId: string,
-        permissions: Record<string, boolean>,
-        requestingUserRole: UserRole,
-        requestingUserId: string
-    ) {
-        if (requestingUserRole !== 'super_admin') {
-            throw new Error('Solo el Super Admin puede modificar permisos');
-        }
-        const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
-        if (!targetUser) throw new Error('Usuario no encontrado');
-        // No permitir asignar permisos a super_admin (ya los tienen todos)
-        if (targetUser.role === 'super_admin') {
-            throw new Error('Los Super Admin ya tienen todos los permisos');
-        }
-
-        // Obtener permisos actuales y aplicar cambios (merge, no reemplazar)
-        const current = (targetUser.permissions as Record<string, boolean>) || {};
-        const updated = { ...current, ...permissions };
-
-        const result = await prisma.user.update({
-            where: { id: targetUserId },
-            data: { permissions: updated },
-            select: { id: true, email: true, fullName: true, permissions: true },
-        });
-
-        await prisma.auditLog.create({
-            data: {
-                userId: requestingUserId,
-                action: 'UPDATE_USER_PERMISSIONS',
-                description: `Actualizó permisos de '${result.fullName}': ${JSON.stringify(permissions)}`,
-                entityType: 'User',
-                entityId: targetUserId,
-                newValues: permissions as any,
-                ipAddress: '',
-            },
-        }).catch(() => {});
-
-        return {
-            userId: result.id,
-            email: result.email,
-            fullName: result.fullName,
-            permissions: result.permissions,
-        };
-    }
 }
 
 export const userService = new UserService();

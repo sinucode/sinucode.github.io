@@ -11,9 +11,9 @@ import {
 
 const router = Router();
 
-// Todas las rutas requieren autenticación y al menos rol admin
+// Gestión de usuarios: solo super_admin
 router.use(authenticate);
-router.use(requireMinRole('admin'));
+router.use(requireMinRole('super_admin'));
 
 /**
  * GET /api/users
@@ -59,10 +59,5 @@ router.post(
     userController.bulkToggleStatus.bind(userController)
 );
 
-/**
- * PATCH /api/users/:id/permissions
- * Actualizar permisos granulares (solo super_admin)
- */
-router.patch('/:id/permissions', userController.updatePermissions.bind(userController));
 
 export default router;

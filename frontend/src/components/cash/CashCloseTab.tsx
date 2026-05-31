@@ -9,7 +9,7 @@ import {
     getTodayClose, listCloses, createClose, reopenClose, getCloseReport,
     type CloseReport,
 } from '../../api/accounts.api';
-import { usePermissions } from '../../hooks/usePermissions';
+import { useAuthStore } from '../../store/authStore';
 import { invalidateMoney } from '../../utils/invalidate';
 import { generateCloseReportPdf } from '../../utils/generateCloseReportPdf';
 import { exportToCsv } from '../../utils/exportCsv';
@@ -38,8 +38,11 @@ const todayBogota = () =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
 
 export default function CashCloseTab({ businessId }: { businessId: string }) {
+    const { user } = useAuthStore();
     const queryClient = useQueryClient();
-    const { isSuper, canCloseCash } = usePermissions();
+    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const isSuper = user?.role === 'super_admin';
+    const canCloseCash = isAdmin;
 
     const todayStr = todayBogota();
     const [selectedDate, setSelectedDate] = useState(todayStr);

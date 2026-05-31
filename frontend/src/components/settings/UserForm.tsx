@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { createUser, updateUser, updateUserPermissions, type CreateUserData, type User, type UserPermissions } from '../../api/users.api';
+import { createUser, updateUser, type CreateUserData, type User } from '../../api/users.api';
 import { useQuery } from '@tanstack/react-query';
 import { getBusinesses } from '../../api/business.api';
 
@@ -11,11 +11,6 @@ interface UserFormProps {
     initialData?: User;
 }
 
-const PERMISSION_DEFS: { key: keyof UserPermissions; label: string; desc: string }[] = [
-    { key: 'canOperateCash',   label: 'Operaciones de caja',    desc: 'Puede inyectar y retirar capital desde Caja → Operaciones' },
-    { key: 'canCloseCash',     label: 'Cerrar caja diaria',     desc: 'Puede realizar el cierre manual de caja' },
-    { key: 'canTransferFunds', label: 'Transferir entre cuentas', desc: 'Puede mover saldo entre las cuentas del negocio' },
-];
 
 export default function UserForm({ onClose, onSuccess, currentUserRole, initialData }: UserFormProps) {
     const [formData, setFormData] = useState<CreateUserData>({
@@ -26,7 +21,6 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
         businessId: '',
     });
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [permissions, setPermissions] = useState<UserPermissions>({});
     const [error, setError] = useState('');
 
     const { data: businesses } = useQuery({
@@ -44,7 +38,6 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                 role: initialData.role,
                 businessId: initialData.businessId || '',
             });
-            setPermissions(initialData.permissions || {});
         }
     }, [initialData]);
 
@@ -77,12 +70,6 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
         },
     });
 
-    const permsMutation = useMutation({
-        mutationFn: (perms: UserPermissions) => updateUserPermissions(initialData!.userId, perms),
-        onError: (error: any) => {
-            setError(error.response?.data?.error || 'Error al actualizar permisos');
-        },
-    });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -133,20 +120,10 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
             };
             if (formData.password) updateData.password = formData.password;
 
-            // Actualizar datos del usuario
             updateUserMutation.mutate(updateData, {
-                onSuccess: () => {
-                    // Si es super_admin editando un user/admin, también guardar permisos
-                    if (currentUserRole === 'super_admin' && formData.role !== 'super_admin') {
-                        permsMutation.mutate(permissions, {
-                            onSuccess: () => { onSuccess(); onClose(); },
-                        });
-                    } else {
-                        onSuccess(); onClose();
-                    }
-                },
+                onSuccess: () => { onSuccess(); onClose(); },
             });
-            return; // evitar el mutate duplicado abajo
+            return;
         } else {
             createUserMutation.mutate(formData, {
                 onSuccess: () => { onSuccess(); onClose(); },
@@ -154,7 +131,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
         }
     };
 
-    const isPending = createUserMutation.isPending || updateUserMutation.isPending || permsMutation.isPending;
+    const isPending = createUserMutation.isPending || updateUserMutation.isPending;
 
     return (
         /* Overlay */
@@ -260,29 +237,6 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                             />
                         </div>
 
-                        {/* ── Permisos granulares (solo super_admin editando user/admin) ── */}
-                        {currentUserRole === 'super_admin' && initialData && formData.role !== 'super_admin' && (
-                            <div className="border border-primary-100 rounded-xl p-4 space-y-3 bg-primary-50/40">
-                                <p className="text-sm font-semibold text-gray-700">
-                                    🔑 Permisos adicionales
-                                    <span className="ml-1.5 text-xs font-normal text-gray-400">— por defecto solo lo tiene el admin</span>
-                                </p>
-                                {PERMISSION_DEFS.map(p => (
-                                    <label key={p.key} className="flex items-start gap-3 cursor-pointer group">
-                                        <input
-                                            type="checkbox"
-                                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 flex-shrink-0"
-                                            checked={!!permissions[p.key]}
-                                            onChange={e => setPermissions(prev => ({ ...prev, [p.key]: e.target.checked }))}
-                                        />
-                                        <div>
-                                            <span className="text-sm font-medium text-gray-800 group-hover:text-primary-700">{p.label}</span>
-                                            <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
-                                        </div>
-                                    </label>
-                                ))}
-                            </div>
-                        )}
                     </form>
                 </div>
 

@@ -9,12 +9,20 @@ import {
 } from '../../api/audit.api';
 import { useAuthStore } from '../../store/authStore';
 
-export default function AuditLogsViewer() {
+interface AuditLogsViewerProps {
+    /** Si se pasa, los logs se filtran por este negocio (admin ve solo el suyo) */
+    restrictToBusinessId?: string;
+    /** Si true, oculta acciones destructivas (solo lectura) */
+    readOnly?: boolean;
+}
+
+export default function AuditLogsViewer({ restrictToBusinessId, readOnly = false }: AuditLogsViewerProps) {
     const queryClient = useQueryClient();
     const { user } = useAuthStore();
     const [filters, setFilters] = useState<AuditLogFilters>({
         page: 1,
         limit: 20,
+        ...(restrictToBusinessId ? { businessId: restrictToBusinessId } : {}),
     });
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -38,6 +46,8 @@ export default function AuditLogsViewer() {
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined,
             page: 1,
+            // Mantener siempre el filtro de negocio si aplica
+            ...(restrictToBusinessId ? { businessId: restrictToBusinessId } : {}),
         });
     };
 
@@ -83,7 +93,14 @@ export default function AuditLogsViewer() {
 
     return (
         <div>
-            <h2 className="text-xl font-semibold mb-6">Logs de Auditoría</h2>
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">Logs de Auditoría</h2>
+                {readOnly && (
+                    <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full font-medium">
+                        Solo lectura — tu negocio
+                    </span>
+                )}
+            </div>
 
             {/* Filtros */}
             <div className="bg-white rounded-lg shadow p-4 mb-6">
@@ -171,7 +188,7 @@ export default function AuditLogsViewer() {
                                         <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                             IP
                                         </th>
-                                        {user?.role === 'super_admin' && (
+                                        {!readOnly && user?.role === 'super_admin' && (
                                             <th className="px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                                 Acciones
                                             </th>
@@ -206,7 +223,7 @@ export default function AuditLogsViewer() {
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-primary-600">
                                                 {log.ipAddress || 'N/A'}
                                             </td>
-                                            {user?.role === 'super_admin' && (
+                                            {!readOnly && user?.role === 'super_admin' && (
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                     <button
                                                         onClick={() => handleDelete(log.id)}

@@ -20,6 +20,7 @@ export interface AuditLogFilters {
     endDate?: Date;
     userId?: string;
     action?: string;
+    businessId?: string;
     page?: number;
     limit?: number;
 }
@@ -44,6 +45,7 @@ export const getAuditLogs = async (filters: AuditLogFilters): Promise<PaginatedA
     if (filters.endDate) params.append('endDate', filters.endDate.toISOString());
     if (filters.userId) params.append('userId', filters.userId);
     if (filters.action) params.append('action', filters.action);
+    if (filters.businessId) params.append('businessId', filters.businessId);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
 
