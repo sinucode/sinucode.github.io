@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCashFlow, injectCapital, withdrawFunds, forecastCash, transferFunds } from '../api/cash.api';
 import { listAccounts } from '../api/accounts.api';
 import { getBusinesses } from '../api/business.api';
+import { invalidateMoney } from '../utils/invalidate';
 import { useAuthStore } from '../store/authStore';
 import { useBusinessStore } from '../store/businessStore';
 import { DollarSign, TrendingUp, TrendingDown, Activity, Filter, Plus, Minus, ArrowRightLeft, Wallet, Building2, X } from 'lucide-react';
@@ -315,8 +316,7 @@ function Operations({ businessId }: { businessId: string }) {
     const mutation = useMutation({
         mutationFn: (payload: any) => type === 'capital_injection' ? injectCapital(payload) : withdrawFunds(payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-            queryClient.invalidateQueries({ queryKey: ['account-balances'] });
+            invalidateMoney(queryClient);
             setAmount('');
             setDescription('');
         },
@@ -433,8 +433,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
         mutationFn: transferFunds,
         onError: (e: any) => setError(e?.response?.data?.error || e?.response?.data?.errors?.[0]?.msg || 'No se pudo realizar la transferencia'),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-            queryClient.invalidateQueries({ queryKey: ['account-balances'] });
+            invalidateMoney(queryClient);
             onSuccess();
         },
     });

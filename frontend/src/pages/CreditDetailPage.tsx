@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getCreditDetail, simulateCredit, updateCreditSchedule, deleteCredit, CreditDetail, revertInstallment } from '../api/credits.api';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { registerPayment } from '../api/payments.api';
+import { invalidateMoney } from '../utils/invalidate';
 import { useState, useEffect } from 'react';
 import PaymentModal from '../components/credits/PaymentModal';
 import { PaymentSchedule, PaymentFrequency } from '../types';
@@ -103,7 +104,7 @@ export default function CreditDetailPage() {
     const updateMutation = useMutation({
         mutationFn: (payload: any) => updateCreditSchedule(id!, payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['credit', id] });
+            invalidateMoney(queryClient);
             setIsEditOpen(false);
             setEditError('');
         },
@@ -120,9 +121,7 @@ export default function CreditDetailPage() {
     const deleteMutation = useMutation({
         mutationFn: () => deleteCredit(id!),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['credits'] });
-            queryClient.invalidateQueries({ queryKey: ['business'] });
-            queryClient.invalidateQueries({ queryKey: ['cashMovements'] });
+            invalidateMoney(queryClient);
             navigate('/credits');
         },
         onError: (err: any) => {
@@ -910,8 +909,7 @@ function RevertInstallmentModal({
         mutationFn: (amountToRevert: number) =>
             revertInstallment(creditId, schedule.id, { amountToRevert, businessId }),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+            invalidateMoney(queryClient);
             onSuccess();
         },
         onError: (err: any) => {
@@ -997,7 +995,7 @@ function QuickPayDialog({
         mutationFn: (payload: { creditId: string; amount: number; scheduleId: string; paymentMethod: string }) =>
             registerPayment(payload),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
+            invalidateMoney(queryClient);
             onSuccess();
         },
         onError: (err: any) => {

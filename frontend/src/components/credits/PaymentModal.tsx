@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { registerPayment } from '../../api/payments.api';
 import { listAccounts } from '../../api/accounts.api';
+import { invalidateMoney } from '../../utils/invalidate';
 import { Save, X, CheckSquare, Square, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { todayBogota, isOverdueBogota, formatDate } from '../../utils/dates';
 
@@ -179,8 +180,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 });
                 successful.push(s.id);
             }
-            queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
-            queryClient.invalidateQueries({ queryKey: ['credits'] });
+            invalidateMoney(queryClient);
             onSuccess();
         } catch (err: any) {
             if (successful.length > 0) {

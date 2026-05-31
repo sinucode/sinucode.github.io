@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { useBusinessStore } from '../store/businessStore';
 import { getBusinesses } from '../api/business.api';
 import { getTitheSummary, payTithe, TitheCreditItem } from '../api/tithe.api';
+import { invalidateMoney } from '../utils/invalidate';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
 const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -50,8 +51,7 @@ export default function TithePage() {
     const payMutation = useMutation({
         mutationFn: () => payTithe(businessId, Array.from(selectedIds)),
         onSuccess: (res) => {
-            queryClient.invalidateQueries({ queryKey: ['tithe'] });
-            queryClient.invalidateQueries({ queryKey: ['cash-dashboard'] });
+            invalidateMoney(queryClient);
             setSelectedIds(new Set());
             setError('');
             alert(`Diezmo pagado: ${formatMoney(res.titheAmount)} sobre rentabilidad de ${formatMoney(res.totalProfit)} (${res.creditsPaid} créditos). Nuevo saldo en caja: ${formatMoney(res.newBalance)}`);

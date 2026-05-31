@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Wallet, Building2, Smartphone, Plus, Pencil, Trash2, X, Star } from 'lucide-react';
 import { getBusinesses } from '../../api/business.api';
 import { getAccountBalances, createAccount, updateAccount, deleteAccount, AccountBalance } from '../../api/accounts.api';
+import { invalidateMoney } from '../../utils/invalidate';
 
 const formatMoney = (v: any) => `$${Math.ceil(Number(v || 0)).toLocaleString('es-CO')}`;
 
@@ -34,11 +35,7 @@ export default function AccountsManagement() {
     });
     const accounts = balData?.accounts || [];
 
-    const invalidate = () => {
-        queryClient.invalidateQueries({ queryKey: ['account-balances'] });
-        queryClient.invalidateQueries({ queryKey: ['accounts'] });
-        queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-    };
+    const invalidate = () => invalidateMoney(queryClient);
 
     const createMut = useMutation({
         mutationFn: () => createAccount({ businessId, name: newName, type: newType }),

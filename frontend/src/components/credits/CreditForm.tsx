@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
+import { invalidateMoney } from '../../utils/invalidate';
 import { getBusinesses } from '../../api/business.api';
 import { searchClients, getClients } from '../../api/clients.api';
 import { createCredit, simulateCredit, CreditSimulation } from '../../api/credits.api';
@@ -129,7 +130,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     const createMutation = useMutation({
         mutationFn: createCredit,
         onSuccess: (credit) => {
-            queryClient.invalidateQueries({ queryKey: ['credits'] });
+            invalidateMoney(queryClient);
             onCreated(credit.id);
         },
         onError: (err: any) => {
