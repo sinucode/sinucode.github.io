@@ -30,6 +30,10 @@ model User {
   failedLoginAttempts  Int       @default(0) @map("failed_login_attempts")
   lockedUntil          DateTime? @map("locked_until")
 
+  // Permisos granulares (solo super_admin puede modificar)
+  // Estructura: { canOperateCash, canCloseCash, canTransferFunds }
+  permissions          Json      @default("{}")
+
   // Relaciones
   businessesCreated Business[]      @relation("BusinessCreator")
   userBusinesses    UserBusiness[]

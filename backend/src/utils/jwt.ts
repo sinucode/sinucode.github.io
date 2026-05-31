@@ -1,10 +1,17 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
 
+export interface UserPermissions {
+    canOperateCash?: boolean;    // Caja: Operaciones (inyectar/retirar)
+    canCloseCash?: boolean;      // Cerrar caja diaria
+    canTransferFunds?: boolean;  // Transferencia entre cuentas
+}
+
 export interface TokenPayload {
     userId: string;
     email: string;
     role: string;
+    permissions?: UserPermissions;
 }
 
 export const generateAccessToken = (payload: TokenPayload): string => {

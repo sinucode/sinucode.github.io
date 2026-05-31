@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { createUser, updateUser, type CreateUserData, type User } from '../../api/users.api';
+import { createUser, updateUser, updateUserPermissions, type CreateUserData, type User, type UserPermissions } from '../../api/users.api';
 import { useQuery } from '@tanstack/react-query';
 import { getBusinesses } from '../../api/business.api';
 
@@ -11,6 +11,12 @@ interface UserFormProps {
     initialData?: User;
 }
 
+const PERMISSION_DEFS: { key: keyof UserPermissions; label: string; desc: string }[] = [
+    { key: 'canOperateCash',   label: 'Operaciones de caja',    desc: 'Puede inyectar y retirar capital desde Caja → Operaciones' },
+    { key: 'canCloseCash',     label: 'Cerrar caja diaria',     desc: 'Puede realizar el cierre manual de caja' },
+    { key: 'canTransferFunds', label: 'Transferir entre cuentas', desc: 'Puede mover saldo entre las cuentas del negocio' },
+];
+
 export default function UserForm({ onClose, onSuccess, currentUserRole, initialData }: UserFormProps) {
     const [formData, setFormData] = useState<CreateUserData>({
         email: '',
@@ -20,6 +26,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
         businessId: '',
     });
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [permissions, setPermissions] = useState<UserPermissions>({});
     const [error, setError] = useState('');
 
     const { data: businesses } = useQuery({
@@ -33,10 +40,11 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
             setFormData({
                 email: initialData.email,
                 fullName: initialData.fullName,
-                password: '', // Password is empty for updates unless changed
+                password: '',
                 role: initialData.role,
                 businessId: initialData.businessId || '',
             });
+            setPermissions(initialData.permissions || {});
         }
     }, [initialData]);
 
@@ -56,28 +64,23 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
 
     const createUserMutation = useMutation({
         mutationFn: createUser,
-        onSuccess: () => {
-            onSuccess();
-            onClose();
-        },
         onError: (error: any) => {
             setError(error.response?.data?.error || 'Error al crear usuario');
         },
     });
 
     const updateUserMutation = useMutation({
-        mutationFn: (data: any) => {
-            return updateUser(initialData!.userId, data);
-        },
-        onSuccess: () => {
-            onSuccess();
-            onClose();
-        },
+        mutationFn: (data: any) => updateUser(initialData!.userId, data),
         onError: (error: any) => {
-            console.error('Update user error:', error);
-            console.error('Error response:', error.response);
             const errorMessage = error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Error al actualizar usuario';
             setError(errorMessage);
+        },
+    });
+
+    const permsMutation = useMutation({
+        mutationFn: (perms: UserPermissions) => updateUserPermissions(initialData!.userId, perms),
+        onError: (error: any) => {
+            setError(error.response?.data?.error || 'Error al actualizar permisos');
         },
     });
 
@@ -128,16 +131,30 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                 role: formData.role,
                 businessId: formData.businessId || '',
             };
-            if (formData.password) {
-                updateData.password = formData.password;
-            }
-            updateUserMutation.mutate(updateData);
+            if (formData.password) updateData.password = formData.password;
+
+            // Actualizar datos del usuario
+            updateUserMutation.mutate(updateData, {
+                onSuccess: () => {
+                    // Si es super_admin editando un user/admin, también guardar permisos
+                    if (currentUserRole === 'super_admin' && formData.role !== 'super_admin') {
+                        permsMutation.mutate(permissions, {
+                            onSuccess: () => { onSuccess(); onClose(); },
+                        });
+                    } else {
+                        onSuccess(); onClose();
+                    }
+                },
+            });
+            return; // evitar el mutate duplicado abajo
         } else {
-            createUserMutation.mutate(formData);
+            createUserMutation.mutate(formData, {
+                onSuccess: () => { onSuccess(); onClose(); },
+            });
         }
     };
 
-    const isPending = createUserMutation.isPending || updateUserMutation.isPending;
+    const isPending = createUserMutation.isPending || updateUserMutation.isPending || permsMutation.isPending;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -269,6 +286,30 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                             className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                     </div>
+
+                    {/* ── Permisos granulares (solo super_admin editando user/admin) ── */}
+                    {currentUserRole === 'super_admin' && initialData && formData.role !== 'super_admin' && (
+                        <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                                🔑 Permisos adicionales
+                                <span className="text-xs font-normal text-gray-400">(por defecto solo admin los tiene)</span>
+                            </p>
+                            {PERMISSION_DEFS.map(p => (
+                                <label key={p.key} className="flex items-start gap-3 cursor-pointer group">
+                                    <input
+                                        type="checkbox"
+                                        className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        checked={!!permissions[p.key]}
+                                        onChange={e => setPermissions(prev => ({ ...prev, [p.key]: e.target.checked }))}
+                                    />
+                                    <div>
+                                        <span className="text-sm font-medium text-gray-800 group-hover:text-primary-700">{p.label}</span>
+                                        <p className="text-xs text-gray-500">{p.desc}</p>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="flex gap-3 pt-4">
                         <button

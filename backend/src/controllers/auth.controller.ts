@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as authService from '../services/auth.service';
 import { verifyRefreshToken, generateAccessToken } from '../utils/jwt';
 import logger from '../utils/logger';
+import prisma from '../config/database';
 
 /**
  * POST /api/auth/login
@@ -51,7 +52,16 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
         }
 
         const decoded = verifyRefreshToken(refreshToken);
-        const newAccessToken = generateAccessToken(decoded);
+        // Re-leer permissions de DB para que los cambios tomen efecto inmediatamente
+        const dbUser = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: { permissions: true, isActive: true },
+        });
+        if (!dbUser?.isActive) throw new Error('User inactive');
+        const newAccessToken = generateAccessToken({
+            ...decoded,
+            permissions: (dbUser.permissions as any) || {},
+        });
 
         res.json({
             success: true,

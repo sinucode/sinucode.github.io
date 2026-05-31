@@ -1,12 +1,19 @@
 // Tipos de usuario y roles
 export type UserRole = 'super_admin' | 'admin' | 'user';
 
+export interface UserPermissions {
+    canOperateCash?: boolean;    // Inyectar/retirar capital (Operaciones)
+    canCloseCash?: boolean;      // Cerrar caja diaria
+    canTransferFunds?: boolean;  // Transferir entre cuentas
+}
+
 export interface User {
     id: string;
     email: string;
     fullName: string;
     role: UserRole;
     isActive: boolean;
+    permissions?: UserPermissions;
     createdAt: string;
     updatedAt: string;
     assignedBusiness?: {

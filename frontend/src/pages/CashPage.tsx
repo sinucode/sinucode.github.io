@@ -7,6 +7,7 @@ import { invalidateMoney } from '../utils/invalidate';
 import CashCloseTab from '../components/cash/CashCloseTab';
 import { useAuthStore } from '../store/authStore';
 import { useBusinessStore } from '../store/businessStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { DollarSign, TrendingUp, TrendingDown, Activity, Filter, Plus, Minus, ArrowRightLeft, Wallet, Building2, X } from 'lucide-react';
 
 const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString('es-CO')}`;
@@ -14,6 +15,7 @@ const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString
 export default function CashPage() {
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const { canOperateCash, canTransferFunds } = usePermissions();
     const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -98,7 +100,7 @@ export default function CashPage() {
                             className="bg-transparent border-none focus:ring-0 text-sm text-gray-700 p-0 w-32"
                         />
                     </div>
-                    {isAdmin && (
+                    {canTransferFunds && (
                         <button
                             onClick={() => setIsTransferModalOpen(true)}
                             className="flex items-center gap-2 px-4 py-2 bg-white text-primary-700 border border-primary-100 rounded-lg font-medium hover:bg-primary-50 transition-all shadow-sm"
@@ -131,7 +133,7 @@ export default function CashPage() {
                 <TabItem label="Movimientos" active={activeTab === 'movements'} onClick={() => setActiveTab('movements')} />
                 <TabItem label="Cierre" active={activeTab === 'cierre'} onClick={() => setActiveTab('cierre')} />
                 <TabItem label="Proyección" active={activeTab === 'summary'} onClick={() => setActiveTab('summary')} />
-                {isAdmin && (
+                {canOperateCash && (
                     <TabItem label="Operaciones" active={activeTab === 'ops'} onClick={() => setActiveTab('ops')} />
                 )}
             </div>
@@ -188,7 +190,7 @@ export default function CashPage() {
                 <MovementsTable movements={movements} isLoading={isLoading} />
             )}
 
-            {activeTab === 'ops' && isAdmin && businessId && (
+            {activeTab === 'ops' && canOperateCash && businessId && (
                 <Operations businessId={businessId} />
             )}
 

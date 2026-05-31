@@ -124,11 +124,12 @@ export const login = async (
             });
         }
 
-        // Generar tokens JWT
+        // Generar tokens JWT (incluir permisos granulares)
         const tokenPayload: TokenPayload = {
             userId: user.id,
             email: user.email,
             role: user.role,
+            permissions: (user.permissions as any) || {},
         };
 
         const accessToken = generateAccessToken(tokenPayload);

@@ -59,4 +59,10 @@ router.post(
     userController.bulkToggleStatus.bind(userController)
 );
 
+/**
+ * PATCH /api/users/:id/permissions
+ * Actualizar permisos granulares (solo super_admin)
+ */
+router.patch('/:id/permissions', userController.updatePermissions.bind(userController));
+
 export default router;

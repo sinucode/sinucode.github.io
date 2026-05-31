@@ -37,6 +37,22 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
 };
 
 /**
+ * Middleware para verificar permiso granular.
+ * admin y super_admin siempre pasan. user pasa solo si tiene el permiso en su JWT.
+ */
+export const requirePermission = (permission: string) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+        // admin y super_admin tienen todos los permisos
+        if (['admin', 'super_admin'].includes(req.user.role)) return next();
+        // Verificar permiso granular en el payload del JWT
+        const perms = (req.user.permissions as Record<string, boolean> | undefined) || {};
+        if (perms[permission]) return next();
+        return res.status(403).json({ error: 'No tienes permiso para esta acción' });
+    };
+};
+
+/**
  * Middleware para verificar rol mínimo
  */
 export const requireMinRole = (minRole: 'user' | 'admin' | 'super_admin') => {

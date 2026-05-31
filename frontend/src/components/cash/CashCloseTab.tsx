@@ -9,7 +9,7 @@ import {
     getTodayClose, listCloses, createClose, reopenClose, getCloseReport,
     type CloseReport,
 } from '../../api/accounts.api';
-import { useAuthStore } from '../../store/authStore';
+import { usePermissions } from '../../hooks/usePermissions';
 import { invalidateMoney } from '../../utils/invalidate';
 import { generateCloseReportPdf } from '../../utils/generateCloseReportPdf';
 import { exportToCsv } from '../../utils/exportCsv';
@@ -38,10 +38,8 @@ const todayBogota = () =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
 
 export default function CashCloseTab({ businessId }: { businessId: string }) {
-    const { user } = useAuthStore();
     const queryClient = useQueryClient();
-    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
-    const isSuper = user?.role === 'super_admin';
+    const { isSuper, canCloseCash } = usePermissions();
 
     const todayStr = todayBogota();
     const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -197,7 +195,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             </div>
 
             {/* ── Acciones de hoy (cerrar / reabrir) ── */}
-            {isToday && isAdmin && (
+            {isToday && canCloseCash && (
                 <div className={`rounded-xl border p-4 ${isClosed ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}>
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <p className="text-sm font-semibold text-gray-800">
@@ -208,7 +206,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                     : 'Caja ABIERTA — aún no se ha cerrado la caja de hoy.'}
                         </p>
                         <div className="flex gap-2">
-                            {!isClosed && (
+                            {!isClosed && canCloseCash && (
                                 <button
                                     onClick={() => closeMut.mutate()}
                                     disabled={closeMut.isPending}
