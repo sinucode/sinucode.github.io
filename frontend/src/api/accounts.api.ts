@@ -114,6 +114,15 @@ export interface CloseReportOperation {
     usuario: string;
 }
 
+export interface CloseReportCollector {
+    cobradorId: string;
+    cobradorNombre: string;
+    totalCobrado: number;
+    numPagos: number;
+    /** Monto por cuenta de pago: [{ cuenta: 'Efectivo', monto: 30000 }, ...] */
+    porCuenta: { cuenta: string; monto: number }[];
+}
+
 export interface CloseReport {
     meta: {
         businessId: string;
@@ -130,6 +139,7 @@ export interface CloseReport {
     };
     accounts: CloseReportAccount[];
     payments: CloseReportPayment[];
+    collectors: CloseReportCollector[];
     operations: CloseReportOperation[];
     totals: {
         totalCobrado: number;

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Lock, Unlock, Clock, AlertCircle, RotateCcw,
     FileDown, FileSpreadsheet, ChevronDown, ChevronRight,
-    TrendingUp, TrendingDown, DollarSign, Users,
+    TrendingUp, TrendingDown, DollarSign, Users, UserCheck,
 } from 'lucide-react';
 import {
     getTodayClose, listCloses, createClose, reopenClose, getCloseReport,
@@ -119,6 +119,13 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                 Diferencia: a.diferencia !== null ? String(a.diferencia) : '',
             })),
             { S: '', A: '', B: '' },
+            // Liquidación por cobrador
+            ...(r.collectors || []).map(c => ({
+                S: 'Cobrador', A: c.cobradorNombre, B: String(c.totalCobrado),
+                Pagos: String(c.numPagos),
+                PorCuenta: c.porCuenta.map(pc => `${pc.cuenta}: $${Math.ceil(pc.monto).toLocaleString('es-CO')}`).join(' | '),
+            })),
+            { S: '', A: '', B: '' },
             ...r.payments.map(p => ({
                 S: 'Pago', A: p.clienteNombre, B: String(p.monto),
                 Hora: FHour(p.hora),
@@ -144,6 +151,8 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             { header: 'Diferencia', accessor: (x: any) => x.Diferencia || '' },
             { header: 'Hora',       accessor: (x: any) => x.Hora || '' },
             { header: 'Cuota #',    accessor: (x: any) => x.Cuota || '' },
+            { header: 'Pagos',      accessor: (x: any) => x.Pagos || '' },
+            { header: 'Por cuenta', accessor: (x: any) => x.PorCuenta || '' },
             { header: 'Cobrador',   accessor: (x: any) => x.Cobrador || '' },
             { header: 'Descripción',accessor: (x: any) => x.Descripcion || '' },
             { header: 'Usuario',    accessor: (x: any) => x.Usuario || '' },
@@ -352,6 +361,80 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                             </div>
                         )}
                     </div>
+
+                    {/* ── Resumen por cobrador ── */}
+                    {report.collectors && report.collectors.length > 0 && (
+                        <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/60 flex items-center gap-2">
+                                <UserCheck size={16} className="text-amber-700" />
+                                <span className="text-sm font-bold text-amber-900">
+                                    Liquidación por cobrador ({report.collectors.length})
+                                </span>
+                                <span className="text-xs text-amber-600 ml-1">— lo que debes recibir de cada uno</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-xs text-gray-500 border-b border-gray-100">
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cobrador</th>
+                                            <th className="px-4 py-2 text-center font-semibold uppercase">Pagos</th>
+                                            {/* Columnas dinámicas por cuenta */}
+                                            {Array.from(
+                                                new Set(report.collectors.flatMap(c => c.porCuenta.map(pc => pc.cuenta)))
+                                            ).map(cuenta => (
+                                                <th key={cuenta} className="px-4 py-2 text-right font-semibold uppercase text-gray-600">{cuenta}</th>
+                                            ))}
+                                            <th className="px-4 py-2 text-right font-semibold uppercase text-primary-700">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {(() => {
+                                            const allCuentas = Array.from(
+                                                new Set(report.collectors.flatMap(c => c.porCuenta.map(pc => pc.cuenta)))
+                                            );
+                                            return report.collectors.map(c => (
+                                                <tr key={c.cobradorId} className="hover:bg-amber-50/30">
+                                                    <td className="px-4 py-3 font-semibold text-gray-900">{c.cobradorNombre}</td>
+                                                    <td className="px-4 py-3 text-center text-gray-500">{c.numPagos}</td>
+                                                    {allCuentas.map(cuenta => {
+                                                        const entry = c.porCuenta.find(pc => pc.cuenta === cuenta);
+                                                        return (
+                                                            <td key={cuenta} className="px-4 py-3 text-right text-gray-700">
+                                                                {entry ? FM(entry.monto) : <span className="text-gray-300">—</span>}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                    <td className="px-4 py-3 text-right font-bold text-primary-700">{FM(c.totalCobrado)}</td>
+                                                </tr>
+                                            ));
+                                        })()}
+                                        {/* Fila de totales */}
+                                        {report.collectors.length > 1 && (
+                                            <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
+                                                <td className="px-4 py-2.5 text-gray-900">Total</td>
+                                                <td className="px-4 py-2.5 text-center text-gray-700">
+                                                    {report.collectors.reduce((s, c) => s + c.numPagos, 0)}
+                                                </td>
+                                                {Array.from(
+                                                    new Set(report.collectors.flatMap(c => c.porCuenta.map(pc => pc.cuenta)))
+                                                ).map(cuenta => (
+                                                    <td key={cuenta} className="px-4 py-2.5 text-right text-gray-800">
+                                                        {FM(report.collectors.reduce((s, c) => {
+                                                            const e = c.porCuenta.find(pc => pc.cuenta === cuenta);
+                                                            return s + (e?.monto || 0);
+                                                        }, 0))}
+                                                    </td>
+                                                ))}
+                                                <td className="px-4 py-2.5 text-right text-primary-700">
+                                                    {FM(report.collectors.reduce((s, c) => s + c.totalCobrado, 0))}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── Operaciones del día (colapsable) ── */}
                     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

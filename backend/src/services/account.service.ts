@@ -277,7 +277,7 @@ export class AccountService {
                     credit: { include: { client: { select: { fullName: true } } } },
                     schedule:  { select: { installmentNumber: true } },
                     account:   { select: { name: true } },
-                    createdBy: { select: { fullName: true } },
+                    createdBy: { select: { id: true, fullName: true } },
                 },
                 orderBy: { createdAt: 'asc' },
             }),
@@ -346,8 +346,46 @@ export class AccountService {
             cuotaNumero:   p.schedule?.installmentNumber ?? null,
             monto:         Math.round(Number(p.amount) * 100) / 100,
             cuenta:        p.account?.name ?? '—',
+            cobradorId:    p.createdBy.id,
             cobrador:      p.createdBy.fullName,
         }));
+
+        // ─── Resumen por cobrador ───
+        // Agrupa los pagos por cobrador y por cuenta para que el admin sepa
+        // cuánto debe cuadrar / liquidar con cada empleado.
+        const collectorsMap: Record<string, {
+            cobradorId: string;
+            cobradorNombre: string;
+            totalCobrado: number;
+            numPagos: number;
+            porCuenta: Record<string, number>;  // cuenta.name → monto total
+        }> = {};
+
+        for (const p of paymentsTable) {
+            if (!collectorsMap[p.cobradorId]) {
+                collectorsMap[p.cobradorId] = {
+                    cobradorId: p.cobradorId,
+                    cobradorNombre: p.cobrador,
+                    totalCobrado: 0,
+                    numPagos: 0,
+                    porCuenta: {},
+                };
+            }
+            const entry = collectorsMap[p.cobradorId];
+            entry.totalCobrado += p.monto;
+            entry.numPagos     += 1;
+            const cuentaKey = p.cuenta;
+            entry.porCuenta[cuentaKey] = Math.round(((entry.porCuenta[cuentaKey] || 0) + p.monto) * 100) / 100;
+        }
+
+        const collectors = Object.values(collectorsMap).map(c => ({
+            cobradorId:     c.cobradorId,
+            cobradorNombre: c.cobradorNombre,
+            totalCobrado:   Math.round(c.totalCobrado * 100) / 100,
+            numPagos:       c.numPagos,
+            // Array ordenado por cuenta para facilitar renderizado
+            porCuenta: Object.entries(c.porCuenta).map(([cuenta, monto]) => ({ cuenta, monto })),
+        })).sort((a, b) => b.totalCobrado - a.totalCobrado);
 
         // Tabla de operaciones (todo excepto payment_received — esos van en pagos)
         const operationsTable = dayMovements
@@ -389,6 +427,7 @@ export class AccountService {
             },
             accounts: accountsTable,
             payments: paymentsTable,
+            collectors,
             operations: operationsTable,
             totals: {
                 totalCobrado:  Math.round(totalCobrado   * 100) / 100,

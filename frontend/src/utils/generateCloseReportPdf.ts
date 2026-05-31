@@ -34,7 +34,7 @@ function tableRow(doc: jsPDF, cols: Array<{ x: number; text: string; bold?: bool
 }
 
 export function generateCloseReportPdf(report: CloseReport) {
-    const { meta, accounts, payments, operations, totals } = report;
+    const { meta, accounts, payments, collectors, operations, totals } = report;
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
     const LM  = 14;     // margen izquierdo
@@ -163,6 +163,51 @@ export function generateCloseReportPdf(report: CloseReport) {
         y += 6;
     }
     y += 4;
+
+    // ═══ LIQUIDACIÓN POR COBRADOR ═══
+    if (collectors && collectors.length > 0) {
+        checkPage(20);
+        doc.setDrawColor(180, 180, 180);
+        doc.line(LM, y, RM, y);
+        y += 6;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`LIQUIDACIÓN POR COBRADOR`, LM, y);
+        y += 6;
+
+        const allCuentas = Array.from(new Set(collectors.flatMap(c => c.porCuenta.map(pc => pc.cuenta))));
+        // Columnas: Cobrador(50) Pagos(15) + cuentas dinámicas(25 c/u) + Total(25)
+        const colW = Math.min(25, Math.floor((RM - LM - 50 - 15 - 25) / Math.max(allCuentas.length, 1)));
+        const cC: number[] = [LM, LM + 50, LM + 65];
+        allCuentas.forEach((_, i) => cC.push((cC[2] || 0) + i * colW));
+        const totalCol = cC[2] + allCuentas.length * colW;
+
+        doc.setFontSize(7.5);
+        doc.text('Cobrador', cC[0], y);
+        doc.text('Pagos', cC[1], y);
+        allCuentas.forEach((cuenta, i) => doc.text(cuenta.slice(0, 12), cC[2] + i * colW, y));
+        doc.text('Total', totalCol, y);
+        y += 4;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(LM, y, RM, y);
+        y += 4;
+
+        doc.setFontSize(8);
+        for (const c of collectors) {
+            checkPage(7);
+            doc.setFont('helvetica', 'normal');
+            doc.text(c.cobradorNombre.slice(0, 22), cC[0], y);
+            doc.text(String(c.numPagos), cC[1], y);
+            allCuentas.forEach((cuenta, i) => {
+                const e = c.porCuenta.find(pc => pc.cuenta === cuenta);
+                doc.text(e ? FM(e.monto) : '—', cC[2] + i * colW, y);
+            });
+            doc.setFont('helvetica', 'bold');
+            doc.text(FM(c.totalCobrado), totalCol, y);
+            y += 6;
+        }
+        y += 4;
+    }
 
     // ═══ TABLA DE PAGOS ═══
     if (payments.length > 0) {
