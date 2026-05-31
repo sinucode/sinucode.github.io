@@ -418,6 +418,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
     const [fromAccountId, setFromAccountId] = useState('');
     const [toAccountId, setToAccountId] = useState('');
     const [description, setDescription] = useState('');
+    const [error, setError] = useState('');
 
     const { data: accounts } = useQuery({ queryKey: ['accounts', businessId], queryFn: () => listAccounts(businessId), enabled: !!businessId });
 
@@ -430,6 +431,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
 
     const mutation = useMutation({
         mutationFn: transferFunds,
+        onError: (e: any) => setError(e?.response?.data?.error || e?.response?.data?.errors?.[0]?.msg || 'No se pudo realizar la transferencia'),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
             queryClient.invalidateQueries({ queryKey: ['account-balances'] });
@@ -439,13 +441,12 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        mutation.mutate({
-            businessId,
-            amount: Number(amount.replace(/[^0-9]/g, '')),
-            fromAccountId,
-            toAccountId,
-            description
-        });
+        setError('');
+        const amt = Number(amount.replace(/[^0-9]/g, ''));
+        if (!fromAccountId || !toAccountId) return setError('Selecciona las cuentas de origen y destino');
+        if (fromAccountId === toAccountId) return setError('El origen y el destino deben ser diferentes');
+        if (amt <= 0) return setError('Ingresa un monto válido');
+        mutation.mutate({ businessId, amount: amt, fromAccountId, toAccountId, description });
     };
 
     return (
@@ -513,6 +514,11 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                     {fromAccountId === toAccountId && (
                         <p className="text-xs font-bold text-amber-600 bg-amber-50 p-2 rounded-lg text-center">
                             ⚠️ El origen y el destino no pueden ser el mismo
+                        </p>
+                    )}
+                    {error && (
+                        <p className="text-xs font-bold text-rose-600 bg-rose-50 p-2 rounded-lg text-center">
+                            {error}
                         </p>
                     )}
 

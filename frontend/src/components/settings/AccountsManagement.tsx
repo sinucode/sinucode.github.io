@@ -148,16 +148,17 @@ export default function AccountsManagement() {
                     account={deleting}
                     accounts={accounts}
                     pending={deleteMut.isPending}
-                    onCancel={() => setDeleting(null)}
-                    onConfirm={(mode, targetAccountId) => deleteMut.mutate({ id: deleting.id, mode, targetAccountId })}
+                    error={error}
+                    onCancel={() => { setDeleting(null); setError(''); }}
+                    onConfirm={(mode, targetAccountId) => { setError(''); deleteMut.mutate({ id: deleting.id, mode, targetAccountId }); }}
                 />
             )}
         </div>
     );
 }
 
-function DeleteAccountModal({ account, accounts, pending, onCancel, onConfirm }: {
-    account: AccountBalance; accounts: AccountBalance[]; pending: boolean;
+function DeleteAccountModal({ account, accounts, pending, error, onCancel, onConfirm }: {
+    account: AccountBalance; accounts: AccountBalance[]; pending: boolean; error?: string;
     onCancel: () => void; onConfirm: (mode?: 'transfer' | 'withdraw', target?: string) => void;
 }) {
     const hasBalance = Math.abs(account.balance) > 0.01;
@@ -198,6 +199,8 @@ function DeleteAccountModal({ account, accounts, pending, onCancel, onConfirm }:
                 ) : (
                     <p className="text-sm text-gray-500 mb-4">La cuenta no tiene saldo, se eliminará directamente.</p>
                 )}
+
+                {error && <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2 mb-3">{error}</p>}
 
                 <div className="flex gap-2">
                     <button onClick={onCancel} className="flex-1 px-4 py-2 bg-gray-100 rounded-md text-sm font-medium">Cancelar</button>
