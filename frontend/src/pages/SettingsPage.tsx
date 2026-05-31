@@ -3,10 +3,11 @@ import { useAuthStore } from '../store/authStore';
 import ChangePasswordForm from '../components/settings/ChangePasswordForm';
 import UserManagement from '../components/settings/UserManagement';
 import AuditLogsViewer from '../components/settings/AuditLogsViewer';
+import AccountsManagement from '../components/settings/AccountsManagement';
 import { useQuery } from '@tanstack/react-query';
 import { getCurrentUser } from '../api/auth';
 
-type Tab = 'profile' | 'users' | 'audit';
+type Tab = 'profile' | 'accounts' | 'users' | 'audit';
 
 export default function SettingsPage() {
     const { user, setUser } = useAuthStore((state) => ({
@@ -43,6 +44,16 @@ export default function SettingsPage() {
                     stroke="currentColor"
                 >
                     <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+            ),
+            show: true,
+        },
+        {
+            id: 'accounts' as Tab,
+            label: 'Cuentas',
+            icon: (
+                <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                    <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
                 </svg>
             ),
             show: true,
@@ -176,6 +187,8 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'accounts' && <AccountsManagement />}
 
                 {activeTab === 'users' && <UserManagement />}
 

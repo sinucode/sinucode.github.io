@@ -27,6 +27,10 @@ export const registerPaymentValidators = [
         .optional({ nullable: true, checkFalsy: true })
         .isIn(['next_cuota', 'donate'])
         .withMessage('excessAction debe ser "next_cuota" o "donate"'),
+    body('accountId')
+        .optional({ nullable: true, checkFalsy: true })
+        .isUUID()
+        .withMessage('La cuenta seleccionada es inválida'),
 ];
 
 export const listPaymentsValidators = [

@@ -163,6 +163,11 @@ export class BusinessService {
             },
         });
 
+        // Crear cuenta "Efectivo" por defecto del nuevo negocio
+        await prisma.paymentAccount.create({
+            data: { businessId: business.id, name: 'Efectivo', type: 'cash', isDefault: true, createdById: requestingUserId },
+        });
+
         // Auditar
         await prisma.auditLog.create({
             data: {

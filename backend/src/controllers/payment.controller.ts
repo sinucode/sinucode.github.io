@@ -22,6 +22,7 @@ export const registerPayment = async (req: Request, res: Response) => {
             paymentMethod: req.body.paymentMethod,
             notes: req.body.notes,
             scheduleId: req.body.scheduleId,
+            accountId: req.body.accountId,
             excessAction: req.body.excessAction,
             userId,
             role,

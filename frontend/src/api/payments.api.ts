@@ -8,6 +8,7 @@ export interface RegisterPaymentPayload {
     paymentMethod?: string;
     notes?: string;
     scheduleId?: string;
+    accountId?: string;
     excessAction?: 'next_cuota' | 'donate';
 }
 

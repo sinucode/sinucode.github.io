@@ -224,12 +224,13 @@ export class CreditService {
         paymentMethod?: string;
         notes?: string;
         scheduleId?: string;
+        accountId?: string;
         excessAction?: 'next_cuota' | 'donate';
         userId: string;
         role: UserRole;
         ipAddress?: string;
     }) {
-        const { creditId, amount, paymentDate, paymentMethod, notes, scheduleId, excessAction, userId, role, ipAddress } = params;
+        const { creditId, amount, paymentDate, paymentMethod, notes, scheduleId, accountId, excessAction, userId, role, ipAddress } = params;
         const payDate = paymentDate ? new Date(paymentDate) : new Date();
         if (payDate > new Date()) throw new Error('La fecha de pago no puede ser futura');
 
@@ -253,6 +254,18 @@ export class CreditService {
 
             if (credit.status === 'paid') throw new Error('El crédito ya está pagado');
             if (amount <= 0) throw new Error('El monto debe ser mayor a 0');
+
+            // Resolver la cuenta del pago: la enviada (si es válida y del negocio) o la cuenta por defecto
+            let effectiveAccountId: string | null = null;
+            if (accountId) {
+                const acc = await tx.paymentAccount.findFirst({ where: { id: accountId, businessId: credit.businessId, active: true }, select: { id: true } });
+                effectiveAccountId = acc?.id || null;
+            }
+            if (!effectiveAccountId) {
+                const def = await tx.paymentAccount.findFirst({ where: { businessId: credit.businessId, isDefault: true, active: true }, select: { id: true } })
+                    || await tx.paymentAccount.findFirst({ where: { businessId: credit.businessId, active: true }, select: { id: true } });
+                effectiveAccountId = def?.id || null;
+            }
 
             const currentRemaining = Number(credit.remainingBalance);
 
@@ -403,6 +416,7 @@ export class CreditService {
                     // excessAction='next_cuota' el pago se liga a la cuota target original;
                     // la siguiente cuota solo recibe el abono parcial en su paidAmount.
                     scheduleId: scheduleId || null,
+                    accountId: effectiveAccountId,
                     createdById: userId,
                 },
             });
@@ -443,6 +457,7 @@ export class CreditService {
                         description: `Interés crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total: $${totalPaid.toLocaleString('es-CO')} | Donaciones previas: $${totalDonatedAlready.toLocaleString('es-CO')}`,
                         relatedCredit: { connect: { id: credit.id } },
                         paymentMethod: 'efectivo',
+                        ...(effectiveAccountId ? { account: { connect: { id: effectiveAccountId } } } : {}),
                         createdBy: { connect: { id: userId } },
                     };
                 }
@@ -462,6 +477,7 @@ export class CreditService {
                         relatedCreditId: credit.id,
                         relatedPaymentId: payment.id,
                         paymentMethod: paymentMethod || 'efectivo',
+                        accountId: effectiveAccountId,
                         createdById: userId,
                     },
                 }),
@@ -477,6 +493,7 @@ export class CreditService {
                             relatedCreditId: credit.id,
                             relatedPaymentId: payment.id,
                             paymentMethod: paymentMethod || 'efectivo',
+                            accountId: effectiveAccountId,
                             createdById: userId,
                         },
                     })

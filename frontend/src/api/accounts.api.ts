@@ -1,0 +1,43 @@
+import api from '../lib/axios';
+
+export interface PaymentAccount {
+    id: string;
+    businessId: string;
+    name: string;
+    type: 'cash' | 'bank' | 'wallet' | string;
+    isDefault: boolean;
+    active: boolean;
+}
+
+export interface AccountBalance {
+    id: string;
+    name: string;
+    type: string;
+    isDefault: boolean;
+    balance: number;
+}
+
+export const listAccounts = async (businessId: string): Promise<PaymentAccount[]> => {
+    const res = await api.get('/accounts', { params: { businessId } });
+    return res.data;
+};
+
+export const getAccountBalances = async (businessId: string): Promise<{ accounts: AccountBalance[]; total: number }> => {
+    const res = await api.get('/accounts/balances', { params: { businessId } });
+    return res.data;
+};
+
+export const createAccount = async (payload: { businessId: string; name: string; type?: string }): Promise<PaymentAccount> => {
+    const res = await api.post('/accounts', payload);
+    return res.data;
+};
+
+export const updateAccount = async (id: string, payload: { name?: string; type?: string }): Promise<PaymentAccount> => {
+    const res = await api.put(`/accounts/${id}`, payload);
+    return res.data;
+};
+
+export const deleteAccount = async (id: string, payload?: { mode?: 'transfer' | 'withdraw'; targetAccountId?: string }) => {
+    const res = await api.delete(`/accounts/${id}`, { data: payload || {} });
+    return res.data;
+};

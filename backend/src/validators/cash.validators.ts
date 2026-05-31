@@ -23,6 +23,7 @@ export const capitalValidators = [
     body('businessId').isUUID().withMessage('businessId inválido'),
     body('amount').isFloat({ gt: 0 }).withMessage('El monto debe ser mayor a 0'),
     body('description').optional().isLength({ min: 3, max: 200 }).withMessage('Descripción inválida'),
+    body('accountId').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('Cuenta inválida'),
 ];
 
 export const flowValidators = [
@@ -38,7 +39,7 @@ export const forecastValidators = [
 export const transferValidators = [
     body('businessId').isUUID().withMessage('businessId inválido'),
     body('amount').isFloat({ gt: 0 }).withMessage('El monto debe ser mayor a 0'),
-    body('fromMethod').notEmpty().withMessage('Debe especificar el método de origen'),
-    body('toMethod').notEmpty().withMessage('Debe especificar el método de destino'),
+    body('fromAccountId').isUUID().withMessage('Debe especificar la cuenta de origen'),
+    body('toAccountId').isUUID().withMessage('Debe especificar la cuenta de destino'),
     body('description').optional().isLength({ min: 3, max: 200 }).withMessage('Descripción inválida'),
 ];

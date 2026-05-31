@@ -23,6 +23,7 @@ import setupRoutes from './routes/setup.routes';
 import whatsappRoutes from './routes/whatsapp.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import titheRoutes from './routes/tithe.routes';
+import accountRoutes from './routes/account.routes';
 import { startWhatsAppRemindersJob } from './cron/whatsappReminders.cron';
 
 const app: Application = express();
@@ -94,6 +95,7 @@ app.use('/api/setup', setupRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/tithe', titheRoutes);
+app.use('/api/accounts', accountRoutes);
 
 /**
  * MANEJO DE ERRORES

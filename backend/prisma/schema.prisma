@@ -65,10 +65,11 @@ model Business {
   createdBy      User             @relation("BusinessCreator", fields: [createdById], references: [id])
   userBusinesses UserBusiness[]
   clients        Client[]
-  credits        Credit[]
-  cashMovements  CashMovement[]
-  auditLogs      AuditLog[]
-  tithePayments  TithePayment[]
+  credits         Credit[]
+  cashMovements   CashMovement[]
+  auditLogs       AuditLog[]
+  tithePayments   TithePayment[]
+  paymentAccounts PaymentAccount[]
 
   @@map("businesses")
 }
@@ -224,6 +225,28 @@ enum PaymentScheduleStatus {
   @@map("payment_schedule_status")
 }
 
+// CUENTAS / MÉTODOS DE PAGO (por negocio)
+model PaymentAccount {
+  id          String   @id @default(uuid())
+  businessId  String   @map("business_id")
+  name        String
+  type        String   @default("bank") // 'cash' | 'bank' | 'wallet'
+  isDefault   Boolean  @default(false) @map("is_default")
+  active      Boolean  @default(true)
+  createdById String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  cashMovements CashMovement[]
+  payments      Payment[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@map("payment_accounts")
+}
+
 // PAGOS REALIZADOS
 model Payment {
   id                    String   @id @default(uuid())
@@ -236,18 +259,21 @@ model Payment {
   paymentMethod         String?  @map("payment_method")
   notes                 String?
   scheduleId            String?  @map("schedule_id")
+  accountId             String?  @map("account_id")
   createdById           String   @map("created_by")
   createdAt             DateTime @default(now()) @map("created_at")
 
   // Relaciones
   credit        Credit           @relation(fields: [creditId], references: [id], onDelete: Cascade)
   schedule      PaymentSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  account       PaymentAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
   createdBy     User             @relation("PaymentCreator", fields: [createdById], references: [id])
   cashMovements CashMovement[]
 
   @@index([creditId])
   @@index([scheduleId])
   @@index([paymentDate])
+  @@index([accountId])
   @@map("payments")
 }
 
@@ -262,19 +288,22 @@ model CashMovement {
   relatedCreditId String?          @map("related_credit_id")
   relatedPaymentId String?         @map("related_payment_id")
   paymentMethod   String           @default("efectivo") @map("payment_method")
+  accountId       String?          @map("account_id")
   createdById     String           @map("created_by")
   createdAt       DateTime         @default(now()) @map("created_at")
 
   // Relaciones
-  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  relatedCredit  Credit?  @relation(fields: [relatedCreditId], references: [id], onDelete: SetNull)
-  relatedPayment Payment? @relation(fields: [relatedPaymentId], references: [id], onDelete: SetNull)
-  createdBy      User     @relation("CashMovementCreator", fields: [createdById], references: [id])
+  business       Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  relatedCredit  Credit?         @relation(fields: [relatedCreditId], references: [id], onDelete: SetNull)
+  relatedPayment Payment?        @relation(fields: [relatedPaymentId], references: [id], onDelete: SetNull)
+  account        PaymentAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  createdBy      User            @relation("CashMovementCreator", fields: [createdById], references: [id])
 
   @@index([businessId])
   @@index([relatedCreditId])
   @@index([createdAt])
   @@index([businessId, createdAt])
+  @@index([accountId])
   @@map("cash_movements")
 }
 

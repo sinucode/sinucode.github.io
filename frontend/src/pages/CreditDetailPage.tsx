@@ -600,6 +600,7 @@ export default function CreditDetailPage() {
             {isPaymentOpen && (
                 <PaymentModal
                     creditId={credit.id}
+                    businessId={credit.businessId}
                     maxAmount={Number(credit.remainingBalance)}
                     remainingBalance={Number(credit.remainingBalance)}
                     paymentSchedule={credit.paymentSchedule}

@@ -1,5 +1,6 @@
 import { Prisma, UserRole, CashMovementType } from '@prisma/client';
 import prisma from '../config/database';
+import { accountService } from './account.service';
 
 interface CashMovementInput {
     businessId: string;
@@ -9,6 +10,7 @@ interface CashMovementInput {
     relatedCreditId?: string;
     relatedPaymentId?: string;
     paymentMethod?: string;
+    accountId?: string;
 }
 
 interface CashFlowFilters {
@@ -48,6 +50,17 @@ export class CashService {
         return ['payment_received', 'capital_injection', 'interest_earned'].includes(type);
     }
 
+    /** Resuelve la cuenta a usar: la dada (si es válida y del negocio) o la cuenta por defecto. */
+    private async resolveAccountId(businessId: string, accountId?: string): Promise<string | null> {
+        if (accountId) {
+            const acc = await prisma.paymentAccount.findFirst({ where: { id: accountId, businessId, active: true }, select: { id: true } });
+            if (acc) return acc.id;
+        }
+        const def = await prisma.paymentAccount.findFirst({ where: { businessId, isDefault: true, active: true }, select: { id: true } })
+            || await prisma.paymentAccount.findFirst({ where: { businessId, active: true }, select: { id: true } });
+        return def?.id || null;
+    }
+
     async recordMovement(data: CashMovementInput, userId: string, userRole: UserRole) {
         await this.validateAccess(data.businessId, userId, userRole);
 
@@ -67,6 +80,8 @@ export class CashService {
             throw new Error(`Fondos insuficientes. Saldo actual: ${business.currentBalance}, operación: ${data.amount}`);
         }
 
+        const effectiveAccountId = await this.resolveAccountId(data.businessId, data.accountId);
+
         return prisma.$transaction(async (tx) => {
             const mov = await tx.cashMovement.create({
                 data: {
@@ -78,6 +93,7 @@ export class CashService {
                     relatedCreditId: data.relatedCreditId,
                     relatedPaymentId: data.relatedPaymentId,
                     paymentMethod: data.paymentMethod || 'efectivo',
+                    accountId: effectiveAccountId,
                     createdById: userId,
                 },
             });
@@ -102,42 +118,50 @@ export class CashService {
         });
     }
 
-    async injectCapital(businessId: string, amount: number, description: string | undefined, userId: string, role: UserRole) {
+    async injectCapital(businessId: string, amount: number, description: string | undefined, userId: string, role: UserRole, accountId?: string) {
         if (!['admin', 'super_admin'].includes(role)) throw new Error('Solo administradores pueden inyectar capital');
         return this.recordMovement({
             businessId,
             type: 'capital_injection',
             amount,
             description: description || 'Inyección de capital',
-            paymentMethod: 'efectivo'
+            paymentMethod: 'efectivo',
+            accountId,
         }, userId, role);
     }
 
-    async withdrawFunds(businessId: string, amount: number, description: string | undefined, userId: string, role: UserRole) {
+    async withdrawFunds(businessId: string, amount: number, description: string | undefined, userId: string, role: UserRole, accountId?: string) {
         if (!['admin', 'super_admin'].includes(role)) throw new Error('Solo administradores pueden retirar fondos');
         return this.recordMovement({
             businessId,
             type: 'withdrawal',
             amount,
             description: description || 'Retiro de fondos',
-            paymentMethod: 'efectivo'
+            paymentMethod: 'efectivo',
+            accountId,
         }, userId, role);
     }
 
     async createInternalTransfer(params: {
         businessId: string;
-        fromMethod: string;
-        toMethod: string;
+        fromAccountId: string;
+        toAccountId: string;
         amount: number;
         description?: string;
         userId: string;
         role: UserRole;
     }) {
-        const { businessId, fromMethod, toMethod, amount, description, userId, role } = params;
+        const { businessId, fromAccountId, toAccountId, amount, description, userId, role } = params;
         await this.validateAccess(businessId, userId, role);
 
-        if (fromMethod === toMethod) throw new Error('El origen y destino deben ser diferentes');
+        if (fromAccountId === toAccountId) throw new Error('El origen y destino deben ser diferentes');
         if (amount <= 0) throw new Error('El monto debe ser mayor a 0');
+
+        const [from, to] = await Promise.all([
+            prisma.paymentAccount.findFirst({ where: { id: fromAccountId, businessId, active: true } }),
+            prisma.paymentAccount.findFirst({ where: { id: toAccountId, businessId, active: true } }),
+        ]);
+        if (!from || !to) throw new Error('Cuenta de origen o destino no válida');
 
         return prisma.$transaction(async (tx) => {
             const business = await tx.business.findUnique({
@@ -146,14 +170,16 @@ export class CashService {
             });
             if (!business) throw new Error('Negocio no encontrado');
 
+            const desc = description || `Transferencia interna de ${from.name} a ${to.name}`;
             const movOut = await tx.cashMovement.create({
                 data: {
                     businessId,
                     type: 'internal_transfer',
                     amount: new Prisma.Decimal(-amount),
                     balanceAfter: business.currentBalance,
-                    description: description || `Transferencia interna de ${fromMethod} a ${toMethod}`,
-                    paymentMethod: fromMethod,
+                    description: desc,
+                    paymentMethod: from.name,
+                    accountId: from.id,
                     createdById: userId,
                 },
             });
@@ -164,8 +190,9 @@ export class CashService {
                     type: 'internal_transfer',
                     amount: new Prisma.Decimal(amount),
                     balanceAfter: business.currentBalance,
-                    description: description || `Transferencia interna de ${fromMethod} a ${toMethod}`,
-                    paymentMethod: toMethod,
+                    description: desc,
+                    paymentMethod: to.name,
+                    accountId: to.id,
                     createdById: userId,
                 },
             });
@@ -177,7 +204,7 @@ export class CashService {
                     action: 'internal_transfer_recorded',
                     entityType: 'cash_movement',
                     entityId: `${movOut.id},${movIn.id}`,
-                    newValues: { fromMethod, toMethod, amount },
+                    newValues: { fromAccount: from.name, toAccount: to.name, amount },
                 },
             });
 
@@ -265,13 +292,17 @@ export class CashService {
             { totalIncome: 0, totalExpenses: 0, net: 0 }
         );
 
+        // Saldos por cuenta (nuevo sistema multi-cuenta). Se mantiene cash/bank por compatibilidad.
+        const { accounts } = await accountService.getBalances(filters.businessId, userId, role);
+
         return {
             movements: filteredMovements,
             summary: periodSummary,
             balances: {
                 total: declaredTotal,
                 cash: cashBalance,
-                bank: bankBalance
+                bank: bankBalance,
+                accounts,
             }
         };
     }

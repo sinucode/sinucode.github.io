@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCashFlow, injectCapital, withdrawFunds, forecastCash, transferFunds } from '../api/cash.api';
+import { listAccounts } from '../api/accounts.api';
 import { getBusinesses } from '../api/business.api';
 import { useAuthStore } from '../store/authStore';
 import { useBusinessStore } from '../store/businessStore';
@@ -107,10 +108,21 @@ export default function CashPage() {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <SummaryCard title="Saldo Total" value={formatMoney(balances.total)} icon={<DollarSign size={20} />} variant="primary" isLoading={isLoading} />
-                <SummaryCard title="En Efectivo" value={formatMoney(balances.cash)} icon={<Wallet size={20} />} variant="success" isLoading={isLoading} />
-                <SummaryCard title="En Bancos/Otros" value={formatMoney(balances.bank)} icon={<Building2 size={20} />} variant="warning" isLoading={isLoading} />
+                {(balances.accounts && balances.accounts.length > 0
+                    ? balances.accounts
+                    : [{ id: 'cash', name: 'Efectivo', type: 'cash', balance: balances.cash }, { id: 'bank', name: 'Bancos/Otros', type: 'bank', balance: balances.bank }]
+                ).map((a: any) => (
+                    <SummaryCard
+                        key={a.id}
+                        title={a.name}
+                        value={formatMoney(a.balance)}
+                        icon={a.type === 'cash' ? <Wallet size={20} /> : <Building2 size={20} />}
+                        variant={a.type === 'cash' ? 'success' : 'warning'}
+                        isLoading={isLoading}
+                    />
+                ))}
             </div>
 
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
@@ -289,12 +301,22 @@ function Operations({ businessId }: { businessId: string }) {
     const queryClient = useQueryClient();
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
+    const [accountId, setAccountId] = useState('');
     const [type, setType] = useState<'capital_injection' | 'withdrawal'>('capital_injection');
+
+    const { data: accounts } = useQuery({ queryKey: ['accounts', businessId], queryFn: () => listAccounts(businessId), enabled: !!businessId });
+
+    useEffect(() => {
+        if (accounts && accounts.length > 0 && !accountId) {
+            setAccountId((accounts.find(a => a.isDefault) || accounts[0]).id);
+        }
+    }, [accounts]);
 
     const mutation = useMutation({
         mutationFn: (payload: any) => type === 'capital_injection' ? injectCapital(payload) : withdrawFunds(payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+            queryClient.invalidateQueries({ queryKey: ['account-balances'] });
             setAmount('');
             setDescription('');
         },
@@ -328,10 +350,21 @@ function Operations({ businessId }: { businessId: string }) {
                         businessId,
                         amount: Number(amount.replace(/[^0-9]/g, '')),
                         description,
+                        accountId: accountId || undefined,
                     });
                 }}
             >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">Cuenta</label>
+                        <select
+                            value={accountId}
+                            onChange={(e) => setAccountId(e.target.value)}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 font-medium"
+                        >
+                            {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                    </div>
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">Monto</label>
                         <input
@@ -382,14 +415,24 @@ function Operations({ businessId }: { businessId: string }) {
 function TransferModal({ businessId, onClose, onSuccess }: { businessId: string; onClose: () => void; onSuccess: () => void }) {
     const queryClient = useQueryClient();
     const [amount, setAmount] = useState('');
-    const [fromMethod, setFromMethod] = useState('efectivo');
-    const [toMethod, setToMethod] = useState('transferencia');
+    const [fromAccountId, setFromAccountId] = useState('');
+    const [toAccountId, setToAccountId] = useState('');
     const [description, setDescription] = useState('');
+
+    const { data: accounts } = useQuery({ queryKey: ['accounts', businessId], queryFn: () => listAccounts(businessId), enabled: !!businessId });
+
+    useEffect(() => {
+        if (accounts && accounts.length >= 1) {
+            if (!fromAccountId) setFromAccountId((accounts.find(a => a.isDefault) || accounts[0]).id);
+            if (!toAccountId) { const other = accounts.find(a => a.id !== (accounts.find(x => x.isDefault) || accounts[0]).id); if (other) setToAccountId(other.id); }
+        }
+    }, [accounts]);
 
     const mutation = useMutation({
         mutationFn: transferFunds,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
+            queryClient.invalidateQueries({ queryKey: ['account-balances'] });
             onSuccess();
         },
     });
@@ -399,8 +442,8 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
         mutation.mutate({
             businessId,
             amount: Number(amount.replace(/[^0-9]/g, '')),
-            fromMethod,
-            toMethod,
+            fromAccountId,
+            toAccountId,
             description
         });
     };
@@ -422,23 +465,21 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Origen</label>
                             <select
-                                value={fromMethod}
-                                onChange={(e) => setFromMethod(e.target.value)}
+                                value={fromAccountId}
+                                onChange={(e) => setFromAccountId(e.target.value)}
                                 className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm font-bold"
                             >
-                                <option value="efectivo">💳 Efectivo</option>
-                                <option value="transferencia">🏦 Banco/Transf.</option>
+                                {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                         </div>
                         <div className="space-y-1.5 text-right">
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Destino</label>
                             <select
-                                value={toMethod}
-                                onChange={(e) => setToMethod(e.target.value)}
+                                value={toAccountId}
+                                onChange={(e) => setToAccountId(e.target.value)}
                                 className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm font-bold"
                             >
-                                <option value="efectivo">💳 Efectivo</option>
-                                <option value="transferencia">🏦 Banco/Transf.</option>
+                                {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                         </div>
                     </div>
@@ -469,7 +510,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                         />
                     </div>
 
-                    {fromMethod === toMethod && (
+                    {fromAccountId === toAccountId && (
                         <p className="text-xs font-bold text-amber-600 bg-amber-50 p-2 rounded-lg text-center">
                             ⚠️ El origen y el destino no pueden ser el mismo
                         </p>
@@ -485,7 +526,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                         </button>
                         <button
                             type="submit"
-                            disabled={mutation.isPending || fromMethod === toMethod || !amount}
+                            disabled={mutation.isPending || fromAccountId === toAccountId || !amount}
                             className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 shadow-lg shadow-primary-200 disabled:opacity-50 transition-all"
                         >
                             {mutation.isPending ? 'Procesando...' : 'Confirmar'}

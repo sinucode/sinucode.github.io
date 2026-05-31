@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { registerPayment } from '../../api/payments.api';
+import { listAccounts } from '../../api/accounts.api';
 import { Save, X, CheckSquare, Square, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { todayBogota, isOverdueBogota, formatDate } from '../../utils/dates';
 
 interface PaymentModalProps {
     creditId: string;
+    businessId?: string;
     onClose: () => void;
     onSuccess: () => void;
     maxAmount?: number;
@@ -19,6 +21,7 @@ const parseMoney = (str: string) => Number(str.replace(/[^0-9]/g, '')) || 0;
 
 const PaymentModal: React.FC<PaymentModalProps> = ({
     creditId,
+    businessId,
     onClose,
     onSuccess,
     remainingBalance,
@@ -28,8 +31,23 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     const [formData, setFormData] = useState({
         paymentDate: todayBogota(),
         paymentMethod: 'efectivo',
+        accountId: '',
         notes: '',
     });
+
+    // Cargar cuentas del negocio para elegir dónde entra el dinero
+    const { data: accounts } = useQuery({
+        queryKey: ['accounts', businessId],
+        queryFn: () => listAccounts(businessId!),
+        enabled: !!businessId,
+    });
+
+    useEffect(() => {
+        if (accounts && accounts.length > 0 && !formData.accountId) {
+            const def = accounts.find(a => a.isDefault) || accounts[0];
+            setFormData((prev) => ({ ...prev, accountId: def.id, paymentMethod: def.name }));
+        }
+    }, [accounts]);
     const [error, setError] = useState('');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -154,6 +172,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                     amount,
                     paymentDate: formData.paymentDate,
                     paymentMethod: formData.paymentMethod || undefined,
+                    accountId: formData.accountId || undefined,
                     notes: formData.notes || undefined,
                     scheduleId: s.id,
                     excessAction: tieneExceso ? excessAction : undefined,
@@ -363,30 +382,34 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                             />
                         </div>
 
-                        {/* ── Método de pago ── */}
+                        {/* ── Cuenta / método de pago ── */}
                         <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">Método de pago</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {['efectivo', 'transferencia', 'cheque', 'otro'].map((m) => (
-                                    <label
-                                        key={m}
-                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer transition text-sm font-medium capitalize
-                                            ${formData.paymentMethod === m
-                                                ? 'bg-primary-50 border-primary-400 text-primary-800'
-                                                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="paymentMethod"
-                                            value={m}
-                                            checked={formData.paymentMethod === m}
-                                            onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                            className="sr-only"
-                                        />
-                                        {m}
-                                    </label>
-                                ))}
-                            </div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">¿En qué cuenta entra el pago?</label>
+                            {accounts && accounts.length > 0 ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                    {accounts.map((a) => (
+                                        <label
+                                            key={a.id}
+                                            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer transition text-sm font-medium
+                                                ${formData.accountId === a.id
+                                                    ? 'bg-primary-50 border-primary-400 text-primary-800'
+                                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="accountId"
+                                                value={a.id}
+                                                checked={formData.accountId === a.id}
+                                                onChange={() => setFormData({ ...formData, accountId: a.id, paymentMethod: a.name })}
+                                                className="sr-only"
+                                            />
+                                            {a.name}
+                                        </label>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-gray-400">Cargando cuentas...</p>
+                            )}
                         </div>
 
                         {/* ── Notas ── */}

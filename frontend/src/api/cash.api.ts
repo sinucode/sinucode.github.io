@@ -10,12 +10,12 @@ export interface CashMovementInput {
 }
 
 
-export const injectCapital = async (payload: { businessId: string; amount: number; description?: string }) => {
+export const injectCapital = async (payload: { businessId: string; amount: number; description?: string; accountId?: string }) => {
     const res = await api.post('/cash/inject', payload);
     return res.data;
 };
 
-export const withdrawFunds = async (payload: { businessId: string; amount: number; description?: string }) => {
+export const withdrawFunds = async (payload: { businessId: string; amount: number; description?: string; accountId?: string }) => {
     const res = await api.post('/cash/withdraw', payload);
     return res.data;
 };
@@ -33,11 +33,12 @@ export const getCashFlow = async (params: { businessId: string; startDate?: stri
             total: number;
             cash: number;
             bank: number;
+            accounts?: { id: string; name: string; type: string; isDefault: boolean; balance: number }[];
         };
     };
 };
 
-export const transferFunds = async (payload: { businessId: string; amount: number; fromMethod: string; toMethod: string; description?: string }) => {
+export const transferFunds = async (payload: { businessId: string; amount: number; fromAccountId: string; toAccountId: string; description?: string }) => {
     const res = await api.post('/cash/transfer', payload);
     return res.data;
 };

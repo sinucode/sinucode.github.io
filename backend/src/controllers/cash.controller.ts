@@ -39,7 +39,8 @@ export const injectCapital = async (req: Request, res: Response) => {
             Number(req.body.amount),
             req.body.description,
             userId,
-            role
+            role,
+            req.body.accountId
         );
         return res.status(201).json(movement);
     } catch (error: any) {
@@ -58,7 +59,8 @@ export const withdrawFunds = async (req: Request, res: Response) => {
             Number(req.body.amount),
             req.body.description,
             userId,
-            role
+            role,
+            req.body.accountId
         );
         return res.status(201).json(movement);
     } catch (error: any) {
@@ -75,8 +77,8 @@ export const createInternalTransfer = async (req: Request, res: Response) => {
         const role = req.user!.role as UserRole;
         const result = await cashService.createInternalTransfer({
             businessId: req.body.businessId,
-            fromMethod: req.body.fromMethod,
-            toMethod: req.body.toMethod,
+            fromAccountId: req.body.fromAccountId,
+            toAccountId: req.body.toAccountId,
             amount: Number(req.body.amount),
             description: req.body.description,
             userId,
