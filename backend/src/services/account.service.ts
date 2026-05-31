@@ -155,6 +155,96 @@ export class AccountService {
             return { success: true, saldoResuelto: saldo };
         });
     }
+
+    // ───────────────────────────── CIERRE DIARIO ─────────────────────────────
+
+    /** Inicio del día (00:00 America/Bogota) para una fecha dada. */
+    private dayStart(date: Date): Date {
+        const dayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(date);
+        return new Date(`${dayStr}T00:00:00.000-05:00`);
+    }
+
+    /** Lanza error si el día (de la fecha dada) está cerrado para el negocio. */
+    async assertDayOpen(businessId: string, date: Date): Promise<void> {
+        const start = this.dayStart(date);
+        const end = new Date(start.getTime() + 24 * 3600 * 1000);
+        const close = await prisma.cashClose.findFirst({
+            where: { businessId, status: 'closed', closeDate: { gte: start, lt: end } },
+            select: { id: true },
+        });
+        if (close) {
+            const dayStr = new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+            throw new Error(`El día ${dayStr} está cerrado. Un super admin debe reabrir el cierre para registrar este movimiento.`);
+        }
+    }
+
+    /** Cierre del día de hoy si existe (para mostrar estado). */
+    async getTodayClose(businessId: string, userId: string, role: UserRole) {
+        await this.validateAccess(businessId, userId, role);
+        const start = this.dayStart(new Date());
+        const end = new Date(start.getTime() + 24 * 3600 * 1000);
+        return prisma.cashClose.findFirst({ where: { businessId, closeDate: { gte: start, lt: end } } });
+    }
+
+    /** Crea (o re-snapshot) el cierre del día. Admin/super. mode='manual'|'auto'. */
+    async createClose(businessId: string, opts: { countedBalances?: Record<string, number>; notes?: string }, userId: string, role: UserRole, mode: 'manual' | 'auto' = 'manual') {
+        if (mode === 'manual' && !['admin', 'super_admin'].includes(role)) throw new Error('Solo administradores pueden cerrar la caja');
+        await this.validateAccess(businessId, userId, role);
+
+        const { accounts, total } = await this.getBalances(businessId, userId, role);
+        const closeDate = this.dayStart(new Date());
+        const accountBalances = accounts.map(a => {
+            const counted = opts.countedBalances?.[a.id];
+            return {
+                accountId: a.id, name: a.name, systemBalance: a.balance,
+                countedBalance: counted ?? null,
+                difference: counted != null ? Math.round((counted - a.balance) * 100) / 100 : null,
+            };
+        });
+
+        return prisma.cashClose.upsert({
+            where: { businessId_closeDate: { businessId, closeDate } },
+            create: { businessId, closeDate, status: 'closed', closeMode: mode, totalBalance: new Prisma.Decimal(total), accountBalances: accountBalances as any, notes: opts.notes, closedById: userId },
+            update: { status: 'closed', closeMode: mode, totalBalance: new Prisma.Decimal(total), accountBalances: accountBalances as any, notes: opts.notes, closedById: userId, closedAt: new Date(), reopenedById: null, reopenedAt: null, reopenReason: null },
+        });
+    }
+
+    /** Reabre un cierre. Solo super_admin. */
+    async reopenClose(closeId: string, reason: string, userId: string, role: UserRole) {
+        if (role !== 'super_admin') throw new Error('Solo el Super Admin puede reabrir un cierre');
+        const close = await prisma.cashClose.findUnique({ where: { id: closeId } });
+        if (!close) throw new Error('Cierre no encontrado');
+        const updated = await prisma.cashClose.update({
+            where: { id: closeId },
+            data: { status: 'reopened', reopenedById: userId, reopenedAt: new Date(), reopenReason: reason || null },
+        });
+        await prisma.auditLog.create({ data: { userId, businessId: close.businessId, action: 'REOPEN_CASH_CLOSE', description: `Reabrió el cierre del ${close.closeDate.toISOString().slice(0, 10)}. Motivo: ${reason || '—'}`, entityType: 'CashClose', entityId: closeId } }).catch(() => { });
+        return updated;
+    }
+
+    async listCloses(businessId: string, userId: string, role: UserRole) {
+        await this.validateAccess(businessId, userId, role);
+        return prisma.cashClose.findMany({ where: { businessId }, orderBy: { closeDate: 'desc' }, take: 90 });
+    }
+
+    /** Cierre automático de todos los negocios con actividad del día y sin cierre. Para el cron. */
+    async autoCloseAll() {
+        const start = this.dayStart(new Date());
+        const end = new Date(start.getTime() + 24 * 3600 * 1000);
+        const businesses = await prisma.business.findMany({ select: { id: true, name: true, createdById: true } });
+        let closed = 0;
+        for (const b of businesses) {
+            const already = await prisma.cashClose.findFirst({ where: { businessId: b.id, closeDate: { gte: start, lt: end } }, select: { id: true } });
+            if (already) continue;
+            const activity = await prisma.cashMovement.count({ where: { businessId: b.id, createdAt: { gte: start, lt: end } } });
+            if (activity === 0) continue;
+            try {
+                await this.createClose(b.id, {}, b.createdById, 'super_admin', 'auto');
+                closed++;
+            } catch { /* continuar con los demás */ }
+        }
+        return { closed, total: businesses.length };
+    }
 }
 
 export const accountService = new AccountService();

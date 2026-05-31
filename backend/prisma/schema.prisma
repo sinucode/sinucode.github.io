@@ -70,6 +70,7 @@ model Business {
   auditLogs       AuditLog[]
   tithePayments   TithePayment[]
   paymentAccounts PaymentAccount[]
+  cashCloses      CashClose[]
 
   @@map("businesses")
 }
@@ -192,6 +193,30 @@ enum CreditStatus {
   cancelled
 
   @@map("credit_status")
+}
+
+// CIERRE DIARIO DE CAJA
+model CashClose {
+  id              String    @id @default(uuid())
+  businessId      String    @map("business_id")
+  closeDate       DateTime  @map("close_date")
+  status          String    @default("closed") // 'closed' | 'reopened'
+  closeMode       String    @map("close_mode") // 'manual' | 'auto'
+  totalBalance    Decimal   @map("total_balance") @db.Decimal(15, 2)
+  accountBalances Json      @map("account_balances")
+  notes           String?
+  closedById      String    @map("closed_by")
+  closedAt        DateTime  @default(now()) @map("closed_at")
+  reopenedById    String?   @map("reopened_by")
+  reopenedAt      DateTime? @map("reopened_at")
+  reopenReason    String?   @map("reopen_reason")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, closeDate])
+  @@index([businessId, closeDate])
+  @@map("cash_closes")
 }
 
 // PLAN DE PAGOS (CUOTAS PROGRAMADAS)

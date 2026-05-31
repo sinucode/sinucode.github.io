@@ -2,12 +2,17 @@ import { Router } from 'express';
 import { body, query } from 'express-validator';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireMinRole } from '../middleware/roleHierarchy.middleware';
-import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount } from '../controllers/account.controller';
+import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount, getTodayClose, listCloses, createClose, reopenClose, autoCloseRun } from '../controllers/account.controller';
 
 const router = Router();
-router.use(authenticate);
 
 const accountTypes = ['cash', 'bank', 'wallet'];
+
+// Cron de cierre automático — SIN authenticate (se protege con secreto). Vercel Cron usa GET.
+router.get('/closes/auto-run', autoCloseRun);
+router.post('/closes/auto-run', autoCloseRun);
+
+router.use(authenticate);
 
 router.get('/', requireMinRole('user'), [query('businessId').isUUID().withMessage('businessId inválido')], listAccounts);
 router.get('/balances', requireMinRole('user'), [query('businessId').isUUID().withMessage('businessId inválido')], getAccountBalances);
@@ -27,5 +32,11 @@ router.delete('/:id', requireMinRole('user'), [
     body('mode').optional().isIn(['transfer', 'withdraw']).withMessage('Modo inválido'),
     body('targetAccountId').optional().isUUID().withMessage('Cuenta destino inválida'),
 ], deleteAccount);
+
+// Cierre diario
+router.get('/closes/today', requireMinRole('user'), [query('businessId').isUUID()], getTodayClose);
+router.get('/closes', requireMinRole('user'), [query('businessId').isUUID()], listCloses);
+router.post('/closes', requireMinRole('admin'), [body('businessId').isUUID().withMessage('businessId inválido')], createClose);
+router.post('/closes/:id/reopen', requireMinRole('super_admin'), reopenClose);
 
 export default router;

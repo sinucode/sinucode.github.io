@@ -63,6 +63,7 @@ export class CashService {
 
     async recordMovement(data: CashMovementInput, userId: string, userRole: UserRole) {
         await this.validateAccess(data.businessId, userId, userRole);
+        await accountService.assertDayOpen(data.businessId, new Date());
 
         const business = await prisma.business.findUnique({
             where: { id: data.businessId },
@@ -153,6 +154,7 @@ export class CashService {
     }) {
         const { businessId, fromAccountId, toAccountId, amount, description, userId, role } = params;
         await this.validateAccess(businessId, userId, role);
+        await accountService.assertDayOpen(businessId, new Date());
 
         if (fromAccountId === toAccountId) throw new Error('El origen y destino deben ser diferentes');
         if (amount <= 0) throw new Error('El monto debe ser mayor a 0');

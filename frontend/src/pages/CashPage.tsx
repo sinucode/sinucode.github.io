@@ -4,6 +4,7 @@ import { getCashFlow, injectCapital, withdrawFunds, forecastCash, transferFunds 
 import { listAccounts } from '../api/accounts.api';
 import { getBusinesses } from '../api/business.api';
 import { invalidateMoney } from '../utils/invalidate';
+import CashCloseTab from '../components/cash/CashCloseTab';
 import { useAuthStore } from '../store/authStore';
 import { useBusinessStore } from '../store/businessStore';
 import { DollarSign, TrendingUp, TrendingDown, Activity, Filter, Plus, Minus, ArrowRightLeft, Wallet, Building2, X } from 'lucide-react';
@@ -16,7 +17,7 @@ export default function CashPage() {
     const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [activeTab, setActiveTab] = useState<'movements' | 'summary' | 'ops'>('movements');
+    const [activeTab, setActiveTab] = useState<'movements' | 'summary' | 'ops' | 'cierre'>('movements');
     const [targetDate, setTargetDate] = useState('');
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
@@ -128,6 +129,7 @@ export default function CashPage() {
 
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 <TabItem label="Movimientos" active={activeTab === 'movements'} onClick={() => setActiveTab('movements')} />
+                <TabItem label="Cierre" active={activeTab === 'cierre'} onClick={() => setActiveTab('cierre')} />
                 <TabItem label="Proyección" active={activeTab === 'summary'} onClick={() => setActiveTab('summary')} />
                 {isAdmin && (
                     <TabItem label="Operaciones" active={activeTab === 'ops'} onClick={() => setActiveTab('ops')} />
@@ -188,6 +190,10 @@ export default function CashPage() {
 
             {activeTab === 'ops' && isAdmin && businessId && (
                 <Operations businessId={businessId} />
+            )}
+
+            {activeTab === 'cierre' && businessId && (
+                <CashCloseTab businessId={businessId} />
             )}
 
             {isTransferModalOpen && businessId && (

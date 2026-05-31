@@ -58,3 +58,46 @@ export const deleteAccount = async (req: Request, res: Response) => {
         return res.status(statusFor(e.message)).json({ error: e.message });
     }
 };
+
+// ─── Cierre diario ───
+export const getTodayClose = async (req: Request, res: Response) => {
+    try {
+        const close = await accountService.getTodayClose(req.query.businessId as string, req.user!.userId, req.user!.role as UserRole);
+        return res.json(close);
+    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+};
+
+export const listCloses = async (req: Request, res: Response) => {
+    try {
+        const closes = await accountService.listCloses(req.query.businessId as string, req.user!.userId, req.user!.role as UserRole);
+        return res.json(closes);
+    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+};
+
+export const createClose = async (req: Request, res: Response) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const close = await accountService.createClose(req.body.businessId, { countedBalances: req.body.countedBalances, notes: req.body.notes }, req.user!.userId, req.user!.role as UserRole, 'manual');
+        return res.status(201).json(close);
+    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+};
+
+export const reopenClose = async (req: Request, res: Response) => {
+    try {
+        const close = await accountService.reopenClose(req.params.id, req.body.reason, req.user!.userId, req.user!.role as UserRole);
+        return res.json(close);
+    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+};
+
+export const autoCloseRun = async (req: Request, res: Response) => {
+    try {
+        const secret = process.env.CRON_SECRET;
+        const headerSecret = req.header('x-cron-secret');
+        const bearer = req.header('authorization'); // Vercel Cron manda 'Bearer <CRON_SECRET>'
+        const ok = !!secret && (headerSecret === secret || bearer === `Bearer ${secret}`);
+        if (!ok) return res.status(401).json({ error: 'No autorizado' });
+        const result = await accountService.autoCloseAll();
+        return res.json(result);
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+};

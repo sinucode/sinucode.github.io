@@ -41,3 +41,40 @@ export const deleteAccount = async (id: string, payload?: { mode?: 'transfer' | 
     const res = await api.delete(`/accounts/${id}`, { data: payload || {} });
     return res.data;
 };
+
+// ─── Cierre diario ───
+export interface CashClose {
+    id: string;
+    businessId: string;
+    closeDate: string;
+    status: 'closed' | 'reopened';
+    closeMode: 'manual' | 'auto';
+    totalBalance: number | string;
+    accountBalances: { accountId: string; name: string; systemBalance: number; countedBalance: number | null; difference: number | null }[];
+    notes?: string | null;
+    closedById: string;
+    closedAt: string;
+    reopenedById?: string | null;
+    reopenedAt?: string | null;
+    reopenReason?: string | null;
+}
+
+export const getTodayClose = async (businessId: string): Promise<CashClose | null> => {
+    const res = await api.get('/accounts/closes/today', { params: { businessId } });
+    return res.data;
+};
+
+export const listCloses = async (businessId: string): Promise<CashClose[]> => {
+    const res = await api.get('/accounts/closes', { params: { businessId } });
+    return res.data;
+};
+
+export const createClose = async (payload: { businessId: string; countedBalances?: Record<string, number>; notes?: string }): Promise<CashClose> => {
+    const res = await api.post('/accounts/closes', payload);
+    return res.data;
+};
+
+export const reopenClose = async (id: string, reason: string): Promise<CashClose> => {
+    const res = await api.post(`/accounts/closes/${id}/reopen`, { reason });
+    return res.data;
+};

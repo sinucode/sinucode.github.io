@@ -2,6 +2,7 @@ import { Prisma, UserRole } from '@prisma/client';
 import prisma from '../config/database';
 import { calculateCreditPlan, calculateEndDate } from '../utils/calculations';
 import { normalizeToNoon } from '../utils/dates';
+import { accountService } from './account.service';
 
 export type PaymentFrequency = 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly';
 
@@ -233,6 +234,10 @@ export class CreditService {
         const { creditId, amount, paymentDate, paymentMethod, notes, scheduleId, accountId, excessAction, userId, role, ipAddress } = params;
         const payDate = paymentDate ? new Date(paymentDate) : new Date();
         if (payDate > new Date()) throw new Error('La fecha de pago no puede ser futura');
+
+        // Bloqueo de día cerrado (cierre de caja)
+        const creditBiz = await prisma.credit.findUnique({ where: { id: creditId }, select: { businessId: true } });
+        if (creditBiz) await accountService.assertDayOpen(creditBiz.businessId, payDate);
 
         return prisma.$transaction(async (tx) => {
             const credit = await tx.credit.findUnique({

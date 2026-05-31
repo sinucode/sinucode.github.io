@@ -1,6 +1,12 @@
 {
     "version": 2,
     "regions": ["pdx1"],
+    "crons": [
+        {
+            "path": "/api/accounts/closes/auto-run",
+            "schedule": "59 4 * * *"
+        }
+    ],
     "builds": [
         {
             "src": "backend/src/server.ts",
