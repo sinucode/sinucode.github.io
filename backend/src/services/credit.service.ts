@@ -286,16 +286,20 @@ export class CreditService {
                 const scheduledPending = Number(target.scheduledAmount) - Number(target.paidAmount);
                 if (scheduledPending <= 0) throw new Error('La cuota ya está pagada');
 
-                if (amount > scheduledPending + 0.01) {
+                // Usar Math.ceil como umbral de exceso para alinear con el redondeo del frontend.
+                // El frontend muestra y envía Math.ceil(scheduledPending); sin ceil aquí se detecta
+                // un falso excedente de $1 cuando el usuario paga exactamente la cuota mostrada.
+                const scheduledPendingCeil = Math.ceil(scheduledPending);
+                if (amount > scheduledPendingCeil + 0.01) {
                     // ── Hay sobrepago: requiere acción explícita ──
                     if (!excessAction) {
                         throw new Error(
-                            `El pago de $${amount} supera el monto pendiente de la cuota ($${scheduledPending}). ` +
+                            `El pago de $${amount} supera el monto pendiente de la cuota ($${scheduledPendingCeil}). ` +
                             `Debe especificar excessAction: "next_cuota" (abonar a la siguiente cuota) o "donate" (donar al negocio).`
                         );
                     }
 
-                    const excess = amount - scheduledPending;
+                    const excess = amount - scheduledPendingCeil;
 
                     // Marcar la cuota actual como pagada completa
                     await tx.paymentSchedule.update({

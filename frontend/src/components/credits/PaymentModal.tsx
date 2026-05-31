@@ -133,7 +133,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         const schedulesToPay = pendingSchedules.filter((s) => selectedIds.has(s.id));
         for (const s of schedulesToPay) {
             const pago = getAmount(s);
-            const pending = Number(s.scheduledAmount) - Number(s.paidAmount || 0);
+            // Usar Math.ceil igual que el monto mostrado al usuario, para evitar
+            // falso excedente de $1 cuando se paga exactamente la cuota redondeada.
+            const pending = Math.ceil(Number(s.scheduledAmount) - Number(s.paidAmount || 0));
             if (pago > pending + 0.01) {
                 conExceso.push({
                     id: s.id,
