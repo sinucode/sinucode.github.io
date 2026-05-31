@@ -31,12 +31,16 @@ export class BusinessController {
     async getBusiness(req: Request, res: Response) {
         try {
             const { id } = req.params;
-            const business = await businessService.getBusinessById(id);
+            const userId = req.user?.userId;
+            const role = req.user?.role;
+            const business = await businessService.getBusinessById(id, userId, role);
             return res.json(business);
         } catch (error: any) {
             console.error('Error getting business:', error);
             if (error.message === 'Business not found') {
                 return res.status(404).json({ error: error.message });
+            } else if (error.message === 'No tiene permisos para acceder a este negocio') {
+                return res.status(403).json({ error: error.message });
             } else {
                 return res.status(500).json({ error: error.message || 'Failed to get business' });
             }
@@ -87,13 +91,15 @@ export class BusinessController {
             const { id } = req.params;
             const { name, description, initialCapital } = req.body;
             const requestingUserId = req.user!.userId;
+            const role = req.user?.role;
             const ipAddress = req.ip || req.socket.remoteAddress || '';
 
             const business = await businessService.updateBusiness(
                 id,
                 { name, description, initialCapital },
                 requestingUserId,
-                ipAddress
+                ipAddress,
+                role
             );
 
             return res.json(business);
@@ -101,6 +107,8 @@ export class BusinessController {
             console.error('Error updating business:', error);
             if (error.message === 'Business not found') {
                 return res.status(404).json({ error: error.message });
+            } else if (error.message === 'No tiene permisos para editar este negocio') {
+                return res.status(403).json({ error: error.message });
             } else {
                 return res.status(400).json({ error: error.message || 'Failed to update business' });
             }

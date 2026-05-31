@@ -24,7 +24,7 @@ export class CashService {
      * Valida que el usuario tenga acceso al negocio solicitado
      */
     private async validateAccess(businessId: string, userId: string, role: UserRole): Promise<void> {
-        if (role === 'super_admin' || role === 'admin') return;
+        if (role === 'super_admin') return;
 
         const userBusiness = await prisma.userBusiness.findFirst({
             where: { userId, businessId },

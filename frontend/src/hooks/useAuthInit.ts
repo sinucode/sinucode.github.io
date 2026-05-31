@@ -25,7 +25,7 @@ export const useAuthInit = () => {
                 const user = await getCurrentUser();
                 setUser(user);
 
-                if (user?.role === 'user' && user.assignedBusiness) {
+                if ((user?.role === 'user' || user?.role === 'admin') && user.assignedBusiness) {
                     useBusinessStore.getState().setSelectedBusiness(user.assignedBusiness.id, user.assignedBusiness.name);
                 }
 

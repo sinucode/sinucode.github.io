@@ -20,6 +20,7 @@ export default function DashboardHome() {
     const { user } = useAuthStore();
     const navigate = useNavigate();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const isSuperAdmin = user?.role === 'super_admin';
     const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
 
     const [dateRange, setDateRange] = useState<DateRange>(() => presetToRange('currentMonth'));
@@ -27,14 +28,15 @@ export default function DashboardHome() {
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
         queryFn: getBusinesses,
-        enabled: isAdmin,
+        enabled: isSuperAdmin,
     });
 
     useEffect(() => {
-        if (isAdmin && businesses && businesses.length > 0 && !businessId) {
+        // super_admin: auto-selecciona el primero si no hay ninguno
+        if (isSuperAdmin && businesses && businesses.length > 0 && !businessId) {
             setSelectedBusiness(businesses[0].id, businesses[0].name);
         }
-    }, [isAdmin, businesses, businessId, setSelectedBusiness]);
+    }, [isSuperAdmin, businesses, businessId, setSelectedBusiness]);
 
     // Para el calendario seguimos cargando todos los créditos del negocio
     const { data: credits } = useQuery({
@@ -68,7 +70,7 @@ export default function DashboardHome() {
                             Rol: {user?.role === 'super_admin' ? 'Super Administrador' : user?.role === 'admin' ? 'Administrador' : 'Usuario de Negocio'}
                         </p>
                     </div>
-                    {isAdmin && (
+                    {isSuperAdmin && (
                         <select
                             value={businessId}
                             onChange={(e) => {

@@ -20,7 +20,7 @@ export class PaymentService {
     async listPayments(userId: string, role: UserRole, filters: PaymentFilters) {
         let targetBusinessId = filters.businessId;
 
-        if (role === 'user') {
+        if (role !== 'super_admin') {
             const userBusinessId = await this.getUserBusiness(userId);
             if (!userBusinessId) throw new Error('Usuario no tiene negocio asignado');
             if (targetBusinessId && targetBusinessId !== userBusinessId) {

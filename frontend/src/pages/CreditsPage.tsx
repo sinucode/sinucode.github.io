@@ -31,12 +31,12 @@ export default function CreditsPage() {
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'createdAt', direction: 'desc' });
     const { selectedBusinessId, setSelectedBusiness } = useBusinessStore();
     const { user } = useAuthStore();
-    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const isSuperAdmin = user?.role === 'super_admin';
 
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
         queryFn: getBusinesses,
-        enabled: isAdmin,
+        enabled: isSuperAdmin,
     });
 
     const { data: credits, isLoading, refetch } = useQuery<Credit[]>({
@@ -125,7 +125,7 @@ export default function CreditsPage() {
                     <FilterChip label="Cobro hoy" active={filter === 'dueToday'} onClick={() => setFilter('dueToday')} />
                     <FilterChip label="En mora" active={filter === 'overdue'} onClick={() => setFilter('overdue')} />
                 </div>
-                {isAdmin && (
+                {isSuperAdmin && (
                     <div className="w-full md:w-1/3 min-w-[200px]">
                         <select
                             value={selectedBusinessId}

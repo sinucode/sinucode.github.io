@@ -75,7 +75,6 @@ export default function PaymentsPage() {
     const { user } = useAuthStore();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
     const isSuperAdmin = user?.role === 'super_admin';
     const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
 
@@ -91,7 +90,7 @@ export default function PaymentsPage() {
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
         queryFn: getBusinesses,
-        enabled: isAdmin,
+        enabled: isSuperAdmin,
     });
 
     const { data: payments, isLoading } = useQuery<Payment[]>({
@@ -236,7 +235,7 @@ export default function PaymentsPage() {
                     <Filter size={16} /> Filtros
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                    {isAdmin && (
+                    {isSuperAdmin && (
                         <select
                             value={businessId}
                             onChange={(e) => {

@@ -22,7 +22,7 @@ export default function LoginPage() {
             const response = await loginApi({ email, password });
             login(response.accessToken, response.refreshToken, response.user as any);
 
-            if (response.user.role === 'user' && response.user.assignedBusiness) {
+            if ((response.user.role === 'user' || response.user.role === 'admin') && response.user.assignedBusiness) {
                 useBusinessStore.getState().setSelectedBusiness(response.user.assignedBusiness.id, response.user.assignedBusiness.name);
             }
 

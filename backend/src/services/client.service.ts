@@ -44,20 +44,19 @@ export class ClientService {
     async getAllClients(userId: string, userRole: UserRole, businessId?: string) {
         let targetBusinessId: string | undefined;
 
-        if (userRole === 'user') {
+        if (userRole === 'super_admin') {
+            // super_admin puede ver todos o filtrar por negocio específico
+            targetBusinessId = businessId || undefined;
+        } else {
+            // admin y user: solo pueden ver clientes de su negocio asignado
             const userBusinessId = await this.getUserBusiness(userId);
             if (!userBusinessId) {
                 throw new Error('Usuario no tiene negocio asignado');
             }
-
             if (businessId && businessId !== userBusinessId) {
                 throw new Error('No tiene permisos para ver clientes de otro negocio');
             }
-
             targetBusinessId = userBusinessId;
-        } else {
-            // Admin/super_admin: si viene businessId se filtra, si no se traen todos
-            targetBusinessId = businessId || undefined;
         }
 
         const clients = await prisma.client.findMany({
@@ -475,14 +474,14 @@ export class ClientService {
     ) {
         let targetBusinessId: string | undefined;
 
-        if (userRole === 'user') {
+        if (userRole === 'super_admin') {
+            targetBusinessId = businessId || undefined;
+        } else {
             const userBusinessId = await this.getUserBusiness(userId);
             if (!userBusinessId) {
                 throw new Error('Usuario no tiene negocio asignado');
             }
             targetBusinessId = userBusinessId;
-        } else {
-            targetBusinessId = businessId || undefined;
         }
 
         const clients = await prisma.client.findMany({

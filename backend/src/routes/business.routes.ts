@@ -27,20 +27,20 @@ router.get('/:id', businessController.getBusiness.bind(businessController));
 
 /**
  * POST /api/businesses
- * Crear nuevo negocio
+ * Crear nuevo negocio — solo super_admin
  */
-router.post('/', createBusinessValidators, businessController.createBusiness.bind(businessController));
+router.post('/', requireMinRole('super_admin'), createBusinessValidators, businessController.createBusiness.bind(businessController));
 
 /**
  * PUT /api/businesses/:id
- * Actualizar negocio
+ * Actualizar negocio — admin puede editar el suyo (verificación en servicio)
  */
 router.put('/:id', updateBusinessValidators, businessController.updateBusiness.bind(businessController));
 
 /**
  * DELETE /api/businesses/:id
- * Eliminar negocio
+ * Eliminar negocio — solo super_admin
  */
-router.delete('/:id', businessController.deleteBusiness.bind(businessController));
+router.delete('/:id', requireMinRole('super_admin'), businessController.deleteBusiness.bind(businessController));
 
 export default router;

@@ -12,7 +12,7 @@ export interface AccountBalance {
 export class AccountService {
     /** Valida que el usuario tenga acceso al negocio (mismo patrón que cash.service) */
     private async validateAccess(businessId: string, userId: string, role: UserRole): Promise<void> {
-        if (role === 'super_admin' || role === 'admin') return;
+        if (role === 'super_admin') return;
         const ub = await prisma.userBusiness.findFirst({ where: { userId, businessId }, select: { businessId: true } });
         if (!ub) throw new Error('No tiene permisos para acceder a los datos de este negocio');
     }

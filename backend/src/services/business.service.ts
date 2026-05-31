@@ -16,10 +16,19 @@ interface UpdateBusinessData {
      * Servicio de gestión de negocios
      */
 export class BusinessService {
+    /** Devuelve el businessId asignado a un usuario (admin/user) — primer registro en userBusiness */
+    private async getUserBusiness(userId: string): Promise<string | null> {
+        const ub = await prisma.userBusiness.findFirst({
+            where: { userId },
+            select: { businessId: true },
+        });
+        return ub?.businessId || null;
+    }
+
     /**
      * Obtener todos los negocios
      * Implementa filtrado por rol para Defense-in-Depth
-     * 
+     *
      * @param userId - ID del usuario (opcional para backward compatibility)
      * @param userRole - Rol del usuario (opcional para backward compatibility)
      * @returns Lista de negocios accesibles para el usuario
@@ -27,7 +36,7 @@ export class BusinessService {
     async getAllBusinesses(userId?: string, userRole?: 'user' | 'admin' | 'super_admin') {
         // Si no se proporciona userId/role, asumir llamada de admin (backward compatibility)
         // O si es admin/super_admin, retornar todos los negocios
-        if (!userId || !userRole || userRole === 'admin' || userRole === 'super_admin') {
+        if (!userId || !userRole || userRole === 'super_admin') {
             const businesses = await prisma.business.findMany({
                 select: {
                     id: true,
@@ -95,8 +104,16 @@ export class BusinessService {
 
     /**
      * Obtener negocio por ID
+     * Si se pasa userId + role, verifica que el admin solo acceda a su negocio
      */
-    async getBusinessById(businessId: string) {
+    async getBusinessById(businessId: string, userId?: string, role?: string) {
+        // Admin solo puede leer su propio negocio
+        if (role === 'admin' && userId) {
+            const ownId = await this.getUserBusiness(userId);
+            if (ownId && ownId !== businessId) {
+                throw new Error('No tiene permisos para acceder a este negocio');
+            }
+        }
         const business = await prisma.business.findUnique({
             where: { id: businessId },
             select: {
@@ -205,8 +222,17 @@ export class BusinessService {
         businessId: string,
         data: UpdateBusinessData,
         requestingUserId: string,
-        ipAddress: string = ''
+        ipAddress: string = '',
+        role?: string
     ) {
+        // Admin solo puede editar su propio negocio
+        if (role === 'admin') {
+            const ownId = await this.getUserBusiness(requestingUserId);
+            if (ownId && ownId !== businessId) {
+                throw new Error('No tiene permisos para editar este negocio');
+            }
+        }
+
         // Verificar que el negocio existe
         const existingBusiness = await prisma.business.findUnique({
             where: { id: businessId },

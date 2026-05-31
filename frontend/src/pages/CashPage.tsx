@@ -14,6 +14,7 @@ const formatMoney = (val: any) => `$${Math.ceil(Number(val || 0)).toLocaleString
 export default function CashPage() {
     const { user } = useAuthStore();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
+    const isSuperAdmin = user?.role === 'super_admin';
     const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -24,7 +25,7 @@ export default function CashPage() {
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
         queryFn: getBusinesses,
-        enabled: isAdmin,
+        enabled: isSuperAdmin,
     });
 
     const { data: flow, isLoading } = useQuery({
@@ -68,7 +69,7 @@ export default function CashPage() {
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm">
                         <Filter size={16} className="text-gray-400" />
-                        {isAdmin && (
+                        {isSuperAdmin && (
                             <select
                                 value={businessId}
                                 onChange={(e) => {

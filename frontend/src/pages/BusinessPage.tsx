@@ -63,6 +63,7 @@ export default function BusinessPage() {
     };
 
     const canManage = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+    const isSuperAdmin = currentUser?.role === 'super_admin';
 
     if (isLoading) {
         return (
@@ -76,7 +77,7 @@ export default function BusinessPage() {
         <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
                 <h1 className="text-xl sm:text-2xl font-bold">Negocios</h1>
-                {canManage && (
+                {isSuperAdmin && (
                     <button
                         onClick={() => setShowCreateForm(true)}
                         className="w-full sm:w-auto bg-primary-500 text-white px-4 py-2 rounded-md hover:bg-primary-600 flex items-center justify-center gap-2"
@@ -159,24 +160,24 @@ export default function BusinessPage() {
                                     {canManage && (
                                         <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <div className="flex items-center justify-end gap-2">
-                                                {(currentUser?.role === 'super_admin' || currentUser?.role === 'admin') && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => setEditingBusiness(business)}
-                                                            className="text-primary-600 hover:text-primary-900"
-                                                            title="Editar"
-                                                        >
-                                                            <Pencil size={18} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteClick(business)}
-                                                            disabled={deleteMutation.isPending}
-                                                            className="text-red-600 hover:text-red-900 disabled:opacity-50"
-                                                            title="Eliminar"
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    </>
+                                                {/* Editar: admin y super_admin */}
+                                                <button
+                                                    onClick={() => setEditingBusiness(business)}
+                                                    className="text-primary-600 hover:text-primary-900"
+                                                    title="Editar"
+                                                >
+                                                    <Pencil size={18} />
+                                                </button>
+                                                {/* Eliminar: solo super_admin */}
+                                                {isSuperAdmin && (
+                                                    <button
+                                                        onClick={() => handleDeleteClick(business)}
+                                                        disabled={deleteMutation.isPending}
+                                                        className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
                                                 )}
                                             </div>
                                         </td>

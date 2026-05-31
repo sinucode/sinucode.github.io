@@ -102,7 +102,7 @@ const ClientsPage = () => {
 
             {/* Filtros y Búsqueda */}
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4">
-                {isAdmin && (
+                {isSuperAdmin && (
                     <div className="w-full md:w-1/3">
                         <select
                             value={selectedBusinessId}

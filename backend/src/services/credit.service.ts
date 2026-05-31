@@ -151,7 +151,7 @@ export class CreditService {
     async listCredits(userId: string, role: UserRole, filters: ListFilters = {}) {
         let businessId: string | undefined = filters.businessId;
 
-        if (role === 'user') {
+        if (role !== 'super_admin') {
             const userBusinessId = await this.getUserBusiness(userId);
             if (!userBusinessId) throw new Error('No tiene negocio asignado');
             if (businessId && businessId !== userBusinessId) throw new Error('No tiene permisos para ver créditos de otro negocio');
@@ -208,7 +208,7 @@ export class CreditService {
 
         if (!credit) throw new Error('Crédito no encontrado');
 
-        if (role === 'user') {
+        if (role !== 'super_admin') {
             const userBusinessId = await this.getUserBusiness(userId);
             if (!userBusinessId || userBusinessId !== credit.businessId) {
                 throw new Error('No tiene permisos para ver este crédito');
@@ -250,7 +250,7 @@ export class CreditService {
             });
             if (!credit) throw new Error('Crédito no encontrado');
 
-            if (role === 'user') {
+            if (role !== 'super_admin') {
                 const userBusinessId = await this.getUserBusiness(userId);
                 if (!userBusinessId || userBusinessId !== credit.businessId) {
                     throw new Error('No tiene permisos para operar este crédito');
