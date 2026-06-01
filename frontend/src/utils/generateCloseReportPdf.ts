@@ -34,7 +34,7 @@ function tableRow(doc: jsPDF, cols: Array<{ x: number; text: string; bold?: bool
 }
 
 export function generateCloseReportPdf(report: CloseReport) {
-    const { meta, accounts, payments, collectors, disbursers, operations, totals } = report;
+    const { meta, accounts, payments, collectors, disbursers, cancellations, operations, totals } = report;
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
     const LM  = 14;     // margen izquierdo
@@ -249,6 +249,47 @@ export function generateCloseReportPdf(report: CloseReport) {
         } else {
             y += 4;
         }
+    }
+
+    // ═══ CANCELACIONES DEL DÍA ═══
+    if (cancellations && cancellations.length > 0) {
+        checkPage(20);
+        doc.setDrawColor(180, 180, 180);
+        doc.line(LM, y, RM, y);
+        y += 6;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`CANCELACIONES DEL DÍA (${cancellations.length})`, LM, y);
+        y += 6;
+
+        const xC = [LM, LM + 52, LM + 102, LM + 140, LM + 166];
+        doc.setFontSize(7.5);
+        doc.text('Cliente',         xC[0], y);
+        doc.text('Apertura',        xC[1], y);
+        doc.text('Capital devuelto',xC[2], y);
+        doc.text('Cuenta origen',   xC[3], y);
+        doc.text('Usuario',         xC[4], y);
+        y += 4;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(LM, y, RM, y);
+        y += 4;
+
+        doc.setFontSize(8);
+        for (const c of cancellations) {
+            checkPage(7);
+            const apertura = c.fechaApertura
+                ? new Date(c.fechaApertura).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                : '—';
+            tableRow(doc, [
+                { x: xC[0], text: c.cliente,       maxW: 48 },
+                { x: xC[1], text: apertura },
+                { x: xC[2], text: FM(c.montoDevuelto), bold: true },
+                { x: xC[3], text: c.cuentaOrigen,  maxW: 24 },
+                { x: xC[4], text: c.usuario,        maxW: 28 },
+            ], y);
+            y += 6;
+        }
+        y += 4;
     }
 
     // ═══ TABLA DE PAGOS ═══

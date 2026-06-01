@@ -278,8 +278,9 @@ export class AccountService {
             prisma.cashMovement.findMany({
                 where: { businessId, createdAt: { gte: dayStart, lte: dayEnd } },
                 include: {
-                    createdBy: { select: { id: true, fullName: true } },
-                    account:   { select: { name: true } },
+                    createdBy:     { select: { id: true, fullName: true } },
+                    account:       { select: { name: true } },
+                    relatedCredit: { select: { id: true, startDate: true, amount: true, client: { select: { fullName: true } } } },
                 },
                 orderBy: { createdAt: 'asc' },
             }),
@@ -421,6 +422,18 @@ export class AccountService {
             porCuenta: Object.entries(c.porCuenta).map(([cuenta, monto]) => ({ cuenta, monto })),
         })).sort((a, b) => b.totalCobrado - a.totalCobrado);
 
+        // ─── Cancelaciones del día ───
+        const cancellations = dayMovements
+            .filter(m => m.type === 'credit_cancellation')
+            .map(m => ({
+                creditId:      m.relatedCreditId ?? null,
+                cliente:       (m.relatedCredit as any)?.client?.fullName ?? m.description,
+                fechaApertura: (m.relatedCredit as any)?.startDate ?? null,
+                montoDevuelto: Math.round(Number(m.amount) * 100) / 100,
+                cuentaOrigen:  m.account?.name ?? '—',
+                usuario:       m.createdBy.fullName,
+            }));
+
         // ─── Resumen de créditos colocados por usuario ───
         const disbursersMap: Record<string, {
             usuarioId: string;
@@ -488,6 +501,7 @@ export class AccountService {
             payments: paymentsTable,
             collectors,
             disbursers,
+            cancellations,
             operations: operationsTable,
             totals: {
                 totalCobrado:  Math.round(totalCobrado   * 100) / 100,

@@ -316,31 +316,39 @@ export default function CreditDetailPage() {
                     <ArrowLeft size={16} /> Volver
                 </button>
                 <div className="flex items-center gap-2">
-                    {canEditPlan && (
-                        <button
-                            onClick={() => {
-                                setEditError('');
-                                setEditRows(credit.paymentSchedule);
-                                setIsEditOpen(true);
-                            }}
-                            className="px-4 py-2 bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 text-sm font-medium"
-                        >
-                            Editar plan
-                        </button>
-                    )}
-                    <button
-                        onClick={() => setIsPaymentOpen(true)}
-                        className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600"
-                    >
-                        Registrar Pago
-                    </button>
-                    {user?.role === 'super_admin' && (
-                        <button
-                            onClick={() => setIsDeleteConfirmOpen(true)}
-                            className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm font-medium"
-                        >
-                            Eliminar Crédito
-                        </button>
+                    {credit.status === 'cancelled' ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold bg-gray-200 text-gray-600 border border-gray-300">
+                            CANCELADO
+                        </span>
+                    ) : (
+                        <>
+                            {canEditPlan && (
+                                <button
+                                    onClick={() => {
+                                        setEditError('');
+                                        setEditRows(credit.paymentSchedule);
+                                        setIsEditOpen(true);
+                                    }}
+                                    className="px-4 py-2 bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 text-sm font-medium"
+                                >
+                                    Editar plan
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setIsPaymentOpen(true)}
+                                className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600"
+                            >
+                                Registrar Pago
+                            </button>
+                            {user?.role === 'super_admin' && (
+                                <button
+                                    onClick={() => setIsDeleteConfirmOpen(true)}
+                                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm font-medium"
+                                >
+                                    Cancelar Crédito
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
@@ -868,10 +876,10 @@ export default function CreditDetailPage() {
 
             <ConfirmDialog
                 isOpen={isDeleteConfirmOpen}
-                title="¿Eliminar crédito?"
-                message="Esta acción es irreversible y devolverá el capital del crédito al saldo de la caja. ¿Deseas continuar?"
-                confirmText="Sí, eliminar"
-                cancelText="Cancelar"
+                title="¿Cancelar crédito?"
+                message={`Se cancelará este crédito: los pagos registrados se revertirán a sus cuentas y el capital (${formatMoney(credit?.amount)}) volverá a la cuenta de origen. El crédito quedará archivado como CANCELADO. ¿Continuar?`}
+                confirmText="Sí, cancelar crédito"
+                cancelText="No, volver"
                 onConfirm={() => deleteMutation.mutate()}
                 onCancel={() => setIsDeleteConfirmOpen(false)}
                 isLoading={deleteMutation.isPending}

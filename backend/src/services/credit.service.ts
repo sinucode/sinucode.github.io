@@ -204,7 +204,10 @@ export class CreditService {
 
         const where: Prisma.CreditWhereInput = {
             ...(businessId && { businessId }),
-            ...(filters.status && { status: filters.status as any }),
+            // Excluir cancelados por defecto; si se pasa status explícito se respeta
+            ...(filters.status
+                ? { status: filters.status as any }
+                : { status: { not: 'cancelled' as any } }),
         };
 
         const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
@@ -807,110 +810,222 @@ export class CreditService {
         return refreshed;
     }
 
-    async bulkDeleteCredits(creditIds: string[], requestingUserId: string, userRole: UserRole, ipAddress: string = '') {
-        if (userRole === 'user') throw new Error('No tiene permisos para eliminar créditos en lote');
-
-        const creditsToDelete = await prisma.credit.findMany({
-            where: { id: { in: creditIds } },
-            include: { client: { select: { fullName: true } } }
-        });
-
-        if (creditsToDelete.length === 0) return { message: 'No se encontraron créditos para eliminar', deletedCount: 0 };
-
-        if (userRole === 'admin') {
-            const userBusinessId = await this.getUserBusiness(requestingUserId);
-            const invalidCredits = creditsToDelete.filter(c => c.businessId !== userBusinessId);
-            if (invalidCredits.length > 0) throw new Error('No tiene permisos para eliminar uno o más créditos seleccionados');
-        }
-
-        const validIds = creditsToDelete.map(c => c.id);
-        const { count } = await prisma.credit.deleteMany({ where: { id: { in: validIds } } });
-
-        const auditLogs = creditsToDelete.map(c => ({
-            userId: requestingUserId,
-            businessId: c.businessId,
-            action: 'BULK_DELETE_CREDIT',
-            description: `Eliminación en lote: crédito del cliente '${c.client?.fullName}' por $${c.amount}`,
-            entityType: 'Credit',
-            entityId: c.id,
-            ipAddress,
-        }));
-
-        await prisma.auditLog.createMany({ data: auditLogs });
-
-        return { message: `Se eliminaron ${count} créditos exitosamente`, deletedCount: count };
-    }
-    async deleteCredit(creditId: string, userId: string, role: UserRole, ipAddress: string = '') {
-        if (role !== 'super_admin') {
-            throw new Error('Solo el Super Admin puede eliminar créditos completos');
-        }
-
-        const credit = await prisma.credit.findUnique({
+    /**
+     * Lógica reutilizable de cancelación de crédito (soft-cancel).
+     * Debe llamarse DENTRO de una $transaction existente (`tx`).
+     * - Revierte cada pago a la cuenta donde entró.
+     * - Devuelve el capital a la cuenta de origen del desembolso.
+     * - Actualiza business.currentBalance en una sola operación.
+     * - Marca el crédito como `cancelled` (no lo borra).
+     */
+    private async cancelCreditTx(
+        tx: Prisma.TransactionClient,
+        creditId: string,
+        userId: string,
+        ipAddress: string
+    ): Promise<{ revertedAmount: number }> {
+        const credit = await tx.credit.findUnique({
             where: { id: creditId },
             include: {
                 business: { select: { id: true, currentBalance: true } },
-                client: { select: { fullName: true } },
-                payments: { select: { id: true } }
-            }
+                client:   { select: { fullName: true } },
+                payments: {
+                    select: {
+                        id: true,
+                        amount: true,
+                        accountId: true,
+                        account: { select: { name: true } },
+                    },
+                    orderBy: { paymentDate: 'asc' },
+                },
+                paymentSchedule: { select: { id: true } },
+            },
+        });
+        if (!credit) throw new Error('Crédito no encontrado');
+        if (credit.status === 'cancelled') throw new Error('El crédito ya fue cancelado');
+
+        const businessId = credit.business.id;
+
+        // ── 1. Resolver la cuenta de origen del desembolso ──────────────────────
+        const disbMovement = await tx.cashMovement.findFirst({
+            where: { relatedCreditId: creditId, type: 'loan_disbursement' },
+            select: { accountId: true, account: { select: { name: true } } },
         });
 
-        if (!credit) throw new Error('Crédito no encontrado');
+        let originAccountId: string | null = disbMovement?.accountId ?? null;
+        let originAccountName: string      = disbMovement?.account?.name ?? 'Efectivo';
 
-        // Validar: si el crédito tiene pagos registrados, no permitir eliminación directa.
-        // El admin debe revertir los pagos primero (usando revertInstallment) para mantener
-        // la consistencia del balance de caja.
-        if (credit.payments.length > 0) {
-            throw new Error(
-                `No se puede eliminar el crédito porque tiene ${credit.payments.length} pago(s) registrado(s). ` +
-                `Revierta los pagos individualmente antes de eliminar el crédito.`
-            );
+        if (!originAccountId) {
+            // Fallback legacy: cuenta isDisbursementDefault → isDefault → primera activa
+            const defAcc = await tx.paymentAccount.findFirst({
+                where: { businessId, active: true },
+                orderBy: [{ isDisbursementDefault: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
+                select: { id: true, name: true },
+            });
+            originAccountId   = defAcc?.id    ?? null;
+            originAccountName = defAcc?.name   ?? 'Efectivo';
         }
 
-        const amountToRevert = Number(credit.amount);
-        const businessId = credit.businessId;
+        // ── 2. Revertir cada pago a la cuenta donde entró ───────────────────────
+        let balanceDelta = 0;
 
-        return prisma.$transaction(async (tx) => {
-            // 1. Revertir balance del negocio
-            const newBalance = new Prisma.Decimal(credit.business.currentBalance).plus(amountToRevert);
-            await tx.business.update({
-                where: { id: businessId },
-                data: { currentBalance: newBalance }
-            });
+        for (const payment of credit.payments) {
+            const payAmt    = Number(payment.amount);
+            const payAccId  = payment.accountId  ?? originAccountId;
+            const payAccName = payment.account?.name ?? originAccountName;
 
-            // 2. Registrar movimiento de caja por cancelación
             await tx.cashMovement.create({
                 data: {
                     businessId,
-                    type: 'credit_cancellation',
-                    amount: new Prisma.Decimal(amountToRevert),
-                    balanceAfter: newBalance,
-                    description: `Cancelación/Eliminación Crédito #${credit.id.slice(0, 8)} - Cliente: ${credit.client.fullName}`,
-                    relatedCreditId: null, // El crédito será eliminado
-                    createdById: userId,
-                }
+                    type: 'payment_reversion',
+                    amount:      new Prisma.Decimal(payAmt),
+                    balanceAfter: new Prisma.Decimal(0), // se recalcula con balance final abajo
+                    description: `Reversión (cancelación crédito) - ${credit.client.fullName}`,
+                    relatedCreditId: creditId,
+                    paymentMethod: payAccName,
+                    accountId:    payAccId ?? undefined,
+                    createdById:  userId,
+                },
             });
+            balanceDelta -= payAmt;
+        }
 
-            // 3. Eliminar el crédito (Prisma maneja cascada para paymentSchedule y payments)
-            await tx.credit.delete({
-                where: { id: creditId }
-            });
-
-            // 4. Auditoría
-            await tx.auditLog.create({
-                data: {
-                    userId,
-                    businessId,
-                    action: 'DELETE_CREDIT_FULL',
-                    description: `Eliminación total de crédito de ${credit.client.fullName} por $${amountToRevert.toLocaleString('es-CO')}. Capital devuelto a caja.`,
-                    entityType: 'Credit',
-                    entityId: creditId,
-                    oldValues: { creditId, amount: amountToRevert, clientId: credit.clientId },
-                    ipAddress,
-                }
-            });
-
-            return { success: true, revertedAmount: amountToRevert };
+        // Resetear todas las cuotas a paidAmount=0/pending
+        await tx.paymentSchedule.updateMany({
+            where: { creditId },
+            data:  { paidAmount: new Prisma.Decimal(0), status: 'pending' },
         });
+
+        // ── 3. Devolver capital a la cuenta de origen ────────────────────────────
+        const principal = Number(credit.amount);
+        balanceDelta += principal;
+
+        const startDateStr = credit.startDate
+            ? new Date(credit.startDate).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' })
+            : '—';
+
+        await tx.cashMovement.create({
+            data: {
+                businessId,
+                type:        'credit_cancellation',
+                amount:      new Prisma.Decimal(principal),
+                balanceAfter: new Prisma.Decimal(0), // se actualiza con la actualización real abajo
+                description: `Cancelación crédito #${creditId.slice(0, 8)} | Cliente: ${credit.client.fullName} | Apertura: ${startDateStr}`,
+                relatedCreditId:  creditId,
+                paymentMethod:   originAccountName,
+                accountId:       originAccountId ?? undefined,
+                createdById:     userId,
+            },
+        });
+
+        // ── 4. Un solo update del saldo del negocio ──────────────────────────────
+        const newBalance = new Prisma.Decimal(credit.business.currentBalance).plus(balanceDelta);
+        await tx.business.update({
+            where: { id: businessId },
+            data:  { currentBalance: newBalance },
+        });
+
+        // Actualizar balanceAfter en los dos últimos movimientos creados
+        // (no crítico para cuadre, pero mejora la legibilidad del historial)
+        // Nota: Prisma no devuelve IDs de los movimientos creados en el loop,
+        // lo más limpio es un updateMany con el valor final.
+        await tx.cashMovement.updateMany({
+            where: {
+                businessId,
+                createdById: userId,
+                balanceAfter: new Prisma.Decimal(0),
+                createdAt:    { gte: new Date(Date.now() - 10_000) }, // creados en esta transacción
+            },
+            data: { balanceAfter: newBalance },
+        });
+
+        // ── 5. Soft-cancel del crédito ───────────────────────────────────────────
+        await tx.credit.update({
+            where: { id: creditId },
+            data:  {
+                status:         'cancelled',
+                remainingBalance: new Prisma.Decimal(credit.totalWithInterest),
+                completionDate: null,
+                earnedInterest: null,
+            },
+        });
+
+        // ── 6. Auditoría ─────────────────────────────────────────────────────────
+        await tx.auditLog.create({
+            data: {
+                userId,
+                businessId,
+                action:      'CANCEL_CREDIT',
+                description: `Cancelación de crédito de ${credit.client.fullName} | Capital $${principal.toLocaleString('es-CO')} devuelto a ${originAccountName}${credit.payments.length > 0 ? ` | ${credit.payments.length} pago(s) revertidos` : ''}`,
+                entityType:  'Credit',
+                entityId:    creditId,
+                oldValues:   { status: credit.status, remainingBalance: credit.remainingBalance, paymentsCount: credit.payments.length },
+                newValues:   { status: 'cancelled', revertedCapital: principal, balanceDelta },
+                ipAddress,
+            },
+        });
+
+        return { revertedAmount: principal };
+    }
+
+    async bulkDeleteCredits(creditIds: string[], requestingUserId: string, userRole: UserRole, ipAddress: string = '') {
+        if (userRole === 'user') throw new Error('No tiene permisos para cancelar créditos en lote');
+
+        // Verificar que los créditos existen
+        const creditsToCancel = await prisma.credit.findMany({
+            where: { id: { in: creditIds }, status: { not: 'cancelled' } },
+            select: { id: true, businessId: true, client: { select: { fullName: true } } },
+        });
+
+        if (creditsToCancel.length === 0) return { message: 'No se encontraron créditos activos para cancelar', cancelledCount: 0 };
+
+        if (userRole === 'admin') {
+            const userBusinessId = await this.getUserBusiness(requestingUserId);
+            const invalid = creditsToCancel.filter(c => c.businessId !== userBusinessId);
+            if (invalid.length > 0) throw new Error('No tiene permisos para cancelar uno o más créditos seleccionados');
+        }
+
+        // Cancelar cada crédito en una única transacción
+        const results = await prisma.$transaction(
+            async (tx) => {
+                const outcomes: Array<{ id: string; ok: boolean; error?: string }> = [];
+                for (const c of creditsToCancel) {
+                    try {
+                        await this.cancelCreditTx(tx, c.id, requestingUserId, ipAddress);
+                        outcomes.push({ id: c.id, ok: true });
+                    } catch (err: any) {
+                        outcomes.push({ id: c.id, ok: false, error: err.message });
+                    }
+                }
+                return outcomes;
+            },
+            { timeout: 30_000 }
+        );
+
+        const cancelled = results.filter(r => r.ok).length;
+        const errors    = results.filter(r => !r.ok);
+
+        return {
+            message: `${cancelled} crédito(s) cancelado(s)${errors.length > 0 ? `; ${errors.length} con error` : ''}`,
+            cancelledCount: cancelled,
+            errors,
+        };
+    }
+
+    async deleteCredit(creditId: string, userId: string, role: UserRole, ipAddress: string = '') {
+        if (role !== 'super_admin') {
+            throw new Error('Solo el Super Admin puede cancelar créditos');
+        }
+
+        const exists = await prisma.credit.findUnique({ where: { id: creditId }, select: { id: true, amount: true } });
+        if (!exists) throw new Error('Crédito no encontrado');
+
+        const result = await prisma.$transaction(
+            async (tx) => this.cancelCreditTx(tx, creditId, userId, ipAddress),
+            { timeout: 20_000 }
+        );
+
+        return { success: true, revertedAmount: result.revertedAmount };
     }
 
     async revertInstallment(
@@ -927,7 +1042,7 @@ export class CreditService {
         return await prisma.$transaction(async (tx) => {
             const schedule = await tx.paymentSchedule.findUnique({
                 where: { id: scheduleId, creditId },
-                include: { credit: { include: { business: true } } }
+                include: { credit: { include: { business: true } } },
             });
 
             if (!schedule) throw new Error('Cuota no encontrada');
@@ -978,18 +1093,28 @@ export class CreditService {
             });
 
             // 3. Compensar la Caja
+            // Resolver la cuenta donde entró el pago (para revertir desde la misma cuenta)
+            const originalPayment = await tx.payment.findFirst({
+                where: { creditId, scheduleId },
+                orderBy: { paymentDate: 'desc' },
+                select: { accountId: true, account: { select: { name: true } } },
+            });
+            const revertAccountId   = originalPayment?.accountId ?? null;
+            const revertAccountName = originalPayment?.account?.name ?? 'Efectivo';
+
             const newBalance = new Prisma.Decimal(business.currentBalance).minus(amountToRevert);
             await tx.cashMovement.create({
                 data: {
                     businessId: business.id,
-                    type: 'payment_reversion' as any, // Cast to any to avoid temporary TS sync issues
+                    type: 'payment_reversion' as any,
                     amount: new Prisma.Decimal(amountToRevert),
                     balanceAfter: newBalance,
                     description: `Reversión en cuota #${schedule.installmentNumber} del crédito ${credit.id.slice(0, 8)}`,
-                    paymentMethod: 'efectivo',
-                    createdById: userId,
-                    relatedCreditId: creditId
-                }
+                    paymentMethod: revertAccountName,
+                    accountId:    revertAccountId ?? undefined,
+                    createdById:  userId,
+                    relatedCreditId: creditId,
+                },
             });
 
             await tx.business.update({

@@ -136,6 +136,15 @@ export interface CloseReportDisburser {
     totalDesembolsado: number;
 }
 
+export interface CloseReportCancellation {
+    creditId: string | null;
+    cliente: string;
+    fechaApertura: string | null;
+    montoDevuelto: number;
+    cuentaOrigen: string;
+    usuario: string;
+}
+
 export interface CloseReport {
     meta: {
         businessId: string;
@@ -154,6 +163,7 @@ export interface CloseReport {
     payments: CloseReportPayment[];
     collectors: CloseReportCollector[];
     disbursers: CloseReportDisburser[];
+    cancellations: CloseReportCancellation[];
     operations: CloseReportOperation[];
     totals: {
         totalCobrado: number;

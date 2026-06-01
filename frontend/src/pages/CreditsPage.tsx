@@ -226,7 +226,10 @@ export default function CreditsPage() {
                                 let displayStatus = 'Activo';
                                 let statusColor = 'bg-emerald-100 text-emerald-800';
 
-                                if (credit.status === 'paid') {
+                                if (credit.status === 'cancelled') {
+                                    displayStatus = 'Cancelado';
+                                    statusColor = 'bg-gray-100 text-gray-600';
+                                } else if (credit.status === 'paid') {
                                     displayStatus = 'Completado';
                                     statusColor = 'bg-blue-100 text-blue-800';
                                 } else if (isOverdue) {

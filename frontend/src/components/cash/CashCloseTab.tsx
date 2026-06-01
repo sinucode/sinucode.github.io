@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Lock, Unlock, Clock, AlertCircle, RotateCcw,
     FileDown, FileSpreadsheet, ChevronDown, ChevronRight,
-    TrendingUp, TrendingDown, DollarSign, Users, UserCheck,
+    TrendingUp, TrendingDown, DollarSign, Users, UserCheck, XCircle,
 } from 'lucide-react';
 import {
     getTodayClose, listCloses, createClose, reopenClose, getCloseReport,
@@ -130,6 +130,13 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                 S: 'Desembolso', A: d.usuarioNombre, B: String(d.totalDesembolsado),
                 Pagos: String(d.numCreditos),
                 PorCuenta: '',
+            })),
+            { S: '', A: '', B: '' },
+            ...(r.cancellations || []).map(c => ({
+                S: 'Cancelacion', A: c.cliente, B: String(c.montoDevuelto),
+                Pagos: c.fechaApertura ? new Date(c.fechaApertura).toLocaleDateString('es-CO') : '—',
+                PorCuenta: c.cuentaOrigen,
+                Cobrador: c.usuario,
             })),
             { S: '', A: '', B: '' },
             ...r.payments.map(p => ({
@@ -478,6 +485,56 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                 <td className="px-4 py-2.5 text-right text-blue-700">
                                                     {FM(report.disbursers.reduce((s, d) => s + d.totalDesembolsado, 0))}
                                                 </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Cancelaciones del día ── */}
+                    {report.cancellations && report.cancellations.length > 0 && (
+                        <div className="bg-white rounded-xl border border-rose-200 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-rose-100 bg-rose-50/60 flex items-center gap-2">
+                                <XCircle size={16} className="text-rose-600" />
+                                <span className="text-sm font-bold text-rose-900">
+                                    Cancelaciones del día ({report.cancellations.length})
+                                </span>
+                                <span className="text-xs text-rose-500 ml-1">— capital devuelto a la cuenta de origen</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-xs text-gray-500 border-b border-gray-100">
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cliente</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Apertura crédito</th>
+                                            <th className="px-4 py-2 text-right font-semibold uppercase text-rose-700">Capital devuelto</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta origen</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cancelado por</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {report.cancellations.map((c, idx) => (
+                                            <tr key={c.creditId ?? idx} className="hover:bg-rose-50/30">
+                                                <td className="px-4 py-3 font-semibold text-gray-900">{c.cliente}</td>
+                                                <td className="px-4 py-3 text-gray-500 text-xs">
+                                                    {c.fechaApertura
+                                                        ? new Date(c.fechaApertura).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-rose-700">{FM(c.montoDevuelto)}</td>
+                                                <td className="px-4 py-3 text-gray-600">{c.cuentaOrigen}</td>
+                                                <td className="px-4 py-3 text-gray-600">{c.usuario}</td>
+                                            </tr>
+                                        ))}
+                                        {report.cancellations.length > 1 && (
+                                            <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
+                                                <td className="px-4 py-2.5 text-gray-900" colSpan={2}>Total</td>
+                                                <td className="px-4 py-2.5 text-right text-rose-700">
+                                                    {FM(report.cancellations.reduce((s, c) => s + c.montoDevuelto, 0))}
+                                                </td>
+                                                <td colSpan={2} />
                                             </tr>
                                         )}
                                     </tbody>
