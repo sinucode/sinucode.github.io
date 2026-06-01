@@ -344,13 +344,15 @@ export class AccountService {
         const activeAccounts = accounts.filter(a => a.active);
 
         // ─── Cálculo de saldos por cuenta ───
-        const aperturaByAcc: Record<string, number> = {};
-        const ingresosByAcc: Record<string, number> = {};
-        const egresosByAcc:  Record<string, number> = {};
+        const aperturaByAcc:  Record<string, number> = {};
+        const ingresosByAcc:  Record<string, number> = {};
+        const egresosByAcc:   Record<string, number> = {};
+        const trasladosByAcc: Record<string, number> = {}; // net de internal_transfer del día
         accounts.forEach(a => {
-            aperturaByAcc[a.id] = 0;
-            ingresosByAcc[a.id] = 0;
-            egresosByAcc[a.id]  = 0;
+            aperturaByAcc[a.id]  = 0;
+            ingresosByAcc[a.id]  = 0;
+            egresosByAcc[a.id]   = 0;
+            trasladosByAcc[a.id] = 0;
         });
 
         // Apertura: suma de movimientos ANTES del día
@@ -373,14 +375,21 @@ export class AccountService {
             }
         }
 
-        // Ingresos/Egresos del día
+        // Ingresos / Egresos / Traslados del día
+        // Las transferencias internas se separan en su propio acumulador para que
+        // no queden mezcladas con ingresos reales del negocio.
         for (const mov of dayMovements) {
-            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
+            const eff   = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
             const accId = (mov.accountId && ingresosByAcc[mov.accountId] !== undefined)
                 ? mov.accountId : anchorAcc?.id;
-            if (accId) {
-                if (eff >= 0) ingresosByAcc[accId] = (ingresosByAcc[accId] || 0) + eff;
-                else          egresosByAcc[accId]  = (egresosByAcc[accId]  || 0) + eff;
+            if (!accId) continue;
+
+            if ((mov.type as string) === 'internal_transfer') {
+                trasladosByAcc[accId] = (trasladosByAcc[accId] || 0) + eff;
+            } else if (eff >= 0) {
+                ingresosByAcc[accId] = (ingresosByAcc[accId] || 0) + eff;
+            } else {
+                egresosByAcc[accId]  = (egresosByAcc[accId]  || 0) + eff;
             }
         }
 
@@ -394,11 +403,12 @@ export class AccountService {
         ];
 
         const accountsTable = accountsForTable.map(a => {
-            const apertura = Math.round((aperturaByAcc[a.id] || 0) * 100) / 100;
-            const ingresos = Math.round((ingresosByAcc[a.id] || 0) * 100) / 100;
-            const egresos  = Math.round((egresosByAcc[a.id]  || 0) * 100) / 100;
-            const esperado = Math.round((apertura + ingresos + egresos) * 100) / 100;
-            const snapshot = (cashClose?.accountBalances as any[] | null)
+            const apertura  = Math.round((aperturaByAcc[a.id]  || 0) * 100) / 100;
+            const ingresos  = Math.round((ingresosByAcc[a.id]  || 0) * 100) / 100;
+            const egresos   = Math.round((egresosByAcc[a.id]   || 0) * 100) / 100;
+            const traslados = Math.round((trasladosByAcc[a.id] || 0) * 100) / 100;
+            const esperado  = Math.round((apertura + ingresos + traslados + egresos) * 100) / 100;
+            const snapshot  = (cashClose?.accountBalances as any[] | null)
                 ?.find((ab: any) => ab.accountId === a.id);
             return {
                 accountId: a.id,
@@ -406,6 +416,7 @@ export class AccountService {
                 type:      a.type,
                 apertura,
                 ingresos,
+                traslados,
                 egresos,
                 esperado,
                 contado:    snapshot?.countedBalance   ?? null,

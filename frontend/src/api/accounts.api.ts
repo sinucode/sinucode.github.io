@@ -92,6 +92,7 @@ export interface CloseReportAccount {
     type: string;
     apertura: number;
     ingresos: number;
+    traslados: number;   // net de transferencias internas (no son ingresos reales del negocio)
     egresos: number;
     esperado: number;
     contado: number | null;

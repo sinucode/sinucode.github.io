@@ -115,9 +115,12 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             { S: '',    A: '',                 B: '' },
             ...r.accounts.map(a => ({
                 S: 'Cuenta', A: a.name, B: '',
-                Apertura: String(a.apertura), Ingresos: String(a.ingresos),
-                Egresos: String(a.egresos),   Esperado: String(a.esperado),
-                Contado: a.contado !== null ? String(a.contado) : '',
+                Apertura:   String(a.apertura),
+                Ingresos:   String(a.ingresos),
+                Traslados:  String(a.traslados ?? 0),
+                Egresos:    String(a.egresos),
+                Esperado:   String(a.esperado),
+                Contado:    a.contado !== null ? String(a.contado) : '',
                 Diferencia: a.diferencia !== null ? String(a.diferencia) : '',
             })),
             { S: '', A: '', B: '' },
@@ -334,6 +337,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                         <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase">Apertura</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase text-emerald-700">Ingresos</th>
+                                        <th className="px-4 py-2 text-right font-semibold uppercase text-indigo-600">Traslados</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase text-rose-700">Egresos</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase text-primary-700">Esperado</th>
                                         {hasContado && <th className="px-4 py-2 text-right font-semibold uppercase">Contado</th>}
@@ -353,6 +357,13 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                             </td>
                                             <td className="px-4 py-2.5 text-right text-gray-600">{FM(a.apertura)}</td>
                                             <td className="px-4 py-2.5 text-right text-emerald-700 font-medium">{FM(a.ingresos)}</td>
+                                            <td className="px-4 py-2.5 text-right font-medium">
+                                                {(a.traslados ?? 0) !== 0 ? (
+                                                    <span className={(a.traslados ?? 0) > 0 ? 'text-indigo-600' : 'text-orange-600'}>
+                                                        {(a.traslados ?? 0) > 0 ? '+' : ''}{FM(a.traslados ?? 0)}
+                                                    </span>
+                                                ) : <span className="text-gray-300">—</span>}
+                                            </td>
                                             <td className="px-4 py-2.5 text-right text-rose-700 font-medium">{a.egresos !== 0 ? FM(a.egresos) : '—'}</td>
                                             <td className="px-4 py-2.5 text-right font-bold text-primary-700">{FM(a.esperado)}</td>
                                             {hasContado && <td className="px-4 py-2.5 text-right">{a.contado !== null ? FM(a.contado) : '—'}</td>}
@@ -367,6 +378,9 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                         <td className="px-4 py-2.5 text-gray-900">Total</td>
                                         <td className="px-4 py-2.5 text-right text-gray-700">{FM(report.accounts.reduce((s, a) => s + a.apertura, 0))}</td>
                                         <td className="px-4 py-2.5 text-right text-emerald-700">{FM(report.totals.totalIngresos)}</td>
+                                        <td className="px-4 py-2.5 text-right text-indigo-600">
+                                            <span className="text-gray-300 font-normal">—</span>
+                                        </td>
                                         <td className="px-4 py-2.5 text-right text-rose-700">{FM(report.totals.totalEgresos)}</td>
                                         <td className="px-4 py-2.5 text-right text-primary-700">{FM(report.accounts.reduce((s, a) => s + a.esperado, 0))}</td>
                                         {hasContado && <td colSpan={2} />}
