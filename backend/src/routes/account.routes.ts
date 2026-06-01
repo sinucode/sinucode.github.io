@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { body, query } from 'express-validator';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireMinRole } from '../middleware/roleHierarchy.middleware';
-import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount, getTodayClose, listCloses, createClose, reopenClose, autoCloseRun, getCloseReport } from '../controllers/account.controller';
+import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount, setDefaultAccount, getTodayClose, listCloses, createClose, reopenClose, autoCloseRun, getCloseReport } from '../controllers/account.controller';
 
 const router = Router();
 
@@ -32,6 +32,10 @@ router.delete('/:id', requireMinRole('user'), [
     body('mode').optional().isIn(['transfer', 'withdraw']).withMessage('Modo inválido'),
     body('targetAccountId').optional().isUUID().withMessage('Cuenta destino inválida'),
 ], deleteAccount);
+
+router.patch('/:id/default', requireMinRole('admin'), [
+    body('kind').isIn(['payment', 'disbursement']).withMessage('kind debe ser "payment" o "disbursement"'),
+], setDefaultAccount);
 
 // Cierre diario
 router.get('/closes/today', requireMinRole('user'), [query('businessId').isUUID()], getTodayClose);

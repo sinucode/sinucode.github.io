@@ -38,6 +38,7 @@ export const createCredit = async (req: Request, res: Response) => {
                 amount: Number(req.body.amount),
                 interestRate: Number(req.body.interestRate),
                 termDays: Number(req.body.termDays),
+                accountId: req.body.accountId || undefined,
             },
             userId,
             role,
@@ -46,6 +47,9 @@ export const createCredit = async (req: Request, res: Response) => {
         return res.status(201).json(credit);
     } catch (error: any) {
         console.error('Error creando crédito:', error);
+        if ((error as any).code === 'INSUFFICIENT_ACCOUNT_BALANCE') {
+            return res.status(400).json({ error: error.message, code: error.code, details: error.details });
+        }
         if (error.message?.includes('monto excede')) {
             return res.status(409).json({ error: error.message });
         }

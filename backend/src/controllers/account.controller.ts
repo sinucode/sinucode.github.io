@@ -59,6 +59,17 @@ export const deleteAccount = async (req: Request, res: Response) => {
     }
 };
 
+export const setDefaultAccount = async (req: Request, res: Response) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        await accountService.setDefault(req.params.id, req.body.kind, req.user!.userId, req.user!.role as UserRole);
+        return res.json({ success: true });
+    } catch (e: any) {
+        return res.status(statusFor(e.message)).json({ error: e.message });
+    }
+};
+
 // ─── Cierre diario ───
 export const getTodayClose = async (req: Request, res: Response) => {
     try {

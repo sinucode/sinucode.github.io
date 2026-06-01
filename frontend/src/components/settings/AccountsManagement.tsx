@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Wallet, Building2, Smartphone, Plus, Pencil, Trash2, X, Star } from 'lucide-react';
+import { Wallet, Building2, Smartphone, Plus, Pencil, Trash2, X, Banknote, CreditCard } from 'lucide-react';
 import { getBusinesses } from '../../api/business.api';
-import { getAccountBalances, createAccount, updateAccount, deleteAccount, AccountBalance } from '../../api/accounts.api';
+import { getAccountBalances, createAccount, updateAccount, deleteAccount, setDefaultAccount, AccountBalance } from '../../api/accounts.api';
 import { invalidateMoney } from '../../utils/invalidate';
 
 const formatMoney = (v: any) => `$${Math.ceil(Number(v || 0)).toLocaleString('es-CO')}`;
@@ -51,6 +51,11 @@ export default function AccountsManagement() {
         mutationFn: (p: { id: string; mode?: 'transfer' | 'withdraw'; targetAccountId?: string }) => deleteAccount(p.id, { mode: p.mode, targetAccountId: p.targetAccountId }),
         onSuccess: () => { setDeleting(null); setError(''); invalidate(); },
         onError: (e: any) => setError(e?.response?.data?.error || 'Error al eliminar'),
+    });
+    const setDefaultMut = useMutation({
+        mutationFn: (p: { id: string; kind: 'payment' | 'disbursement' }) => setDefaultAccount(p.id, p.kind),
+        onSuccess: () => { setError(''); invalidate(); },
+        onError: (e: any) => setError(e?.response?.data?.error || 'Error al actualizar predeterminado'),
     });
 
     const total = useMemo(() => accounts.reduce((s, a) => s + a.balance, 0), [accounts]);
@@ -113,9 +118,18 @@ export default function AccountsManagement() {
                                         <button onClick={() => setEditing(null)} className="px-2 py-1 bg-gray-100 rounded text-xs">Cancelar</button>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
                                         <span className="font-medium text-gray-900">{a.name}</span>
-                                        {a.isDefault && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded"><Star size={10} /> Por defecto</span>}
+                                        {a.isDefault && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                                <Banknote size={10} /> Pagos
+                                            </span>
+                                        )}
+                                        {a.isDisbursementDefault && (
+                                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                                                <CreditCard size={10} /> Créditos
+                                            </span>
+                                        )}
                                         <span className="text-[10px] text-gray-400 uppercase">{meta.label}</span>
                                     </div>
                                 )}
@@ -125,8 +139,26 @@ export default function AccountsManagement() {
                             </div>
                             {editing?.id !== a.id && (
                                 <div className="flex items-center gap-1">
-                                    <button onClick={() => setEditing({ id: a.id, name: a.name })} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded" title="Editar"><Pencil size={15} /></button>
                                     {!a.isDefault && (
+                                        <button
+                                            onClick={() => setDefaultMut.mutate({ id: a.id, kind: 'payment' })}
+                                            className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded"
+                                            title="Marcar como predeterminada para pagos"
+                                        >
+                                            <Banknote size={15} />
+                                        </button>
+                                    )}
+                                    {!a.isDisbursementDefault && (
+                                        <button
+                                            onClick={() => setDefaultMut.mutate({ id: a.id, kind: 'disbursement' })}
+                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                            title="Marcar como predeterminada para créditos"
+                                        >
+                                            <CreditCard size={15} />
+                                        </button>
+                                    )}
+                                    <button onClick={() => setEditing({ id: a.id, name: a.name })} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded" title="Editar"><Pencil size={15} /></button>
+                                    {!a.isDefault && !a.isDisbursementDefault && (
                                         <button onClick={() => setDeleting(a)} className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded" title="Eliminar"><Trash2 size={15} /></button>
                                     )}
                                 </div>

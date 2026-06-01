@@ -14,6 +14,7 @@ interface CreateCreditInput {
     termDays: number;
     frequency: PaymentFrequency;
     startDate?: string;
+    accountId?: string;
 }
 
 interface ListFilters {
@@ -75,6 +76,48 @@ export class CreditService {
         if (!business) throw new Error('Negocio no encontrado');
         if (Number(business.currentBalance) < data.amount) throw new Error('El monto excede el saldo disponible en caja');
 
+        // Resolver cuenta de desembolso
+        let disbursementAccountId: string;
+        let disbursementAccountName: string;
+
+        if (data.accountId) {
+            // Cuenta explícita: validar que pertenece al negocio y está activa
+            const accExplicit = await prisma.paymentAccount.findFirst({
+                where: { id: data.accountId, businessId: targetBusinessId, active: true },
+                select: { id: true, name: true },
+            });
+            if (!accExplicit) throw new Error('Cuenta de desembolso no válida');
+            disbursementAccountId   = accExplicit.id;
+            disbursementAccountName = accExplicit.name;
+        } else {
+            // Usar el predeterminado de desembolso (isDisbursementDefault → isDefault → primera)
+            const accounts = await prisma.paymentAccount.findMany({
+                where: { businessId: targetBusinessId, active: true },
+                orderBy: [{ isDisbursementDefault: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
+                select: { id: true, name: true, isDisbursementDefault: true, isDefault: true },
+            });
+            const defAcc = accounts[0];
+            if (!defAcc) {
+                // Crear la cuenta Efectivo por defecto
+                disbursementAccountId = await accountService.ensureDefaultAccount(targetBusinessId, userId);
+                disbursementAccountName = 'Efectivo';
+            } else {
+                disbursementAccountId   = defAcc.id;
+                disbursementAccountName = defAcc.name;
+            }
+        }
+
+        // Validar saldo de la cuenta de desembolso
+        const { accounts: accBalances } = await accountService.getBalances(targetBusinessId, userId, role);
+        const accBalance = accBalances.find(a => a.id === disbursementAccountId);
+        const available = accBalance?.balance ?? 0;
+        if (available < data.amount) {
+            const err: any = new Error(`Saldo insuficiente en la cuenta "${disbursementAccountName}" ($${available.toLocaleString('es-CO')} disponible, se necesitan $${data.amount.toLocaleString('es-CO')})`);
+            err.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
+            err.details = { accountId: disbursementAccountId, accountName: disbursementAccountName, available, required: data.amount };
+            throw err;
+        }
+
         const simulation = await this.simulateCredit(data);
 
         const result = await prisma.$transaction(async (tx) => {
@@ -121,7 +164,8 @@ export class CreditService {
                     balanceAfter: newBalance,
                     description: `Desembolso crédito a ${client.fullName}`,
                     relatedCreditId: credit.id,
-                    paymentMethod: 'efectivo', // Desembolso por defecto en efectivo
+                    paymentMethod: disbursementAccountName,
+                    accountId: disbursementAccountId,
                     createdById: userId,
                 },
             });

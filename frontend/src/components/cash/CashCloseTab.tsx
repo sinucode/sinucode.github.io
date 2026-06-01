@@ -126,6 +126,12 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                 PorCuenta: c.porCuenta.map(pc => `${pc.cuenta}: $${Math.ceil(pc.monto).toLocaleString('es-CO')}`).join(' | '),
             })),
             { S: '', A: '', B: '' },
+            ...(r.disbursers || []).map(d => ({
+                S: 'Desembolso', A: d.usuarioNombre, B: String(d.totalDesembolsado),
+                Pagos: String(d.numCreditos),
+                PorCuenta: '',
+            })),
+            { S: '', A: '', B: '' },
             ...r.payments.map(p => ({
                 S: 'Pago', A: p.clienteNombre, B: String(p.monto),
                 Hora: FHour(p.hora),
@@ -427,6 +433,50 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                 ))}
                                                 <td className="px-4 py-2.5 text-right text-primary-700">
                                                     {FM(report.collectors.reduce((s, c) => s + c.totalCobrado, 0))}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Créditos colocados por usuario ── */}
+                    {report.disbursers && report.disbursers.length > 0 && (
+                        <div className="bg-white rounded-xl border border-blue-200 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/60 flex items-center gap-2">
+                                <TrendingDown size={16} className="text-blue-700" />
+                                <span className="text-sm font-bold text-blue-900">
+                                    Créditos colocados por usuario ({report.disbursers.length})
+                                </span>
+                                <span className="text-xs text-blue-600 ml-1">— salidas de caja por desembolsos</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-xs text-gray-500 border-b border-gray-100">
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Usuario</th>
+                                            <th className="px-4 py-2 text-center font-semibold uppercase">Créditos</th>
+                                            <th className="px-4 py-2 text-right font-semibold uppercase text-blue-700">Total desembolsado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {report.disbursers.map(d => (
+                                            <tr key={d.usuarioId} className="hover:bg-blue-50/30">
+                                                <td className="px-4 py-3 font-semibold text-gray-900">{d.usuarioNombre}</td>
+                                                <td className="px-4 py-3 text-center text-gray-500">{d.numCreditos}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-blue-700">{FM(d.totalDesembolsado)}</td>
+                                            </tr>
+                                        ))}
+                                        {report.disbursers.length > 1 && (
+                                            <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
+                                                <td className="px-4 py-2.5 text-gray-900">Total</td>
+                                                <td className="px-4 py-2.5 text-center text-gray-700">
+                                                    {report.disbursers.reduce((s, d) => s + d.numCreditos, 0)}
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right text-blue-700">
+                                                    {FM(report.disbursers.reduce((s, d) => s + d.totalDesembolsado, 0))}
                                                 </td>
                                             </tr>
                                         )}

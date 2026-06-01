@@ -6,6 +6,7 @@ export interface AccountBalance {
     name: string;
     type: string;
     isDefault: boolean;
+    isDisbursementDefault: boolean;
     balance: number;
 }
 
@@ -35,9 +36,23 @@ export class AccountService {
         });
         if (existing) return existing.id;
         const acc = await prisma.paymentAccount.create({
-            data: { businessId, name: 'Efectivo', type: 'cash', isDefault: true, createdById },
+            data: { businessId, name: 'Efectivo', type: 'cash', isDefault: true, isDisbursementDefault: true, createdById },
         });
         return acc.id;
+    }
+
+    /** Fija el predeterminado para pagos (isDefault) o desembolsos (isDisbursementDefault). */
+    async setDefault(accountId: string, kind: 'payment' | 'disbursement', userId: string, role: UserRole): Promise<void> {
+        const acc = await prisma.paymentAccount.findUnique({ where: { id: accountId } });
+        if (!acc) throw new Error('Cuenta no encontrada');
+        if (!acc.active) throw new Error('La cuenta no está activa');
+        await this.validateAccess(acc.businessId, userId, role);
+
+        const field = kind === 'payment' ? 'isDefault' : 'isDisbursementDefault';
+        await prisma.$transaction([
+            prisma.paymentAccount.updateMany({ where: { businessId: acc.businessId }, data: { [field]: false } }),
+            prisma.paymentAccount.update({ where: { id: accountId }, data: { [field]: true } }),
+        ]);
     }
 
     async listAccounts(businessId: string, userId: string, role: UserRole) {
@@ -79,6 +94,7 @@ export class AccountService {
 
         const result: AccountBalance[] = accounts.map(a => ({
             id: a.id, name: a.name, type: a.type, isDefault: a.isDefault,
+            isDisbursementDefault: a.isDisbursementDefault,
             balance: Math.round((balByAcc[a.id] || 0) * 100) / 100,
         }));
         return { accounts: result, total: declaredTotal };
@@ -262,7 +278,7 @@ export class AccountService {
             prisma.cashMovement.findMany({
                 where: { businessId, createdAt: { gte: dayStart, lte: dayEnd } },
                 include: {
-                    createdBy: { select: { fullName: true } },
+                    createdBy: { select: { id: true, fullName: true } },
                     account:   { select: { name: true } },
                 },
                 orderBy: { createdAt: 'asc' },
@@ -405,6 +421,31 @@ export class AccountService {
             porCuenta: Object.entries(c.porCuenta).map(([cuenta, monto]) => ({ cuenta, monto })),
         })).sort((a, b) => b.totalCobrado - a.totalCobrado);
 
+        // ─── Resumen de créditos colocados por usuario ───
+        const disbursersMap: Record<string, {
+            usuarioId: string;
+            usuarioNombre: string;
+            numCreditos: number;
+            totalDesembolsado: number;
+        }> = {};
+
+        for (const m of dayMovements.filter(m => m.type === 'loan_disbursement')) {
+            const uid = m.createdBy.id;
+            if (!disbursersMap[uid]) {
+                disbursersMap[uid] = {
+                    usuarioId: uid,
+                    usuarioNombre: m.createdBy.fullName,
+                    numCreditos: 0,
+                    totalDesembolsado: 0,
+                };
+            }
+            disbursersMap[uid].numCreditos    += 1;
+            disbursersMap[uid].totalDesembolsado =
+                Math.round((disbursersMap[uid].totalDesembolsado + Number(m.amount)) * 100) / 100;
+        }
+
+        const disbursers = Object.values(disbursersMap).sort((a, b) => b.totalDesembolsado - a.totalDesembolsado);
+
         // Tabla de operaciones (todo excepto payment_received — esos van en pagos)
         const operationsTable = dayMovements
             .filter(m => m.type !== 'payment_received')
@@ -446,6 +487,7 @@ export class AccountService {
             accounts: accountsTable,
             payments: paymentsTable,
             collectors,
+            disbursers,
             operations: operationsTable,
             totals: {
                 totalCobrado:  Math.round(totalCobrado   * 100) / 100,

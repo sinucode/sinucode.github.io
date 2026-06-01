@@ -34,7 +34,7 @@ function tableRow(doc: jsPDF, cols: Array<{ x: number; text: string; bold?: bool
 }
 
 export function generateCloseReportPdf(report: CloseReport) {
-    const { meta, accounts, payments, collectors, operations, totals } = report;
+    const { meta, accounts, payments, collectors, disbursers, operations, totals } = report;
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
     const LM  = 14;     // margen izquierdo
@@ -207,6 +207,48 @@ export function generateCloseReportPdf(report: CloseReport) {
             y += 6;
         }
         y += 4;
+    }
+
+    // ═══ CRÉDITOS COLOCADOS POR USUARIO ═══
+    if (disbursers && disbursers.length > 0) {
+        checkPage(20);
+        doc.setDrawColor(180, 180, 180);
+        doc.line(LM, y, RM, y);
+        y += 6;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`CRÉDITOS COLOCADOS (${disbursers.length} usuario${disbursers.length !== 1 ? 's' : ''})`, LM, y);
+        y += 6;
+
+        const dC = [LM, LM + 100, LM + 135];
+        doc.setFontSize(7.5);
+        doc.text('Usuario',             dC[0], y);
+        doc.text('Créditos',            dC[1], y);
+        doc.text('Total desembolsado',  dC[2], y);
+        y += 4;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(LM, y, RM, y);
+        y += 4;
+
+        doc.setFontSize(8);
+        for (const d of disbursers) {
+            checkPage(7);
+            doc.setFont('helvetica', 'normal');
+            doc.text(d.usuarioNombre.slice(0, 35), dC[0], y);
+            doc.text(String(d.numCreditos),         dC[1], y);
+            doc.setFont('helvetica', 'bold');
+            doc.text(FM(d.totalDesembolsado),        dC[2], y);
+            y += 6;
+        }
+        if (disbursers.length > 1) {
+            doc.setFont('helvetica', 'bold');
+            doc.text('Total', dC[0], y);
+            doc.text(String(disbursers.reduce((s, d) => s + d.numCreditos, 0)), dC[1], y);
+            doc.text(FM(disbursers.reduce((s, d) => s + d.totalDesembolsado, 0)), dC[2], y);
+            y += 8;
+        } else {
+            y += 4;
+        }
     }
 
     // ═══ TABLA DE PAGOS ═══

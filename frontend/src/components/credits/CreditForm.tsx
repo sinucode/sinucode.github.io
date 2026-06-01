@@ -1,13 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { invalidateMoney } from '../../utils/invalidate';
 import { getBusinesses } from '../../api/business.api';
 import { searchClients, getClients } from '../../api/clients.api';
-import { createCredit, simulateCredit, CreditSimulation } from '../../api/credits.api';
+import { createCredit, simulateCredit, CreditSimulation, CreateCreditPayload } from '../../api/credits.api';
+import { listAccounts, PaymentAccount } from '../../api/accounts.api';
+import { injectCapital, transferFunds } from '../../api/cash.api';
 import { Client, PaymentFrequency } from '../../types';
-import { Search, Calculator, Save, X, Download } from 'lucide-react';
+import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, ArrowRightLeft, PlusCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { todayBogota } from '../../utils/dates';
 
@@ -69,6 +71,16 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     const [installmentAmount, setInstallmentAmount] = useState('');
 
     const isSuperAdmin = user?.role === 'super_admin';
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+
+    // Cuenta de desembolso
+    const [disbursementAccountId, setDisbursementAccountId] = useState<string>('');
+    // Modal de recarga cuando la cuenta no tiene fondos
+    const [rechargeInfo, setRechargeInfo] = useState<{
+        accountId: string; accountName: string; available: number; required: number;
+    } | null>(null);
+    // Guardamos el último payload intentado para reintentar tras recargar
+    const pendingPayloadRef = useRef<CreateCreditPayload | null>(null);
 
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
@@ -90,6 +102,32 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             setSelectedClient(null);
         }
     }, [selectedBusinessId, isSuperAdmin]);
+
+    // ID efectivo del negocio (super_admin elige, otros tienen el asignado)
+    const effectiveBusinessId = isSuperAdmin
+        ? formData.businessId
+        : (user?.assignedBusiness?.id || '');
+
+    const { data: accounts } = useQuery({
+        queryKey: ['accounts', effectiveBusinessId],
+        queryFn: () => listAccounts(effectiveBusinessId),
+        enabled: !!effectiveBusinessId,
+    });
+
+    // Setear la cuenta predeterminada de desembolso cuando carguen las cuentas
+    useEffect(() => {
+        if (accounts && accounts.length > 0) {
+            const def = accounts.find(a => a.isDisbursementDefault)
+                || accounts.find(a => a.isDefault)
+                || accounts[0];
+            if (def && !disbursementAccountId) setDisbursementAccountId(def.id);
+        }
+    }, [accounts]);
+
+    // Resetear cuenta al cambiar de negocio (super_admin)
+    useEffect(() => {
+        setDisbursementAccountId('');
+    }, [effectiveBusinessId]);
 
     const { data: clientResults } = useQuery({
         queryKey: ['clients', 'search', clientSearch, formData.businessId],
@@ -131,15 +169,26 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         mutationFn: createCredit,
         onSuccess: (credit) => {
             invalidateMoney(queryClient);
+            setRechargeInfo(null);
+            pendingPayloadRef.current = null;
             onCreated(credit.id);
         },
         onError: (err: any) => {
-            const errors = err.response?.data?.errors;
+            const data = err.response?.data;
+            if (data?.code === 'INSUFFICIENT_ACCOUNT_BALANCE') {
+                if (isAdmin) {
+                    setRechargeInfo(data.details);
+                } else {
+                    setFormError(data.error || 'Saldo insuficiente en la cuenta seleccionada. Pide a un administrador que la recargue.');
+                }
+                return;
+            }
+            const errors = data?.errors;
             if (Array.isArray(errors) && errors.length > 0) {
                 setFormError(errors[0].msg);
                 return;
             }
-            setFormError(err.response?.data?.error || 'Error al crear el crédito');
+            setFormError(data?.error || 'Error al crear el crédito');
         },
     });
 
@@ -188,7 +237,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         if (isSuperAdmin && !formData.businessId) {
             return setFormError('Selecciona un negocio');
         }
-        createMutation.mutate({
+        const payload: CreateCreditPayload = {
             clientId: selectedClientId,
             amount,
             interestRate,
@@ -196,7 +245,10 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             frequency: formData.frequency,
             startDate: formData.startDate,
             businessId: formData.businessId || undefined,
-        });
+            accountId: disbursementAccountId || undefined,
+        };
+        pendingPayloadRef.current = payload;
+        createMutation.mutate(payload);
     };
 
     const handleSelectClient = (client: Client) => {
@@ -259,7 +311,24 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         }));
     }, [simulation]);
 
-    return createPortal(
+    return <>
+        {rechargeInfo && accounts && (
+            <RechargeAccountModal
+                businessId={effectiveBusinessId}
+                info={rechargeInfo}
+                allAccounts={accounts}
+                onClose={() => { setRechargeInfo(null); pendingPayloadRef.current = null; }}
+                onSuccess={() => {
+                    invalidateMoney(queryClient);
+                    setRechargeInfo(null);
+                    // Reintentar el crédito automáticamente
+                    if (pendingPayloadRef.current) {
+                        createMutation.mutate(pendingPayloadRef.current);
+                    }
+                }}
+            />
+        )}
+        {createPortal(
         /* Overlay al nivel del body: nunca tapado por bottom nav ni layout */
         <div className="fixed inset-0 z-[9999] flex flex-col bg-black/60">
             {/* En móvil: pantalla completa. En desktop: modal centrado */}
@@ -350,6 +419,33 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         <option value="">Seleccione negocio</option>
                                         {businesses?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                                     </select>
+                                </div>
+                            )}
+
+                            {/* Cuenta de desembolso */}
+                            {accounts && accounts.length > 0 && (
+                                <div className={isSuperAdmin ? '' : 'md:col-span-2'}>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">¿De qué cuenta sale el dinero?</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {accounts.map(a => {
+                                            const Icon = a.type === 'cash' ? Wallet : a.type === 'wallet' ? Smartphone : Building2;
+                                            const active = disbursementAccountId === a.id;
+                                            return (
+                                                <button
+                                                    key={a.id}
+                                                    type="button"
+                                                    onClick={() => setDisbursementAccountId(a.id)}
+                                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition ${active ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400'}`}
+                                                >
+                                                    <Icon size={15} />
+                                                    {a.name}
+                                                    {a.isDisbursementDefault && !active && (
+                                                        <span className="text-[10px] text-gray-400">(predeterminada)</span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             )}
 
@@ -548,7 +644,128 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 </div>
             </div>
         </div>
-        , document.body);
+        , document.body)}
+    </>;
+};
+
+// ─── Modal de recarga de cuenta ───────────────────────────────────────────────
+
+interface RechargeModalProps {
+    businessId: string;
+    info: { accountId: string; accountName: string; available: number; required: number };
+    allAccounts: PaymentAccount[];
+    onClose: () => void;
+    onSuccess: () => void;
+}
+
+const RechargeAccountModal: React.FC<RechargeModalProps> = ({ businessId, info, allAccounts, onClose, onSuccess }) => {
+    const [mode, setMode] = useState<'inject' | 'transfer'>('inject');
+    const [fromAccountId, setFromAccountId] = useState(() => {
+        const other = allAccounts.find(a => a.id !== info.accountId);
+        return other?.id || '';
+    });
+    const [amount, setAmount] = useState(String(info.required - info.available > 0 ? info.required - info.available : info.required));
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const otherAccounts = allAccounts.filter(a => a.id !== info.accountId);
+
+    const handleConfirm = async () => {
+        setError('');
+        const amt = Number(amount.replace(/[^0-9]/g, ''));
+        if (amt <= 0) { setError('Ingresa un monto válido'); return; }
+
+        setLoading(true);
+        try {
+            if (mode === 'inject') {
+                await injectCapital({ businessId, amount: amt, accountId: info.accountId, description: `Recarga para desembolso de crédito` });
+            } else {
+                if (!fromAccountId) { setError('Selecciona una cuenta origen'); setLoading(false); return; }
+                await transferFunds({ businessId, amount: amt, fromAccountId, toAccountId: info.accountId, description: `Transferencia para desembolso de crédito` });
+            }
+            onSuccess();
+        } catch (e: any) {
+            setError(e.response?.data?.error || 'Error al recargar');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fmtCOP = (v: number) => `$${Math.ceil(v).toLocaleString('es-CO')}`;
+    const falta = Math.max(0, info.required - info.available);
+
+    return createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+                <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 text-amber-700">
+                        <AlertTriangle size={20} />
+                        <h3 className="text-base font-bold">Saldo insuficiente</h3>
+                    </div>
+                    <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+                    La cuenta <strong>{info.accountName}</strong> tiene {fmtCOP(info.available)} y el crédito requiere {fmtCOP(info.required)}.
+                    {falta > 0 && <> Faltan <strong>{fmtCOP(falta)}</strong>.</>}
+                </div>
+
+                {/* Modo */}
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setMode('inject')}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'inject' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                    >
+                        <PlusCircle size={15} /> Recargar cuenta
+                    </button>
+                    {otherAccounts.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setMode('transfer')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'transfer' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                        >
+                            <ArrowRightLeft size={15} /> Transferir
+                        </button>
+                    )}
+                </div>
+
+                {mode === 'transfer' && (
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Cuenta origen</label>
+                        <select value={fromAccountId} onChange={e => setFromAccountId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm">
+                            {otherAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                    </div>
+                )}
+
+                <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Monto a {mode === 'inject' ? 'ingresar' : 'transferir'}</label>
+                    <input
+                        type="text"
+                        value={Number(amount.replace(/[^0-9]/g, '')).toLocaleString('es-CO')}
+                        onChange={e => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Mínimo sugerido: {fmtCOP(falta > 0 ? falta : info.required)}</p>
+                </div>
+
+                {error && <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">{error}</p>}
+
+                <div className="flex gap-2 pt-1">
+                    <button onClick={onClose} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium">Cancelar</button>
+                    <button
+                        onClick={handleConfirm}
+                        disabled={loading}
+                        className="flex-1 py-2 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                    >
+                        {loading ? 'Procesando...' : 'Confirmar y crear crédito'}
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
 };
 
 export default CreditForm;

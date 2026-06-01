@@ -12,6 +12,7 @@ export interface SimulateCreditPayload {
 export interface CreateCreditPayload extends SimulateCreditPayload {
     clientId: string;
     businessId?: string;
+    accountId?: string;
 }
 
 export interface CreditSimulation {

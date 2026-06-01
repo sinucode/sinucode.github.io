@@ -6,6 +6,7 @@ export interface PaymentAccount {
     name: string;
     type: 'cash' | 'bank' | 'wallet' | string;
     isDefault: boolean;
+    isDisbursementDefault: boolean;
     active: boolean;
 }
 
@@ -14,6 +15,7 @@ export interface AccountBalance {
     name: string;
     type: string;
     isDefault: boolean;
+    isDisbursementDefault: boolean;
     balance: number;
 }
 
@@ -40,6 +42,10 @@ export const updateAccount = async (id: string, payload: { name?: string; type?:
 export const deleteAccount = async (id: string, payload?: { mode?: 'transfer' | 'withdraw'; targetAccountId?: string }) => {
     const res = await api.delete(`/accounts/${id}`, { data: payload || {} });
     return res.data;
+};
+
+export const setDefaultAccount = async (id: string, kind: 'payment' | 'disbursement'): Promise<void> => {
+    await api.patch(`/accounts/${id}/default`, { kind });
 };
 
 // ─── Cierre diario ───
@@ -123,6 +129,13 @@ export interface CloseReportCollector {
     porCuenta: { cuenta: string; monto: number }[];
 }
 
+export interface CloseReportDisburser {
+    usuarioId: string;
+    usuarioNombre: string;
+    numCreditos: number;
+    totalDesembolsado: number;
+}
+
 export interface CloseReport {
     meta: {
         businessId: string;
@@ -140,6 +153,7 @@ export interface CloseReport {
     accounts: CloseReportAccount[];
     payments: CloseReportPayment[];
     collectors: CloseReportCollector[];
+    disbursers: CloseReportDisburser[];
     operations: CloseReportOperation[];
     totals: {
         totalCobrado: number;

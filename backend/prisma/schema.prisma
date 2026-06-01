@@ -260,7 +260,8 @@ model PaymentAccount {
   businessId  String   @map("business_id")
   name        String
   type        String   @default("bank") // 'cash' | 'bank' | 'wallet'
-  isDefault   Boolean  @default(false) @map("is_default")
+  isDefault              Boolean  @default(false) @map("is_default")
+  isDisbursementDefault  Boolean  @default(false) @map("is_disbursement_default")
   active      Boolean  @default(true)
   createdById String   @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")

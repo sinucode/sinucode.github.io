@@ -29,6 +29,10 @@ export const createCreditValidators = [
         .optional({ nullable: true, checkFalsy: true })
         .isUUID()
         .withMessage('El negocio es inválido'),
+    body('accountId')
+        .optional({ nullable: true, checkFalsy: true })
+        .isUUID()
+        .withMessage('La cuenta de desembolso es inválida'),
     ...simulateCreditValidators,
 ];
 
