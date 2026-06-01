@@ -11,6 +11,8 @@ export interface DashboardKpis {
     creditosActivos: number;
     creditosVencidos: number;
     cobrosHoy: number;
+    totalRetiros: number;
+    totalDiezmos: number;
 }
 
 export interface TopDeudor {

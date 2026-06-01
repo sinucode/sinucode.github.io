@@ -181,9 +181,27 @@ export class BusinessService {
         });
 
         // Crear cuenta "Efectivo" por defecto del nuevo negocio
-        await prisma.paymentAccount.create({
-            data: { businessId: business.id, name: 'Efectivo', type: 'cash', isDefault: true, createdById: requestingUserId },
+        const defaultAccount = await prisma.paymentAccount.create({
+            data: { businessId: business.id, name: 'Efectivo', type: 'cash', isDefault: true, isDisbursementDefault: true, createdById: requestingUserId },
         });
+
+        // Registrar el capital inicial como movimiento contable para que el desglose por
+        // cuenta sea consistente desde el primer día (sin necesidad de backfill futuro)
+        if (Number(business.initialCapital) > 0) {
+            await prisma.cashMovement.create({
+                data: {
+                    businessId:   business.id,
+                    type:         'initial_capital',
+                    amount:       business.initialCapital,
+                    balanceAfter: business.initialCapital,
+                    description:  'Capital inicial',
+                    paymentMethod: defaultAccount.name,
+                    accountId:    defaultAccount.id,
+                    createdById:  requestingUserId,
+                    createdAt:    business.createdAt,
+                },
+            });
+        }
 
         // Auditar
         await prisma.auditLog.create({

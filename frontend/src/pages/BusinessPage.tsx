@@ -1,18 +1,22 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Trash2, Plus } from 'lucide-react';
+import { Pencil, Trash2, Plus, BarChart2 } from 'lucide-react';
 import {
     getBusinesses,
     deleteBusiness,
     type Business,
 } from '../api/business.api';
 import { useAuthStore } from '../store/authStore';
+import { useBusinessStore } from '../store/businessStore';
 import BusinessForm from '../components/business/BusinessForm';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 
 export default function BusinessPage() {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const currentUser = useAuthStore((state) => state.user);
+    const { setSelectedBusiness } = useBusinessStore();
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
     const [businessToDelete, setBusinessToDelete] = useState<Business | null>(null);
@@ -37,6 +41,11 @@ export default function BusinessPage() {
 
     const handleDeleteClick = (business: Business) => {
         setBusinessToDelete(business);
+    };
+
+    const handleRowClick = (business: Business) => {
+        setSelectedBusiness(business.id, business.name);
+        navigate('/dashboard');
     };
 
     const handleConfirmDelete = () => {
@@ -111,23 +120,29 @@ export default function BusinessPage() {
                                 <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
                                     Creado
                                 </th>
-                                {canManage && (
-                                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-primary-600 uppercase tracking-wider">
-                                        Acciones
-                                    </th>
-                                )}
+                                <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-primary-600 uppercase tracking-wider">
+                                    Acciones
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {businesses?.map((business) => (
-                                <tr key={business.id} className="hover:bg-primary-50">
+                                <tr
+                                    key={business.id}
+                                    onClick={() => handleRowClick(business)}
+                                    className="hover:bg-primary-50 cursor-pointer transition-colors"
+                                >
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">
-                                            {business.name}
-                                        </div>
-                                        {/* Show description on mobile below name */}
-                                        <div className="md:hidden text-xs text-primary-600 mt-1 line-clamp-2">
-                                            {business.description || '—'}
+                                        <div className="flex items-center gap-2">
+                                            <div>
+                                                <div className="text-sm font-semibold text-gray-900">
+                                                    {business.name}
+                                                </div>
+                                                {/* Show description on mobile below name */}
+                                                <div className="md:hidden text-xs text-primary-600 mt-1 line-clamp-2">
+                                                    {business.description || '—'}
+                                                </div>
+                                            </div>
                                         </div>
                                     </td>
                                     {/* Description column for larger screens */}
@@ -143,7 +158,7 @@ export default function BusinessPage() {
                                     </td>
                                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
                                         <div
-                                            className={`text-xs sm:text-sm font-medium ${business.currentBalance >= 0
+                                            className={`text-xs sm:text-sm font-semibold ${business.currentBalance >= 0
                                                 ? 'text-green-600'
                                                 : 'text-red-600'
                                                 }`}
@@ -157,31 +172,41 @@ export default function BusinessPage() {
                                             {formatDate(business.createdAt)}
                                         </div>
                                     </td>
-                                    {canManage && (
-                                        <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {/* Editar: admin y super_admin */}
-                                                <button
-                                                    onClick={() => setEditingBusiness(business)}
-                                                    className="text-primary-600 hover:text-primary-900"
-                                                    title="Editar"
-                                                >
-                                                    <Pencil size={18} />
-                                                </button>
-                                                {/* Eliminar: solo super_admin */}
-                                                {isSuperAdmin && (
+                                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <div className="flex items-center justify-end gap-2">
+                                            {/* Ver dashboard */}
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleRowClick(business); }}
+                                                className="text-primary-400 hover:text-primary-700"
+                                                title="Ver dashboard"
+                                            >
+                                                <BarChart2 size={18} />
+                                            </button>
+                                            {canManage && (
+                                                <>
+                                                    {/* Editar: admin y super_admin */}
                                                     <button
-                                                        onClick={() => handleDeleteClick(business)}
-                                                        disabled={deleteMutation.isPending}
-                                                        className="text-red-600 hover:text-red-900 disabled:opacity-50"
-                                                        title="Eliminar"
+                                                        onClick={(e) => { e.stopPropagation(); setEditingBusiness(business); }}
+                                                        className="text-primary-600 hover:text-primary-900"
+                                                        title="Editar"
                                                     >
-                                                        <Trash2 size={18} />
+                                                        <Pencil size={18} />
                                                     </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    )}
+                                                    {/* Eliminar: solo super_admin */}
+                                                    {isSuperAdmin && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(business); }}
+                                                            disabled={deleteMutation.isPending}
+                                                            className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                                                            title="Eliminar"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>

@@ -4,6 +4,7 @@ import {
     Lock, Unlock, Clock, AlertCircle, RotateCcw,
     FileDown, FileSpreadsheet, ChevronDown, ChevronRight,
     TrendingUp, TrendingDown, DollarSign, Users, UserCheck, XCircle,
+    Wallet, Building2, MinusCircle,
 } from 'lucide-react';
 import {
     getTodayClose, listCloses, createClose, reopenClose, getCloseReport,
@@ -31,6 +32,7 @@ const TYPE_LABELS: Record<string, string> = {
     expense:             'Gasto',
     loan_disbursement:   'Desembolso',
     credit_cancellation: 'Cancelación',
+    payment_reversion:   'Reversión de pago',
     tithe:               'Diezmo',
 };
 
@@ -108,7 +110,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             { S: 'KPI', A: 'Pagos',           B: String(r.totals.numPagos) },
             { S: 'KPI', A: 'Total cobrado',   B: String(r.totals.totalCobrado) },
             { S: 'KPI', A: 'Ingresos',        B: String(r.totals.totalIngresos) },
-            { S: 'KPI', A: 'Egresos',         B: String(r.totals.totalEgresos) },
+            { S: 'KPI', A: 'Egresos',         B: String(-r.totals.totalEgresos) },
             { S: 'KPI', A: 'Neto',            B: String(r.totals.neto) },
             { S: '',    A: '',                 B: '' },
             ...r.accounts.map(a => ({
@@ -127,7 +129,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             })),
             { S: '', A: '', B: '' },
             ...(r.disbursements || []).map(d => ({
-                S: 'Credito', A: d.cliente, B: String(d.monto),
+                S: 'Credito', A: d.cliente, B: String(-d.monto),   // salida de caja → negativo
                 Hora: FHour(d.hora),
                 Pagos: '',
                 PorCuenta: d.cuenta,
@@ -153,30 +155,38 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                 Cuenta: p.cuenta, Cobrador: p.cobrador, CreditId: p.creditId,
             })),
             { S: '', A: '', B: '' },
-            ...r.operations.map(op => ({
-                S: 'Operacion', A: TYPE_LABELS[op.tipo] || op.tipo, B: String(op.monto),
+            // Gastos y retiros (withdrawal, tithe) — salidas → negativo
+            ...r.operations.filter(op => ['withdrawal', 'tithe'].includes(op.tipo)).map(op => ({
+                S: 'Gasto', A: TYPE_LABELS[op.tipo] || op.tipo, B: String(op.efectoSignado),
+                Hora: FHour(op.hora), Descripcion: op.descripcion,
+                Cuenta: op.cuenta, Usuario: op.usuario,
+            })),
+            { S: '', A: '', B: '' },
+            // Otras operaciones — con signo según efecto (+ ingreso, - egreso)
+            ...r.operations.filter(op => !['withdrawal', 'tithe'].includes(op.tipo)).map(op => ({
+                S: 'Operacion', A: TYPE_LABELS[op.tipo] || op.tipo, B: String(op.efectoSignado),
                 Hora: FHour(op.hora), Descripcion: op.descripcion,
                 Cuenta: op.cuenta, Usuario: op.usuario,
             })),
         ];
         exportToCsv(`cierre-${r.meta.date}-${r.meta.businessName.replace(/\s+/g, '_')}.csv`, rows, [
-            { header: 'Sección',    accessor: (x: any) => x.S },
-            { header: 'Campo',      accessor: (x: any) => x.A },
-            { header: 'Valor',      accessor: (x: any) => x.B },
-            { header: 'Apertura',   accessor: (x: any) => x.Apertura || '' },
-            { header: 'Ingresos',   accessor: (x: any) => x.Ingresos || '' },
-            { header: 'Egresos',    accessor: (x: any) => x.Egresos || '' },
-            { header: 'Esperado',   accessor: (x: any) => x.Esperado || '' },
-            { header: 'Contado',    accessor: (x: any) => x.Contado || '' },
-            { header: 'Diferencia', accessor: (x: any) => x.Diferencia || '' },
-            { header: 'Hora',       accessor: (x: any) => x.Hora || '' },
-            { header: 'Cuota #',    accessor: (x: any) => x.Cuota || '' },
-            { header: 'Pagos',      accessor: (x: any) => x.Pagos || '' },
-            { header: 'Por cuenta', accessor: (x: any) => x.PorCuenta || '' },
-            { header: 'Cobrador',   accessor: (x: any) => x.Cobrador || '' },
-            { header: 'Descripción',accessor: (x: any) => x.Descripcion || '' },
-            { header: 'Usuario',    accessor: (x: any) => x.Usuario || '' },
-            { header: 'CreditId',   accessor: (x: any) => x.CreditId || '' },
+            { header: 'Sección',     accessor: (x: any) => x.S },
+            { header: 'Campo',       accessor: (x: any) => x.A },
+            { header: 'Valor',       accessor: (x: any) => x.B },
+            { header: 'Apertura',    accessor: (x: any) => x.Apertura || '' },
+            { header: 'Ingresos',    accessor: (x: any) => x.Ingresos || '' },
+            { header: 'Egresos',     accessor: (x: any) => x.Egresos || '' },
+            { header: 'Esperado',    accessor: (x: any) => x.Esperado || '' },
+            { header: 'Contado',     accessor: (x: any) => x.Contado || '' },
+            { header: 'Diferencia',  accessor: (x: any) => x.Diferencia || '' },
+            { header: 'Hora',        accessor: (x: any) => x.Hora || '' },
+            { header: 'Cuota #',     accessor: (x: any) => x.Cuota || '' },
+            { header: 'Pagos',       accessor: (x: any) => x.Pagos || '' },
+            { header: 'Cuenta',      accessor: (x: any) => x.PorCuenta || x.Cuenta || '' },
+            { header: 'Cobrador',    accessor: (x: any) => x.Cobrador || '' },
+            { header: 'Descripción', accessor: (x: any) => x.Descripcion || '' },
+            { header: 'Usuario',     accessor: (x: any) => x.Usuario || '' },
+            { header: 'ID Crédito',  accessor: (x: any) => x.CreditId || '' },
         ]);
     };
 
@@ -223,6 +233,23 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
                         <Unlock size={11} /> {isToday ? 'Caja abierta' : 'Sin cierre registrado'}
                     </span>
+                )}
+                {/* Botones de descarga (acceso rápido desde el inicio) */}
+                {report && (
+                    <div className="flex gap-2 ml-auto">
+                        <button
+                            onClick={() => generateCloseReportPdf(report)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 text-white rounded-lg font-semibold text-xs hover:bg-rose-700 transition-colors"
+                        >
+                            <FileDown size={13} /> PDF
+                        </button>
+                        <button
+                            onClick={() => exportExcel(report)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-semibold text-xs hover:bg-emerald-700 transition-colors"
+                        >
+                            <FileSpreadsheet size={13} /> Excel
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -271,16 +298,17 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                     {/* ── KPIs ── */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {[
-                            { label: 'Total cobrado',   value: FM(report.totals.totalCobrado),  Icon: DollarSign,  cls: 'text-primary-600 bg-primary-50' },
-                            { label: 'Pagos recibidos', value: String(report.totals.numPagos),   Icon: Users,       cls: 'text-blue-600    bg-blue-50' },
-                            { label: 'Ingresos',        value: FM(report.totals.totalIngresos), Icon: TrendingUp,  cls: 'text-emerald-600 bg-emerald-50' },
-                            { label: 'Egresos',         value: FM(report.totals.totalEgresos),  Icon: TrendingDown,cls: 'text-rose-600    bg-rose-50' },
+                            { label: 'Total cobrado',   sub: 'Solo cuotas cobradas',      value: FM(report.totals.totalCobrado),  Icon: DollarSign,  cls: 'text-primary-600 bg-primary-50' },
+                            { label: 'Pagos recibidos', sub: `${report.totals.numPagos} transacciones`, value: String(report.totals.numPagos),   Icon: Users,       cls: 'text-blue-600    bg-blue-50' },
+                            { label: 'Ingresos',        sub: 'Todos los entradas del día', value: FM(report.totals.totalIngresos), Icon: TrendingUp,  cls: 'text-emerald-600 bg-emerald-50' },
+                            { label: 'Egresos',         sub: 'Todas las salidas del día',  value: FM(report.totals.totalEgresos),  Icon: TrendingDown,cls: 'text-rose-600    bg-rose-50' },
                         ].map(k => (
                             <div key={k.label} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
                                 <div className={`p-2 rounded-lg ${k.cls}`}><k.Icon size={18} /></div>
                                 <div>
                                     <p className="text-xs text-gray-500">{k.label}</p>
                                     <p className="font-bold text-gray-900 text-sm">{k.value}</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">{k.sub}</p>
                                 </div>
                             </div>
                         ))}
@@ -315,7 +343,14 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                 <tbody className="divide-y divide-gray-100">
                                     {report.accounts.map(a => (
                                         <tr key={a.accountId} className="hover:bg-gray-50">
-                                            <td className="px-4 py-2.5 font-medium text-gray-800">{a.name}</td>
+                                            <td className="px-4 py-2.5 font-medium text-gray-800">
+                                                <span className="flex items-center gap-1.5">
+                                                    {a.type === 'cash'
+                                                        ? <Wallet size={13} className="text-emerald-600 shrink-0" />
+                                                        : <Building2 size={13} className="text-blue-600 shrink-0" />}
+                                                    {a.name}
+                                                </span>
+                                            </td>
                                             <td className="px-4 py-2.5 text-right text-gray-600">{FM(a.apertura)}</td>
                                             <td className="px-4 py-2.5 text-right text-emerald-700 font-medium">{FM(a.ingresos)}</td>
                                             <td className="px-4 py-2.5 text-right text-rose-700 font-medium">{a.egresos !== 0 ? FM(a.egresos) : '—'}</td>
@@ -376,6 +411,13 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                 <td className="px-4 py-2.5 text-gray-600">{p.cobrador}</td>
                                             </tr>
                                         ))}
+                                        <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
+                                            <td className="px-4 py-2.5 text-gray-900" colSpan={3}>Total</td>
+                                            <td className="px-4 py-2.5 text-right text-primary-700">
+                                                {FM(report.payments.reduce((s, p) => s + p.monto, 0))}
+                                            </td>
+                                            <td colSpan={2} />
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -471,7 +513,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                             <th className="px-4 py-2 text-left font-semibold uppercase">Hora</th>
                                             <th className="px-4 py-2 text-left font-semibold uppercase">Cliente</th>
                                             <th className="px-4 py-2 text-right font-semibold uppercase">Monto</th>
-                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Salió de</th>
                                             <th className="px-4 py-2 text-left font-semibold uppercase">Colocado por</th>
                                         </tr>
                                     </thead>
@@ -485,6 +527,17 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                 <td className="px-4 py-2.5 text-gray-600">{d.usuario}</td>
                                             </tr>
                                         ))}
+                                        {report.disbursements.length > 1 && (
+                                            <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
+                                                <td className="px-4 py-2.5 text-gray-900" colSpan={2}>
+                                                    Total ({report.disbursements.length} créditos)
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right text-blue-700">
+                                                    {FM(report.disbursements.reduce((s, d) => s + d.monto, 0))}
+                                                </td>
+                                                <td colSpan={2} />
+                                            </tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -552,7 +605,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                             <th className="px-4 py-2 text-left font-semibold uppercase">Cliente</th>
                                             <th className="px-4 py-2 text-left font-semibold uppercase">Apertura crédito</th>
                                             <th className="px-4 py-2 text-right font-semibold uppercase text-rose-700">Capital devuelto</th>
-                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta origen</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Capital regresó a</th>
                                             <th className="px-4 py-2 text-left font-semibold uppercase">Cancelado por</th>
                                         </tr>
                                     </thead>
@@ -585,70 +638,115 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                         </div>
                     )}
 
-                    {/* ── Operaciones del día (colapsable) ── */}
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                        <button
-                            onClick={() => setShowOps(v => !v)}
-                            className="w-full px-4 py-3 border-b border-gray-100 bg-gray-50/50 text-sm font-bold text-gray-800 flex items-center justify-between hover:bg-gray-100"
-                        >
-                            <span>Operaciones del día ({report.operations.length})</span>
-                            {showOps ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        </button>
-                        {showOps && (
-                            report.operations.length === 0 ? (
-                                <p className="px-4 py-6 text-center text-gray-400 text-sm">Sin operaciones en este día</p>
-                            ) : (
+                    {/* ── Gastos y retiros del día ── */}
+                    {(() => {
+                        const gastos = report.operations.filter(op => ['withdrawal', 'tithe'].includes(op.tipo));
+                        if (gastos.length === 0) return null;
+                        return (
+                            <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
+                                <div className="px-4 py-3 border-b border-orange-100 bg-orange-50/60 flex items-center gap-2">
+                                    <MinusCircle size={16} className="text-orange-600" />
+                                    <span className="text-sm font-bold text-orange-900">
+                                        Gastos y retiros del día ({gastos.length})
+                                    </span>
+                                    <span className="text-xs text-orange-500 ml-1">— dinero que salió de la caja</span>
+                                </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="text-xs text-gray-500 border-b border-gray-100">
                                                 <th className="px-4 py-2 text-left font-semibold uppercase">Hora</th>
                                                 <th className="px-4 py-2 text-left font-semibold uppercase">Tipo</th>
-                                                <th className="px-4 py-2 text-left font-semibold uppercase">Descripción</th>
-                                                <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta</th>
-                                                <th className="px-4 py-2 text-right font-semibold uppercase">Efecto</th>
-                                                <th className="px-4 py-2 text-left font-semibold uppercase">Usuario</th>
+                                                <th className="px-4 py-2 text-left font-semibold uppercase">Para qué</th>
+                                                <th className="px-4 py-2 text-left font-semibold uppercase">Salió de</th>
+                                                <th className="px-4 py-2 text-right font-semibold uppercase text-orange-700">Monto</th>
+                                                <th className="px-4 py-2 text-left font-semibold uppercase">Registrado por</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
-                                            {report.operations.map(op => (
-                                                <tr key={op.id} className="hover:bg-gray-50">
+                                            {gastos.map(op => (
+                                                <tr key={op.id} className="hover:bg-orange-50/20">
                                                     <td className="px-4 py-2.5 text-gray-500 text-xs tabular-nums">{FHour(op.hora)}</td>
                                                     <td className="px-4 py-2.5">
-                                                        <span className={`inline-block px-2 py-0.5 text-xs rounded border font-medium ${op.efectoSignado >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                                                        <span className="inline-block px-2 py-0.5 text-xs rounded border font-medium bg-orange-50 text-orange-700 border-orange-200">
                                                             {TYPE_LABELS[op.tipo] || op.tipo}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-2.5 text-gray-600 max-w-[160px] truncate">{op.descripcion || '—'}</td>
+                                                    <td className="px-4 py-2.5 text-gray-700 max-w-[180px] truncate">{op.descripcion || '—'}</td>
                                                     <td className="px-4 py-2.5 text-gray-600">{op.cuenta}</td>
-                                                    <td className={`px-4 py-2.5 text-right font-bold ${op.efectoSignado >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                                                        {op.efectoSignado >= 0 ? '+' : ''}{FM(op.efectoSignado)}
-                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right font-bold text-orange-700">{FM(Math.abs(op.efectoSignado))}</td>
                                                     <td className="px-4 py-2.5 text-gray-600">{op.usuario}</td>
                                                 </tr>
                                             ))}
+                                            {gastos.length > 1 && (
+                                                <tr className="bg-gray-50 font-bold border-t-2 border-gray-200">
+                                                    <td className="px-4 py-2.5 text-gray-900" colSpan={4}>Total gastos y retiros</td>
+                                                    <td className="px-4 py-2.5 text-right text-orange-700">
+                                                        {FM(gastos.reduce((s, op) => s + Math.abs(op.efectoSignado), 0))}
+                                                    </td>
+                                                    <td />
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
-                            )
-                        )}
-                    </div>
+                            </div>
+                        );
+                    })()}
 
-                    {/* ── Botones descarga ── */}
-                    <div className="flex gap-3 flex-wrap">
-                        <button
-                            onClick={() => generateCloseReportPdf(report)}
-                            className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg font-semibold text-sm hover:bg-rose-700 transition-colors"
-                        >
-                            <FileDown size={16} /> Descargar PDF
-                        </button>
-                        <button
-                            onClick={() => exportExcel(report)}
-                            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold text-sm hover:bg-emerald-700 transition-colors"
-                        >
-                            <FileSpreadsheet size={16} /> Descargar Excel
-                        </button>
-                    </div>
+                    {/* ── Otras operaciones del día (colapsable) ── */}
+                    {(() => {
+                        const otrasOps = report.operations.filter(op => !['withdrawal', 'tithe'].includes(op.tipo));
+                        return (
+                            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                                <button
+                                    onClick={() => setShowOps(v => !v)}
+                                    className="w-full px-4 py-3 border-b border-gray-100 bg-gray-50/50 text-sm font-bold text-gray-800 flex items-center justify-between hover:bg-gray-100"
+                                >
+                                    <span>Otras operaciones del día ({otrasOps.length})</span>
+                                    {showOps ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                </button>
+                                {showOps && (
+                                    otrasOps.length === 0 ? (
+                                        <p className="px-4 py-6 text-center text-gray-400 text-sm">Sin otras operaciones en este día</p>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="text-xs text-gray-500 border-b border-gray-100">
+                                                        <th className="px-4 py-2 text-left font-semibold uppercase">Hora</th>
+                                                        <th className="px-4 py-2 text-left font-semibold uppercase">Tipo</th>
+                                                        <th className="px-4 py-2 text-left font-semibold uppercase">Descripción</th>
+                                                        <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta</th>
+                                                        <th className="px-4 py-2 text-right font-semibold uppercase">Efecto</th>
+                                                        <th className="px-4 py-2 text-left font-semibold uppercase">Usuario</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {otrasOps.map(op => (
+                                                        <tr key={op.id} className="hover:bg-gray-50">
+                                                            <td className="px-4 py-2.5 text-gray-500 text-xs tabular-nums">{FHour(op.hora)}</td>
+                                                            <td className="px-4 py-2.5">
+                                                                <span className={`inline-block px-2 py-0.5 text-xs rounded border font-medium ${op.efectoSignado >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                                                                    {TYPE_LABELS[op.tipo] || op.tipo}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-gray-600 max-w-[160px] truncate">{op.descripcion || '—'}</td>
+                                                            <td className="px-4 py-2.5 text-gray-600">{op.cuenta}</td>
+                                                            <td className={`px-4 py-2.5 text-right font-bold ${op.efectoSignado >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                                {op.efectoSignado >= 0 ? '+' : ''}{FM(op.efectoSignado)}
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-gray-600">{op.usuario}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        );
+                    })()}
                 </>
             )}
 

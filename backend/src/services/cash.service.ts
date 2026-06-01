@@ -47,7 +47,9 @@ export class CashService {
 
     private isIncome(type: CashMovementType, amount: number) {
         if (type === 'internal_transfer') return amount > 0;
-        return ['payment_received', 'capital_injection', 'interest_earned'].includes(type);
+        // Mantener alineado con signedEffect() en account.service.ts
+        return ['payment_received', 'capital_injection', 'interest_earned',
+                'credit_cancellation', 'initial_capital'].includes(type);
     }
 
     /** Resuelve la cuenta a usar: la dada (si es válida y del negocio) o la cuenta por defecto. */
@@ -82,6 +84,20 @@ export class CashService {
         }
 
         const effectiveAccountId = await this.resolveAccountId(data.businessId, data.accountId);
+
+        // Validar saldo de la cuenta específica para retiros y transferencias salientes
+        if (effectiveAccountId && (data.type === 'withdrawal')) {
+            const { accounts: accList } = await accountService.getBalances(data.businessId, userId, userRole);
+            const accEntry = accList.find(a => a.id === effectiveAccountId);
+            if (accEntry && accEntry.balance < Math.abs(data.amount)) {
+                const accName = accEntry.name;
+                throw new Error(
+                    `Saldo insuficiente en la cuenta "${accName}". ` +
+                    `Disponible: $${Math.ceil(accEntry.balance).toLocaleString('es-CO')}, ` +
+                    `solicitado: $${Math.ceil(Math.abs(data.amount)).toLocaleString('es-CO')}`
+                );
+            }
+        }
 
         return prisma.$transaction(async (tx) => {
             const mov = await tx.cashMovement.create({

@@ -21,6 +21,8 @@ export interface DashboardStats {
         creditosActivos: number;
         creditosVencidos: number;
         cobrosHoy: number;
+        totalRetiros: number;
+        totalDiezmos: number;
     };
     topDeudores: Array<{
         clientId: string;
@@ -102,7 +104,7 @@ export class DashboardService {
                 where: {
                     businessId,
                     createdAt: { gte: start, lte: end },
-                    type: { in: ['payment_received', 'interest_earned'] },
+                    type: { in: ['payment_received', 'interest_earned', 'withdrawal', 'tithe'] },
                 },
                 select: {
                     type: true,
@@ -182,10 +184,12 @@ export class DashboardService {
         // Cartera al día = lo que aún no está vencido (todo el saldo menos lo ya vencido)
         const carteraAlDia = totalAdeudado - carteraVencida;
 
-        // Pagos y donaciones en el período
+        // Pagos, donaciones, retiros y diezmos en el período
         let pagosRecibidos = 0;
         let donacionesRecibidas = 0;
         let gananciaRealizada = 0;
+        let totalRetiros = 0;
+        let totalDiezmos = 0;
 
         for (const mov of movementsInRange) {
             const amount = Number(mov.amount);
@@ -197,6 +201,10 @@ export class DashboardService {
                 if (mov.relatedPaymentId) {
                     donacionesRecibidas += amount;
                 }
+            } else if (mov.type === 'withdrawal') {
+                totalRetiros += Math.abs(amount);
+            } else if (mov.type === 'tithe') {
+                totalDiezmos += Math.abs(amount);
             }
         }
 
@@ -283,6 +291,8 @@ export class DashboardService {
                 creditosActivos,
                 creditosVencidos,
                 cobrosHoy,
+                totalRetiros,
+                totalDiezmos,
             },
             topDeudores,
             tendenciaPagos,

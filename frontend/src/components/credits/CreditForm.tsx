@@ -219,6 +219,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
+        if (createMutation.isPending) return;   // evitar doble envío por clic rápido
         setFormError('');
         if (!selectedClientId) return setFormError('Selecciona un cliente');
         const amount = Number(formData.amount.replace(/[^0-9]/g, ''));

@@ -114,6 +114,11 @@ if (!process.env.VERCEL) {
         logger.info(`📍 Environment: ${config.nodeEnv}`);
         logger.info(`🔗 Frontend URL: ${config.frontend.url}`);
 
+        // Advertir si CRON_SECRET no está configurado (el cierre automático fallará silenciosamente)
+        if (!process.env.CRON_SECRET) {
+            logger.warn('⚠️  CRON_SECRET no configurado — el cierre automático de caja no funcionará');
+        }
+
         // Iniciar cron jobs
         startWhatsAppRemindersJob();
     });

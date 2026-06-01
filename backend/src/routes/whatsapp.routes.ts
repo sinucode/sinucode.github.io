@@ -42,6 +42,18 @@ router.put('/template', async (req, res) => {
         return res.status(400).json({ error: 'ID de negocio es requerido' });
     }
 
+    // Verificar que el admin autenticado tiene acceso a este negocio (super_admin puede cualquiera)
+    const user = req.user!;
+    if (user.role !== 'super_admin') {
+        const access = await prisma.userBusiness.findFirst({
+            where: { userId: user.userId, businessId },
+            select: { businessId: true },
+        });
+        if (!access) {
+            return res.status(403).json({ error: 'No tienes acceso a este negocio' });
+        }
+    }
+
     try {
         const business = await prisma.business.update({
             where: { id: businessId },
@@ -80,6 +92,11 @@ router.post('/test', async (req, res) => {
 
     if (!phone || !template) {
         return res.status(400).json({ error: 'Número de teléfono y plantilla son requeridos' });
+    }
+
+    // Validar formato básico de teléfono (7-15 dígitos, puede iniciar con +)
+    if (!/^\+?[0-9]{7,15}$/.test(String(phone).replace(/\s/g, ''))) {
+        return res.status(400).json({ error: 'Número de teléfono inválido. Use formato internacional (ej: +573001234567)' });
     }
 
     try {

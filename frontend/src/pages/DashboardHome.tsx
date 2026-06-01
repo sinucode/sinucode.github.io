@@ -99,40 +99,71 @@ export default function DashboardHome() {
                 carteraVencida={kpis?.carteraVencida ?? 0}
             />
 
-            {/* KPIs Fila 1 — Período (responde al filtro) */}
+            {/* KPIs Fila 1 — Ingresos del período */}
             <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase mb-2 px-1">
-                    Movimientos del período seleccionado
+                    Ingresos del período seleccionado
                 </p>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <KpiCard
                         title="Pagos recibidos"
+                        subtitle="Cuotas cobradas"
                         value={formatMoney(kpis?.pagosRecibidos ?? 0)}
                         color="blue"
                         loading={statsLoading}
+                        onClick={() => navigate('/cash')}
                     />
                     <KpiCard
                         title="Donaciones recibidas"
+                        subtitle="Intereses donados"
                         value={formatMoney(kpis?.donacionesRecibidas ?? 0)}
                         color="emerald"
                         loading={statsLoading}
                     />
                     <KpiCard
                         title="Ganancia realizada"
+                        subtitle="Total intereses ganados"
                         value={formatMoney(kpis?.gananciaRealizada ?? 0)}
                         color="amber"
                         loading={statsLoading}
                     />
                     <KpiCard
                         title="Créditos nuevos"
+                        subtitle="Otorgados en el período"
                         value={String(kpis?.creditosNuevos ?? 0)}
                         color="purple"
                         loading={statsLoading}
+                        onClick={() => navigate('/credits')}
                     />
                 </div>
             </div>
 
-            {/* KPIs Fila 2 — Estado actual (no filtra) */}
+            {/* KPIs Fila 2 — Egresos del período */}
+            <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2 px-1">
+                    Egresos del período seleccionado
+                </p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <KpiCard
+                        title="Retiros"
+                        subtitle="Fondos retirados de caja"
+                        value={formatMoney(kpis?.totalRetiros ?? 0)}
+                        color="rose"
+                        loading={statsLoading}
+                        onClick={() => navigate('/cash')}
+                    />
+                    <KpiCard
+                        title="Diezmos"
+                        subtitle="Diezmos entregados"
+                        value={formatMoney(kpis?.totalDiezmos ?? 0)}
+                        color="violet"
+                        loading={statsLoading}
+                        onClick={() => navigate('/cash')}
+                    />
+                </div>
+            </div>
+
+            {/* KPIs Fila 3 — Estado actual (no filtra) */}
             <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase mb-2 px-1">
                     Estado actual (al día de hoy)
@@ -140,6 +171,7 @@ export default function DashboardHome() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <KpiCard
                         title="Cartera vencida"
+                        subtitle="Cuotas sin pagar vencidas"
                         value={formatMoney(kpis?.carteraVencida ?? 0)}
                         color="red"
                         loading={statsLoading}
@@ -147,6 +179,7 @@ export default function DashboardHome() {
                     />
                     <KpiCard
                         title="Créditos activos"
+                        subtitle="Al día, sin mora"
                         value={String(kpis?.creditosActivos ?? 0)}
                         color="green"
                         loading={statsLoading}
@@ -154,6 +187,7 @@ export default function DashboardHome() {
                     />
                     <KpiCard
                         title="Créditos en mora"
+                        subtitle="Con cuotas vencidas"
                         value={String(kpis?.creditosVencidos ?? 0)}
                         color="red"
                         loading={statsLoading}
@@ -161,6 +195,7 @@ export default function DashboardHome() {
                     />
                     <KpiCard
                         title="Cobros hoy"
+                        subtitle="Cuotas que vencen hoy"
                         value={String(kpis?.cobrosHoy ?? 0)}
                         color="orange"
                         loading={statsLoading}
@@ -212,25 +247,29 @@ export default function DashboardHome() {
 
 function KpiCard({
     title,
+    subtitle,
     value,
     color,
     loading,
     onClick,
 }: {
     title: string;
+    subtitle?: string;
     value: string;
     color: string;
     loading?: boolean;
     onClick?: () => void;
 }) {
     const colors: Record<string, string> = {
-        blue: 'from-blue-500 to-blue-600',
-        green: 'from-emerald-500 to-emerald-600',
+        blue:    'from-blue-500 to-blue-600',
+        green:   'from-emerald-500 to-emerald-600',
         emerald: 'from-emerald-500 to-teal-600',
-        purple: 'from-purple-500 to-purple-600',
-        orange: 'from-orange-500 to-orange-600',
-        red: 'from-red-500 to-red-600',
-        amber: 'from-amber-500 to-amber-600',
+        purple:  'from-purple-500 to-purple-600',
+        orange:  'from-orange-500 to-orange-600',
+        red:     'from-red-500 to-red-600',
+        amber:   'from-amber-500 to-amber-600',
+        rose:    'from-rose-500 to-rose-600',
+        violet:  'from-violet-500 to-violet-600',
     };
 
     return (
@@ -240,7 +279,10 @@ function KpiCard({
                 onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
             }`}
         >
-            <p className="text-xs font-medium opacity-90 uppercase tracking-wide">{title}</p>
+            <p className="text-xs font-semibold opacity-90 uppercase tracking-wide">{title}</p>
+            {subtitle && (
+                <p className="text-[10px] opacity-70 mt-0.5 truncate">{subtitle}</p>
+            )}
             {loading ? (
                 <div className="mt-2 h-7 bg-white/20 rounded animate-pulse" />
             ) : (

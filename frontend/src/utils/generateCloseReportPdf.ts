@@ -1,7 +1,9 @@
 import jsPDF from 'jspdf';
 import { CloseReport } from '../api/accounts.api';
 
-const FM = (v: number) => `$${Math.ceil(v).toLocaleString('es-CO')}`;
+const FM = (v: number) => `$${Math.ceil(Math.abs(v)).toLocaleString('es-CO')}`;
+// Formato con signo: -$500.000 para egresos, +$500.000 para ingresos
+const FMS = (v: number) => `${v >= 0 ? '+' : '-'}$${Math.ceil(Math.abs(v)).toLocaleString('es-CO')}`;
 const FH = (d: string) =>
     new Date(d).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' });
 const FDate = (dateStr: string) => {
@@ -18,6 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
     expense:            'Gasto',
     loan_disbursement:  'Desembolso',
     credit_cancellation:'Cancelación',
+    payment_reversion:  'Reversión de pago',
     tithe:              'Diezmo',
 };
 
@@ -44,9 +47,9 @@ export function generateCloseReportPdf(report: CloseReport) {
     const BOT = 280;    // límite inferior antes de nueva página
 
     const statusLabel =
-        meta.close?.status === 'closed'   ? '🔒 CERRADO'
-        : meta.close?.status === 'reopened' ? '🔓 REABIERTO'
-        : 'ABIERTO (sin cierre registrado)';
+        meta.close?.status === 'closed'   ? '[CERRADO]'
+        : meta.close?.status === 'reopened' ? '[REABIERTO]'
+        : '[ABIERTO - sin cierre registrado]';
 
     let y = 20;
 
@@ -145,8 +148,8 @@ export function generateCloseReportPdf(report: CloseReport) {
         tableRow(doc, [
             { x: aC[0], text: a.name.slice(0, 20), maxW: 38 },
             { x: aC[1], text: FM(a.apertura) },
-            { x: aC[2], text: FM(a.ingresos) },
-            { x: aC[3], text: FM(a.egresos < 0 ? a.egresos : -a.egresos) },
+            { x: aC[2], text: a.ingresos !== 0 ? FMS(Math.abs(a.ingresos)) : '$0' },
+            { x: aC[3], text: a.egresos !== 0 ? FMS(a.egresos) : '$0' },
             { x: aC[4], text: FM(a.esperado), bold: true },
         ], y);
         if (hasContado) {
@@ -225,7 +228,7 @@ export function generateCloseReportPdf(report: CloseReport) {
         doc.text('Hora',         dC2[0], y);
         doc.text('Cliente',      dC2[1], y);
         doc.text('Monto',        dC2[2], y);
-        doc.text('Cuenta',       dC2[3], y);
+        doc.text('Salió de',     dC2[3], y);
         doc.text('Colocado por', dC2[4], y);
         y += 4;
         doc.setDrawColor(200, 200, 200);
@@ -249,6 +252,14 @@ export function generateCloseReportPdf(report: CloseReport) {
                     { x: dC2[3], text: d.cuenta,   maxW: 28 },
                     { x: dC2[4], text: d.usuario,  maxW: 36 },
                 ], y);
+                y += 6;
+            }
+            if (disbursements.length > 1) {
+                checkPage(7);
+                doc.setFont('helvetica', 'bold');
+                doc.text('TOTAL', dC2[1], y);
+                doc.text(FM(disbursements.reduce((s, d) => s + Number(d.monto), 0)), dC2[2], y);
+                doc.setFont('helvetica', 'normal');
                 y += 6;
             }
             y += 4;
@@ -310,11 +321,11 @@ export function generateCloseReportPdf(report: CloseReport) {
 
         const xC = [LM, LM + 52, LM + 102, LM + 140, LM + 166];
         doc.setFontSize(7.5);
-        doc.text('Cliente',         xC[0], y);
-        doc.text('Apertura',        xC[1], y);
-        doc.text('Capital devuelto',xC[2], y);
-        doc.text('Cuenta origen',   xC[3], y);
-        doc.text('Usuario',         xC[4], y);
+        doc.text('Cliente',           xC[0], y);
+        doc.text('Apertura',          xC[1], y);
+        doc.text('Capital devuelto',  xC[2], y);
+        doc.text('Capital regresó a', xC[3], y);
+        doc.text('Usuario',           xC[4], y);
         y += 4;
         doc.setDrawColor(200, 200, 200);
         doc.line(LM, y, RM, y);
@@ -377,6 +388,14 @@ export function generateCloseReportPdf(report: CloseReport) {
             ], y);
             y += 6;
         }
+        if (payments.length > 1) {
+            checkPage(7);
+            doc.setFont('helvetica', 'bold');
+            doc.text('TOTAL', pC[1], y);
+            doc.text(FM(payments.reduce((s, p) => s + Number(p.monto), 0)), pC[3], y);
+            doc.setFont('helvetica', 'normal');
+            y += 6;
+        }
         y += 4;
     } else {
         checkPage(12);
@@ -388,15 +407,65 @@ export function generateCloseReportPdf(report: CloseReport) {
         y += 8;
     }
 
-    // ═══ TABLA DE OPERACIONES ═══
-    if (operations.length > 0) {
+    // ═══ GASTOS Y RETIROS DEL DÍA ═══
+    const gastos = operations.filter(op => ['withdrawal', 'tithe'].includes(op.tipo));
+    if (gastos.length > 0) {
         checkPage(20);
         doc.setDrawColor(180, 180, 180);
         doc.line(LM, y, RM, y);
         y += 6;
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
-        doc.text(`OPERACIONES (${operations.length})`, LM, y);
+        doc.text(`GASTOS Y RETIROS (${gastos.length})`, LM, y);
+        y += 6;
+
+        const gC = [LM, LM + 14, LM + 48, LM + 92, LM + 120, LM + 150];
+        doc.setFontSize(7.5);
+        doc.text('Hora',        gC[0], y);
+        doc.text('Tipo',        gC[1], y);
+        doc.text('Para que',    gC[2], y);
+        doc.text('Salio de',    gC[3], y);
+        doc.text('Monto',       gC[4], y);
+        doc.text('Usuario',     gC[5], y);
+        y += 4;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(LM, y, RM, y);
+        y += 4;
+
+        doc.setFontSize(8);
+        for (const op of gastos) {
+            checkPage(7);
+            tableRow(doc, [
+                { x: gC[0], text: FH(op.hora) },
+                { x: gC[1], text: (TYPE_LABELS[op.tipo] || op.tipo), maxW: 32 },
+                { x: gC[2], text: op.descripcion || '—', maxW: 42 },
+                { x: gC[3], text: op.cuenta, maxW: 26 },
+                { x: gC[4], text: FMS(op.efectoSignado), bold: true },
+                { x: gC[5], text: op.usuario, maxW: 44 },
+            ], y);
+            y += 6;
+        }
+        if (gastos.length > 1) {
+            checkPage(7);
+            doc.setFont('helvetica', 'bold');
+            doc.text('TOTAL', gC[1], y);
+            doc.text(FMS(gastos.reduce((s, op) => s + op.efectoSignado, 0)), gC[4], y);
+            doc.setFont('helvetica', 'normal');
+            y += 6;
+        }
+        y += 4;
+    }
+
+    // ═══ OTRAS OPERACIONES DEL DÍA ═══
+    const otrasOps = operations.filter(op => !['withdrawal', 'tithe'].includes(op.tipo));
+    if (otrasOps.length > 0) {
+        checkPage(20);
+        doc.setDrawColor(180, 180, 180);
+        doc.line(LM, y, RM, y);
+        y += 6;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`OTRAS OPERACIONES (${otrasOps.length})`, LM, y);
         y += 6;
 
         // Hora(14) Tipo(34) Descripción(44) Cuenta(28) Monto(26) Usuario(resto)
@@ -405,7 +474,7 @@ export function generateCloseReportPdf(report: CloseReport) {
         doc.setFont('helvetica', 'bold');
         doc.text('Hora',       oC[0], y);
         doc.text('Tipo',       oC[1], y);
-        doc.text('Descripción',oC[2], y);
+        doc.text('Descripcion',oC[2], y);
         doc.text('Cuenta',     oC[3], y);
         doc.text('Monto',      oC[4], y);
         doc.text('Usuario',    oC[5], y);
@@ -415,14 +484,14 @@ export function generateCloseReportPdf(report: CloseReport) {
         y += 4;
 
         doc.setFontSize(8);
-        for (const op of operations) {
+        for (const op of otrasOps) {
             checkPage(7);
             tableRow(doc, [
                 { x: oC[0], text: FH(op.hora) },
                 { x: oC[1], text: (TYPE_LABELS[op.tipo] || op.tipo), maxW: 32 },
-                { x: oC[2], text: op.descripcion, maxW: 42 },
+                { x: oC[2], text: op.descripcion || '—', maxW: 42 },
                 { x: oC[3], text: op.cuenta, maxW: 26 },
-                { x: oC[4], text: FM(op.monto), bold: true },
+                { x: oC[4], text: FMS(op.efectoSignado), bold: true },
                 { x: oC[5], text: op.usuario, maxW: 44 },
             ], y);
             y += 6;

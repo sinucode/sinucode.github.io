@@ -1046,6 +1046,15 @@ export class CreditService {
             });
 
             if (!schedule) throw new Error('Cuota no encontrada');
+
+            // No permitir revertir cuotas de créditos ya pagados — el crédito quedaría en estado inconsistente
+            if (schedule.credit.status === 'paid') {
+                throw new Error(
+                    'No se puede revertir una cuota de un crédito ya completamente pagado. ' +
+                    'Si hubo un error, cancela el crédito y regístralo nuevamente.'
+                );
+            }
+
             // Usar Math.ceil como umbral para alinear con el redondeo de la UI (siempre muestra
             // y envía Math.ceil del paidAmount). Sin esto, pagar/revertir un decimal como 153333,33
             // comparado contra el ceileado 153334 lanzaba un falso "excede el monto pagado".

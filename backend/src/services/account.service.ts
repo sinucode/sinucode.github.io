@@ -63,33 +63,36 @@ export class AccountService {
         });
     }
 
-    /** Saldo por cuenta. Reconcilia el residual con el saldo real del negocio en la cuenta por defecto. */
+    /** Saldo por cuenta. Reconcilia el residual con el saldo real del negocio en la cuenta ancla (la más antigua). */
     async getBalances(businessId: string, userId: string, role: UserRole): Promise<{ accounts: AccountBalance[]; total: number }> {
         await this.validateAccess(businessId, userId, role);
 
         const [accounts, business, movements] = await Promise.all([
-            prisma.paymentAccount.findMany({ where: { businessId, active: true }, orderBy: [{ isDefault: 'desc' }, { name: 'asc' }] }),
+            prisma.paymentAccount.findMany({ where: { businessId, active: true }, orderBy: [{ createdAt: 'asc' }, { name: 'asc' }] }),
             prisma.business.findUnique({ where: { id: businessId }, select: { currentBalance: true } }),
             prisma.cashMovement.findMany({ where: { businessId }, select: { type: true, amount: true, accountId: true } }),
         ]);
         if (!business) throw new Error('Negocio no encontrado');
 
-        const defaultAcc = accounts.find(a => a.isDefault) || accounts[0];
+        // anchorAcc: cuenta más antigua del negocio — ancla ESTABLE para movimientos legacy y el
+        // offset del capital inicial. No cambia aunque el usuario reasigne las preferencias
+        // isDefault / isDisbursementDefault (que son solo etiquetas de UI).
+        const anchorAcc = accounts[0]; // orderBy createdAt asc → primer elemento = más antigua
         const balByAcc: Record<string, number> = {};
         accounts.forEach(a => { balByAcc[a.id] = 0; });
 
         for (const mov of movements) {
             const eff = this.signedEffect(mov.type, Number(mov.amount));
-            // Movimientos sin cuenta (legacy) caen en la cuenta por defecto
-            const accId = mov.accountId && balByAcc[mov.accountId] !== undefined ? mov.accountId : defaultAcc?.id;
+            // Movimientos sin cuenta (legacy) caen en la cuenta ancla (estable, no en la default mutable)
+            const accId = mov.accountId && balByAcc[mov.accountId] !== undefined ? mov.accountId : anchorAcc?.id;
             if (accId) balByAcc[accId] = (balByAcc[accId] || 0) + eff;
         }
 
         // Reconciliar residual con el saldo real del negocio (cuadra siempre el total)
         const declaredTotal = Number(business.currentBalance);
         const calc = Object.values(balByAcc).reduce((s, v) => s + v, 0);
-        if (Math.abs(declaredTotal - calc) > 0.01 && defaultAcc) {
-            balByAcc[defaultAcc.id] += declaredTotal - calc;
+        if (Math.abs(declaredTotal - calc) > 0.01 && anchorAcc) {
+            balByAcc[anchorAcc.id] += declaredTotal - calc;
         }
 
         const result: AccountBalance[] = accounts.map(a => ({
@@ -154,9 +157,12 @@ export class AccountService {
                     if (!opts.targetAccountId || opts.targetAccountId === accountId) throw new Error('Selecciona una cuenta destino válida');
                     const target = await tx.paymentAccount.findFirst({ where: { id: opts.targetAccountId, businessId: acc.businessId, active: true } });
                     if (!target) throw new Error('Cuenta destino no válida');
+                    // Leer el balance real del negocio — la transferencia interna no lo cambia
+                    const bizForTransfer = await tx.business.findUnique({ where: { id: acc.businessId }, select: { currentBalance: true } });
+                    const realBalance = bizForTransfer!.currentBalance;
                     // Transferencia interna: no cambia el total del negocio
-                    await tx.cashMovement.create({ data: { businessId: acc.businessId, type: 'internal_transfer', amount: new Prisma.Decimal(-saldo), balanceAfter: new Prisma.Decimal(0), description: `Cierre de cuenta '${acc.name}' → '${target.name}'`, accountId, paymentMethod: acc.name, createdById: userId } });
-                    await tx.cashMovement.create({ data: { businessId: acc.businessId, type: 'internal_transfer', amount: new Prisma.Decimal(saldo), balanceAfter: new Prisma.Decimal(0), description: `Ingreso por cierre de cuenta '${acc.name}'`, accountId: target.id, paymentMethod: target.name, createdById: userId } });
+                    await tx.cashMovement.create({ data: { businessId: acc.businessId, type: 'internal_transfer', amount: new Prisma.Decimal(-saldo), balanceAfter: realBalance, description: `Cierre de cuenta '${acc.name}' → '${target.name}'`, accountId, paymentMethod: acc.name, createdById: userId } });
+                    await tx.cashMovement.create({ data: { businessId: acc.businessId, type: 'internal_transfer', amount: new Prisma.Decimal(saldo), balanceAfter: realBalance, description: `Ingreso por cierre de cuenta '${acc.name}'`, accountId: target.id, paymentMethod: target.name, createdById: userId } });
                 } else {
                     // Retiro: reduce el total del negocio
                     const biz = await tx.business.findUnique({ where: { id: acc.businessId }, select: { currentBalance: true } });
@@ -218,9 +224,34 @@ export class AccountService {
             };
         });
 
+        const createData = {
+            businessId, closeDate, status: 'closed' as const, closeMode: mode,
+            totalBalance: new Prisma.Decimal(total), accountBalances: accountBalances as any,
+            notes: opts.notes, closedById: userId,
+        };
+
+        if (mode === 'auto') {
+            // En modo automático (cron): solo crear si no existe — nunca sobreescribir un cierre
+            // manual ni sus conteos. Si dos instancias del cron corren a la vez, la segunda recibirá
+            // P2002 (unique constraint) y simplemente ignorará el error.
+            try {
+                return await prisma.cashClose.create({ data: createData });
+            } catch (e: any) {
+                if (e?.code === 'P2002') {
+                    // Ya existe un cierre para este día — la primera instancia ganó, ignorar
+                    const existing = await prisma.cashClose.findFirst({
+                        where: { businessId, closeDate: { gte: closeDate, lt: new Date(closeDate.getTime() + 24 * 3600 * 1000) } },
+                    });
+                    return existing!;
+                }
+                throw e;
+            }
+        }
+
+        // Modo manual: upsert para permitir re-snapshot del día actual
         return prisma.cashClose.upsert({
             where: { businessId_closeDate: { businessId, closeDate } },
-            create: { businessId, closeDate, status: 'closed', closeMode: mode, totalBalance: new Prisma.Decimal(total), accountBalances: accountBalances as any, notes: opts.notes, closedById: userId },
+            create: createData,
             update: { status: 'closed', closeMode: mode, totalBalance: new Prisma.Decimal(total), accountBalances: accountBalances as any, notes: opts.notes, closedById: userId, closedAt: new Date(), reopenedById: null, reopenedAt: null, reopenReason: null },
         });
     }
@@ -307,7 +338,9 @@ export class AccountService {
             }),
         ]);
 
-        const defaultAcc = accounts.find(a => a.isDefault) || accounts[0];
+        // anchorAcc: cuenta más antigua (orderBy createdAt asc) — ancla ESTABLE para movimientos
+        // legacy y el offset del capital inicial. Nunca cambia con las preferencias de UI.
+        const anchorAcc = [...accounts].sort((a, b) => +a.createdAt - +b.createdAt)[0];
         const activeAccounts = accounts.filter(a => a.active);
 
         // ─── Cálculo de saldos por cuenta ───
@@ -324,19 +357,19 @@ export class AccountService {
         for (const mov of preMovements) {
             const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
             const accId = (mov.accountId && aperturaByAcc[mov.accountId] !== undefined)
-                ? mov.accountId : defaultAcc?.id;
+                ? mov.accountId : anchorAcc?.id;
             if (accId) aperturaByAcc[accId] = (aperturaByAcc[accId] || 0) + eff;
         }
 
         // Reconciliar el capital inicial: createBusiness guarda currentBalance pero no registra
         // un cashMovement de tipo 'initial_capital'. El offset absorbe esa diferencia igual que
         // getBalances() y deja la apertura cuadrada con el saldo real.
-        if (defaultAcc && business) {
+        if (anchorAcc && business) {
             const rawSumAll = allMovements.reduce(
                 (s, m) => s + this.signedEffect(m.type as CashMovementType, Number(m.amount)), 0);
             const offset = Number(business.currentBalance) - rawSumAll;
             if (Math.abs(offset) > 0.01) {
-                aperturaByAcc[defaultAcc.id] = (aperturaByAcc[defaultAcc.id] || 0) + offset;
+                aperturaByAcc[anchorAcc.id] = (aperturaByAcc[anchorAcc.id] || 0) + offset;
             }
         }
 
@@ -344,15 +377,23 @@ export class AccountService {
         for (const mov of dayMovements) {
             const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
             const accId = (mov.accountId && ingresosByAcc[mov.accountId] !== undefined)
-                ? mov.accountId : defaultAcc?.id;
+                ? mov.accountId : anchorAcc?.id;
             if (accId) {
                 if (eff >= 0) ingresosByAcc[accId] = (ingresosByAcc[accId] || 0) + eff;
                 else          egresosByAcc[accId]  = (egresosByAcc[accId]  || 0) + eff;
             }
         }
 
-        // Tabla de cuentas
-        const accountsTable = activeAccounts.map(a => {
+        // Tabla de cuentas: incluir cuentas activas + cuentas inactivas que tuvieron movimientos
+        // en el día reportado (para que los totales cuadren y haya visibilidad de dónde vino el dinero)
+        const accountsForTable = [
+            ...activeAccounts,
+            ...accounts.filter(a =>
+                !a.active && dayMovements.some(m => m.accountId === a.id)
+            ),
+        ];
+
+        const accountsTable = accountsForTable.map(a => {
             const apertura = Math.round((aperturaByAcc[a.id] || 0) * 100) / 100;
             const ingresos = Math.round((ingresosByAcc[a.id] || 0) * 100) / 100;
             const egresos  = Math.round((egresosByAcc[a.id]  || 0) * 100) / 100;
@@ -361,7 +402,7 @@ export class AccountService {
                 ?.find((ab: any) => ab.accountId === a.id);
             return {
                 accountId: a.id,
-                name:      a.name,
+                name:      a.active ? a.name : `${a.name} (eliminada)`,
                 type:      a.type,
                 apertura,
                 ingresos,
@@ -472,9 +513,9 @@ export class AccountService {
 
         const disbursers = Object.values(disbursersMap).sort((a, b) => b.totalDesembolsado - a.totalDesembolsado);
 
-        // Tabla de operaciones (todo excepto payment_received — esos van en pagos)
+        // Tabla de operaciones: excluye pagos (van en pagos), créditos (van en créditos) y cancelaciones (van en cancelaciones)
         const operationsTable = dayMovements
-            .filter(m => m.type !== 'payment_received')
+            .filter(m => !['payment_received', 'loan_disbursement', 'credit_cancellation'].includes(m.type))
             .map(m => ({
                 id:           m.id,
                 hora:         m.createdAt,

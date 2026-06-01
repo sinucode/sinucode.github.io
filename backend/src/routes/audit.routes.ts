@@ -33,6 +33,6 @@ router.get('/actions', auditController.getActions.bind(auditController));
  * DELETE /api/audit/:id
  * Eliminar log de auditoría (solo super_admin)
  */
-router.delete('/:id', auditController.deleteLog.bind(auditController));
+router.delete('/:id', requireMinRole('super_admin'), auditController.deleteLog.bind(auditController));
 
 export default router;
