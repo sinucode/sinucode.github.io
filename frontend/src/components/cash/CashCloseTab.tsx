@@ -126,8 +126,15 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                 PorCuenta: c.porCuenta.map(pc => `${pc.cuenta}: $${Math.ceil(pc.monto).toLocaleString('es-CO')}`).join(' | '),
             })),
             { S: '', A: '', B: '' },
+            ...(r.disbursements || []).map(d => ({
+                S: 'Credito', A: d.cliente, B: String(d.monto),
+                Hora: FHour(d.hora),
+                Pagos: '',
+                PorCuenta: d.cuenta,
+                Cobrador: d.usuario,
+            })),
             ...(r.disbursers || []).map(d => ({
-                S: 'Desembolso', A: d.usuarioNombre, B: String(d.totalDesembolsado),
+                S: 'DesembolsoResumen', A: d.usuarioNombre, B: String(d.totalDesembolsado),
                 Pagos: String(d.numCreditos),
                 PorCuenta: '',
             })),
@@ -449,15 +456,50 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                         </div>
                     )}
 
-                    {/* ── Créditos colocados por usuario ── */}
+                    {/* ── Créditos del día (tabla individual) ── */}
+                    <div className="bg-white rounded-xl border border-blue-200 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/60 text-sm font-bold text-blue-900">
+                            Créditos colocados del día ({report.disbursements?.length ?? 0})
+                        </div>
+                        {!report.disbursements || report.disbursements.length === 0 ? (
+                            <p className="px-4 py-6 text-center text-gray-400 text-sm">Sin créditos colocados en este día</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-xs text-gray-500 border-b border-gray-100">
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Hora</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cliente</th>
+                                            <th className="px-4 py-2 text-right font-semibold uppercase">Monto</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta</th>
+                                            <th className="px-4 py-2 text-left font-semibold uppercase">Colocado por</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {report.disbursements.map(d => (
+                                            <tr key={d.id} className="hover:bg-blue-50/20">
+                                                <td className="px-4 py-2.5 text-gray-500 text-xs tabular-nums">{FHour(d.hora)}</td>
+                                                <td className="px-4 py-2.5 font-medium text-gray-900">{d.cliente}</td>
+                                                <td className="px-4 py-2.5 text-right font-bold text-blue-700">{FM(d.monto)}</td>
+                                                <td className="px-4 py-2.5 text-gray-600">{d.cuenta}</td>
+                                                <td className="px-4 py-2.5 text-gray-600">{d.usuario}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── Resumen de créditos por usuario (liquidación) ── */}
                     {report.disbursers && report.disbursers.length > 0 && (
                         <div className="bg-white rounded-xl border border-blue-200 overflow-hidden">
                             <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/60 flex items-center gap-2">
                                 <TrendingDown size={16} className="text-blue-700" />
                                 <span className="text-sm font-bold text-blue-900">
-                                    Créditos colocados por usuario ({report.disbursers.length})
+                                    Resumen por asesor ({report.disbursers.length})
                                 </span>
-                                <span className="text-xs text-blue-600 ml-1">— salidas de caja por desembolsos</span>
+                                <span className="text-xs text-blue-600 ml-1">— total desembolsado por cada usuario</span>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
@@ -465,7 +507,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                         <tr className="text-xs text-gray-500 border-b border-gray-100">
                                             <th className="px-4 py-2 text-left font-semibold uppercase">Usuario</th>
                                             <th className="px-4 py-2 text-center font-semibold uppercase">Créditos</th>
-                                            <th className="px-4 py-2 text-right font-semibold uppercase text-blue-700">Total desembolsado</th>
+                                            <th className="px-4 py-2 text-right font-semibold uppercase text-blue-700">Total</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">

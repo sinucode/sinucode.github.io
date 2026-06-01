@@ -34,7 +34,7 @@ function tableRow(doc: jsPDF, cols: Array<{ x: number; text: string; bold?: bool
 }
 
 export function generateCloseReportPdf(report: CloseReport) {
-    const { meta, accounts, payments, collectors, disbursers, cancellations, operations, totals } = report;
+    const { meta, accounts, payments, collectors, disbursements, disbursers, cancellations, operations, totals } = report;
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
     const LM  = 14;     // margen izquierdo
@@ -209,7 +209,53 @@ export function generateCloseReportPdf(report: CloseReport) {
         y += 4;
     }
 
-    // ═══ CRÉDITOS COLOCADOS POR USUARIO ═══
+    // ═══ CRÉDITOS COLOCADOS DEL DÍA (filas individuales) ═══
+    {
+        checkPage(20);
+        doc.setDrawColor(180, 180, 180);
+        doc.line(LM, y, RM, y);
+        y += 6;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`CRÉDITOS COLOCADOS (${disbursements?.length ?? 0})`, LM, y);
+        y += 6;
+
+        const dC2 = [LM, LM + 14, LM + 56, LM + 98, LM + 128, LM + 158];
+        doc.setFontSize(7.5);
+        doc.text('Hora',         dC2[0], y);
+        doc.text('Cliente',      dC2[1], y);
+        doc.text('Monto',        dC2[2], y);
+        doc.text('Cuenta',       dC2[3], y);
+        doc.text('Colocado por', dC2[4], y);
+        y += 4;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(LM, y, RM, y);
+        y += 4;
+
+        doc.setFontSize(8);
+        if (!disbursements || disbursements.length === 0) {
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(140, 140, 140);
+            doc.text('Sin créditos colocados en este día.', LM, y);
+            doc.setTextColor(0, 0, 0);
+            y += 8;
+        } else {
+            for (const d of disbursements) {
+                checkPage(7);
+                tableRow(doc, [
+                    { x: dC2[0], text: FH(d.hora) },
+                    { x: dC2[1], text: d.cliente,  maxW: 40 },
+                    { x: dC2[2], text: FM(d.monto), bold: true },
+                    { x: dC2[3], text: d.cuenta,   maxW: 28 },
+                    { x: dC2[4], text: d.usuario,  maxW: 36 },
+                ], y);
+                y += 6;
+            }
+            y += 4;
+        }
+    }
+
+    // ═══ CRÉDITOS COLOCADOS POR USUARIO (resumen) ═══
     if (disbursers && disbursers.length > 0) {
         checkPage(20);
         doc.setDrawColor(180, 180, 180);
@@ -217,7 +263,7 @@ export function generateCloseReportPdf(report: CloseReport) {
         y += 6;
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
-        doc.text(`CRÉDITOS COLOCADOS (${disbursers.length} usuario${disbursers.length !== 1 ? 's' : ''})`, LM, y);
+        doc.text(`RESUMEN DE CRÉDITOS POR ASESOR (${disbursers.length})`, LM, y);
         y += 6;
 
         const dC = [LM, LM + 100, LM + 135];

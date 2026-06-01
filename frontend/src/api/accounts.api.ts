@@ -129,6 +129,16 @@ export interface CloseReportCollector {
     porCuenta: { cuenta: string; monto: number }[];
 }
 
+export interface CloseReportDisbursement {
+    id: string;
+    hora: string;
+    creditId: string | null;
+    cliente: string;
+    monto: number;
+    cuenta: string;
+    usuario: string;
+}
+
 export interface CloseReportDisburser {
     usuarioId: string;
     usuarioNombre: string;
@@ -162,6 +172,7 @@ export interface CloseReport {
     accounts: CloseReportAccount[];
     payments: CloseReportPayment[];
     collectors: CloseReportCollector[];
+    disbursements: CloseReportDisbursement[];
     disbursers: CloseReportDisburser[];
     cancellations: CloseReportCancellation[];
     operations: CloseReportOperation[];

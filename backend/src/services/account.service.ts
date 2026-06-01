@@ -434,6 +434,19 @@ export class AccountService {
                 usuario:       m.createdBy.fullName,
             }));
 
+        // ─── Tabla individual de créditos colocados (una fila por crédito) ───
+        const disbursementsTable = dayMovements
+            .filter(m => m.type === 'loan_disbursement')
+            .map(m => ({
+                id:       m.id,
+                hora:     m.createdAt,
+                creditId: m.relatedCreditId ?? null,
+                cliente:  (m.relatedCredit as any)?.client?.fullName ?? m.description,
+                monto:    Math.round(Number(m.amount) * 100) / 100,
+                cuenta:   m.account?.name ?? '—',
+                usuario:  m.createdBy.fullName,
+            }));
+
         // ─── Resumen de créditos colocados por usuario ───
         const disbursersMap: Record<string, {
             usuarioId: string;
@@ -500,6 +513,7 @@ export class AccountService {
             accounts: accountsTable,
             payments: paymentsTable,
             collectors,
+            disbursements: disbursementsTable,
             disbursers,
             cancellations,
             operations: operationsTable,
