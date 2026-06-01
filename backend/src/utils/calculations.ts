@@ -95,11 +95,14 @@ export const calculateCreditPlan = (
     else if (frequency === 'daily') paymentsPerMonth = 30;
 
     const interestPerPayment = rateDecimal / paymentsPerMonth;
-    const totalInterest = amount * interestPerPayment * numberOfPayments;
-    const totalWithInterest = amount + totalInterest;
 
-    // Calcular monto de cada cuota (distribuido equitativamente)
-    const paymentAmount = totalWithInterest / numberOfPayments;
+    // Redondear totales a pesos enteros (COP no usa centavos).
+    // El residuo de redondeo se absorbe en la última cuota para que Σcuotas == totalWithInterest exacto.
+    const totalWithInterest = Math.round(amount + amount * interestPerPayment * numberOfPayments);
+    const totalInterest = totalWithInterest - amount;
+
+    // Cuota base entera; la última = totalWithInterest − base*(n−1) para cuadrar exacto
+    const paymentAmount = Math.round(totalWithInterest / numberOfPayments);
 
     // Generar plan de pagos
     const paymentPlan: PaymentPlan[] = [];
@@ -114,10 +117,15 @@ export const calculateCreditPlan = (
             currentDueDate = normalizeToNoon(nextDate);
         }
 
+        const isLast = i === numberOfPayments - 1;
+        const scheduledAmount = isLast
+            ? totalWithInterest - paymentAmount * (numberOfPayments - 1)
+            : paymentAmount;
+
         paymentPlan.push({
             installmentNumber: i + 1,
             dueDate: currentDueDate,
-            scheduledAmount: paymentAmount,
+            scheduledAmount,
         });
     }
 

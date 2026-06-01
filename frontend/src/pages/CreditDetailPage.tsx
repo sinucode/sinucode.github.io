@@ -919,7 +919,10 @@ function RevertInstallmentModal({
 
     const handleRevert = () => {
         const amt = Number(amount.replace(/[^0-9]/g, ''));
-        if (amt <= 0 || amt > Number(schedule.paidAmount)) {
+        // Usar Math.ceil igual que el valor mostrado (UI siempre redondea hacia arriba),
+        // para evitar falso "Monto inválido" cuando paidAmount tiene decimales internos.
+        const maxRevert = Math.ceil(Number(schedule.paidAmount));
+        if (amt <= 0 || amt > maxRevert) {
             alert('Monto inválido');
             return;
         }

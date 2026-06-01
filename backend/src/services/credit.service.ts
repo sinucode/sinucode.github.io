@@ -887,15 +887,20 @@ export class CreditService {
             });
 
             if (!schedule) throw new Error('Cuota no encontrada');
-            if (amountToRevert > Number(schedule.paidAmount)) {
-                throw new Error(`El monto a revertir ($${amountToRevert}) excede el monto pagado de la cuota ($${schedule.paidAmount})`);
+            // Usar Math.ceil como umbral para alinear con el redondeo de la UI (siempre muestra
+            // y envía Math.ceil del paidAmount). Sin esto, pagar/revertir un decimal como 153333,33
+            // comparado contra el ceileado 153334 lanzaba un falso "excede el monto pagado".
+            const paidAmountCeil = Math.ceil(Number(schedule.paidAmount));
+            if (amountToRevert > paidAmountCeil + 0.01) {
+                throw new Error(`El monto a revertir ($${amountToRevert}) excede el monto pagado de la cuota ($${paidAmountCeil})`);
             }
 
             const business = schedule.credit.business;
             const credit = schedule.credit;
 
-            // 1. Actualizar la cuota
-            const newPaidAmount = new Prisma.Decimal(schedule.paidAmount).minus(amountToRevert);
+            // 1. Actualizar la cuota — clampear a ≥ 0 por si amountToRevert supera levemente
+            //    el paidAmount decimal (diferencia de redondeo, máx 1 peso).
+            const newPaidAmount = new Prisma.Decimal(Math.max(0, Number(schedule.paidAmount) - amountToRevert));
             const isPastDue = schedule.dueDate < new Date();
             const newStatus = Number(newPaidAmount) <= 0
                 ? (isPastDue ? 'overdue' : 'pending')
