@@ -152,14 +152,16 @@ export default function DashboardHome() {
                         loading={statsLoading}
                         onClick={() => navigate('/cash')}
                     />
-                    <KpiCard
-                        title="Diezmos"
-                        subtitle="Diezmos entregados"
-                        value={formatMoney(kpis?.totalDiezmos ?? 0)}
-                        color="violet"
-                        loading={statsLoading}
-                        onClick={() => navigate('/cash')}
-                    />
+                    {isSuperAdmin && (
+                        <KpiCard
+                            title="Diezmos"
+                            subtitle="Diezmos entregados"
+                            value={formatMoney(kpis?.totalDiezmos ?? 0)}
+                            color="violet"
+                            loading={statsLoading}
+                            onClick={() => navigate('/cash')}
+                        />
+                    )}
                 </div>
             </div>
 
