@@ -35,13 +35,14 @@ model User {
   permissions          Json      @default("{}")
 
   // Relaciones
-  businessesCreated Business[]      @relation("BusinessCreator")
+  businessesCreated Business[]        @relation("BusinessCreator")
   userBusinesses    UserBusiness[]
-  creditsCreated    Credit[]        @relation("CreditCreator")
-  paymentsCreated   Payment[]       @relation("PaymentCreator")
-  cashMovements     CashMovement[]  @relation("CashMovementCreator")
+  creditsCreated    Credit[]          @relation("CreditCreator")
+  paymentsCreated   Payment[]         @relation("PaymentCreator")
+  cashMovements     CashMovement[]    @relation("CashMovementCreator")
   auditLogs         AuditLog[]
-  titheApprovals    TithePayment[]  @relation("TitheApprover")
+  titheApprovals    TithePayment[]    @relation("TitheApprover")
+  billings          BusinessBilling[] @relation("BillingCreator")
   @@map("users")
 }
 
@@ -60,21 +61,23 @@ model Business {
   description    String?
   initialCapital Decimal  @default(0) @map("initial_capital") @db.Decimal(15, 2)
   currentBalance Decimal  @default(0) @map("current_balance") @db.Decimal(15, 2)
+  billingPricePerCredit Decimal @default(0) @map("billing_price_per_credit") @db.Decimal(15, 2)
   createdById    String   @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   whatsappMessageTemplate String? @db.Text @map("whatsapp_message_template")
   updatedAt              DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  createdBy      User             @relation("BusinessCreator", fields: [createdById], references: [id])
-  userBusinesses UserBusiness[]
-  clients        Client[]
+  createdBy       User             @relation("BusinessCreator", fields: [createdById], references: [id])
+  userBusinesses  UserBusiness[]
+  clients         Client[]
   credits         Credit[]
   cashMovements   CashMovement[]
   auditLogs       AuditLog[]
   tithePayments   TithePayment[]
   paymentAccounts PaymentAccount[]
   cashCloses      CashClose[]
+  billings        BusinessBilling[]
 
   @@map("businesses")
 }
@@ -400,4 +403,26 @@ enum EmailReminderStatus {
   failed
 
   @@map("email_reminder_status")
+}
+
+// FACTURACIÓN POR NEGOCIO
+model BusinessBilling {
+  id           String   @id @default(uuid())
+  businessId   String   @map("business_id")
+  businessName String   @map("business_name")
+  periodStart  DateTime @map("period_start")
+  periodEnd    DateTime @map("period_end")
+  creditsCount Int      @map("credits_count")
+  pricePerUnit Decimal  @map("price_per_unit") @db.Decimal(15, 2)
+  totalAmount  Decimal  @map("total_amount")   @db.Decimal(15, 2)
+  notes        String?
+  createdById  String   @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("BillingCreator", fields: [createdById], references: [id])
+
+  @@index([businessId])
+  @@index([createdAt])
+  @@map("business_billings")
 }

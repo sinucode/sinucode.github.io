@@ -12,6 +12,7 @@ import {
     Building2,
     Church,
     X,
+    Receipt,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,7 +32,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
     const navLinks = [
         { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Dashboard', show: true },
-        { to: '/businesses', icon: <Building2 size={20} />, label: 'Negocios', show: user?.role === 'super_admin' || user?.role === 'admin' },
+        { to: '/businesses', icon: <Building2 size={20} />, label: 'Negocios',    show: user?.role === 'super_admin' },
+        { to: '/billing',    icon: <Receipt  size={20} />, label: 'Facturación', show: user?.role === 'super_admin' },
         { to: '/clients', icon: <Users size={20} />, label: 'Clientes', show: true },
         { to: '/credits', icon: <CreditCard size={20} />, label: 'Créditos', show: true },
         { to: '/payments', icon: <DollarSign size={20} />, label: 'Pagos', show: true },

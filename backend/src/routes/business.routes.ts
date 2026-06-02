@@ -9,9 +9,9 @@ import {
 
 const router = Router();
 
-// Todas las rutas requieren autenticación y al menos rol admin
+// Todas las rutas de negocios son exclusivas de super_admin
 router.use(authenticate);
-router.use(requireMinRole('admin'));
+router.use(requireMinRole('super_admin'));
 
 /**
  * GET /api/businesses

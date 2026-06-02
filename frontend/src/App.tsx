@@ -14,6 +14,7 @@ import PaymentsPage from './pages/PaymentsPage';
 import CashPage from './pages/CashPage';
 import WhatsAppPage from './pages/WhatsAppPage';
 import TithePage from './pages/TithePage';
+import BillingPage from './pages/BillingPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, isLoading } = useAuthStore();
@@ -30,6 +31,22 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         return <Navigate to="/login" replace />;
     }
 
+    return <>{children}</>;
+}
+
+function SuperAdminRoute({ children }: { children: React.ReactNode }) {
+    const { user, isAuthenticated, isLoading } = useAuthStore();
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    if (user?.role !== 'super_admin') return <Navigate to="/dashboard" replace />;
     return <>{children}</>;
 }
 
@@ -55,7 +72,8 @@ function App() {
                     <Route index element={<DashboardHome />} />
                     <Route path="dashboard" element={<DashboardHome />} />
                     <Route path="settings" element={<SettingsPage />} />
-                    <Route path="businesses" element={<BusinessPage />} />
+                    <Route path="businesses" element={<SuperAdminRoute><BusinessPage /></SuperAdminRoute>} />
+                    <Route path="billing" element={<SuperAdminRoute><BillingPage /></SuperAdminRoute>} />
                     <Route path="clients" element={<ClientsPage />} />
                     <Route path="credits" element={<CreditsPage />} />
                     <Route path="credits/:id" element={<CreditDetailPage />} />
