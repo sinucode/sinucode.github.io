@@ -110,6 +110,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             { S: 'KPI', A: 'Pagos',           B: String(r.totals.numPagos) },
             { S: 'KPI', A: 'Total cobrado',   B: String(r.totals.totalCobrado) },
             { S: 'KPI', A: 'Ingresos',        B: String(r.totals.totalIngresos) },
+            { S: 'KPI', A: 'Inyección',       B: String(r.totals.totalInyeccion) },
             { S: 'KPI', A: 'Egresos',         B: String(-r.totals.totalEgresos) },
             { S: 'KPI', A: 'Neto',            B: String(r.totals.neto) },
             { S: '',    A: '',                 B: '' },
@@ -117,6 +118,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                 S: 'Cuenta', A: a.name, B: '',
                 Apertura:   String(a.apertura),
                 Ingresos:   String(a.ingresos),
+                Inyeccion:  String(a.inyeccion ?? 0),
                 Traslados:  String(a.traslados ?? 0),
                 Egresos:    String(a.egresos),
                 Esperado:   String(a.esperado),
@@ -178,6 +180,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             { header: 'Valor',       accessor: (x: any) => x.B },
             { header: 'Apertura',    accessor: (x: any) => x.Apertura || '' },
             { header: 'Ingresos',    accessor: (x: any) => x.Ingresos || '' },
+            { header: 'Inyección',   accessor: (x: any) => x.Inyeccion || '' },
             { header: 'Egresos',     accessor: (x: any) => x.Egresos || '' },
             { header: 'Esperado',    accessor: (x: any) => x.Esperado || '' },
             { header: 'Contado',     accessor: (x: any) => x.Contado || '' },
@@ -337,6 +340,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                         <th className="px-4 py-2 text-left font-semibold uppercase">Cuenta</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase">Apertura</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase text-emerald-700">Ingresos</th>
+                                        <th className="px-4 py-2 text-right font-semibold uppercase text-teal-600">Inyección</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase text-indigo-600">Traslados</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase text-rose-700">Egresos</th>
                                         <th className="px-4 py-2 text-right font-semibold uppercase text-primary-700">Esperado</th>
@@ -358,6 +362,11 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                             <td className="px-4 py-2.5 text-right text-gray-600">{FM(a.apertura)}</td>
                                             <td className="px-4 py-2.5 text-right text-emerald-700 font-medium">{FM(a.ingresos)}</td>
                                             <td className="px-4 py-2.5 text-right font-medium">
+                                                {(a.inyeccion ?? 0) !== 0
+                                                    ? <span className="text-teal-600">+{FM(a.inyeccion ?? 0)}</span>
+                                                    : <span className="text-gray-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right font-medium">
                                                 {(a.traslados ?? 0) !== 0 ? (
                                                     <span className={(a.traslados ?? 0) > 0 ? 'text-indigo-600' : 'text-orange-600'}>
                                                         {(a.traslados ?? 0) > 0 ? '+' : ''}{FM(a.traslados ?? 0)}
@@ -378,6 +387,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                         <td className="px-4 py-2.5 text-gray-900">Total</td>
                                         <td className="px-4 py-2.5 text-right text-gray-700">{FM(report.accounts.reduce((s, a) => s + a.apertura, 0))}</td>
                                         <td className="px-4 py-2.5 text-right text-emerald-700">{FM(report.totals.totalIngresos)}</td>
+                                        <td className="px-4 py-2.5 text-right text-teal-600">{report.totals.totalInyeccion ? FM(report.totals.totalInyeccion) : <span className="text-gray-300 font-normal">—</span>}</td>
                                         <td className="px-4 py-2.5 text-right text-indigo-600">
                                             <span className="text-gray-300 font-normal">—</span>
                                         </td>

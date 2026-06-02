@@ -346,11 +346,13 @@ export class AccountService {
         // ─── Cálculo de saldos por cuenta ───
         const aperturaByAcc:  Record<string, number> = {};
         const ingresosByAcc:  Record<string, number> = {};
+        const inyeccionByAcc: Record<string, number> = {}; // capital_injection / initial_capital
         const egresosByAcc:   Record<string, number> = {};
         const trasladosByAcc: Record<string, number> = {}; // net de internal_transfer del día
         accounts.forEach(a => {
             aperturaByAcc[a.id]  = 0;
             ingresosByAcc[a.id]  = 0;
+            inyeccionByAcc[a.id] = 0;
             egresosByAcc[a.id]   = 0;
             trasladosByAcc[a.id] = 0;
         });
@@ -386,6 +388,8 @@ export class AccountService {
 
             if ((mov.type as string) === 'internal_transfer') {
                 trasladosByAcc[accId] = (trasladosByAcc[accId] || 0) + eff;
+            } else if ((mov.type as string) === 'capital_injection' || (mov.type as string) === 'initial_capital') {
+                inyeccionByAcc[accId] = (inyeccionByAcc[accId] || 0) + eff;
             } else if (eff >= 0) {
                 ingresosByAcc[accId] = (ingresosByAcc[accId] || 0) + eff;
             } else {
@@ -405,9 +409,10 @@ export class AccountService {
         const accountsTable = accountsForTable.map(a => {
             const apertura  = Math.round((aperturaByAcc[a.id]  || 0) * 100) / 100;
             const ingresos  = Math.round((ingresosByAcc[a.id]  || 0) * 100) / 100;
+            const inyeccion = Math.round((inyeccionByAcc[a.id] || 0) * 100) / 100;
             const egresos   = Math.round((egresosByAcc[a.id]   || 0) * 100) / 100;
             const traslados = Math.round((trasladosByAcc[a.id] || 0) * 100) / 100;
-            const esperado  = Math.round((apertura + ingresos + traslados + egresos) * 100) / 100;
+            const esperado  = Math.round((apertura + ingresos + inyeccion + traslados + egresos) * 100) / 100;
             const snapshot  = (cashClose?.accountBalances as any[] | null)
                 ?.find((ab: any) => ab.accountId === a.id);
             return {
@@ -416,6 +421,7 @@ export class AccountService {
                 type:      a.type,
                 apertura,
                 ingresos,
+                inyeccion,
                 traslados,
                 egresos,
                 esperado,
@@ -538,13 +544,17 @@ export class AccountService {
                 usuario:      m.createdBy.fullName,
             }));
 
-        // Totales
-        let totalIngresos = 0;
-        let totalEgresos  = 0;
+        // Totales — los traslados se excluyen (neto 0); las inyecciones van aparte
+        let totalIngresos  = 0;
+        let totalInyeccion = 0;
+        let totalEgresos   = 0;
         for (const mov of dayMovements) {
+            const t   = mov.type as string;
             const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
-            if (eff >= 0) totalIngresos += eff;
-            else          totalEgresos  += eff;
+            if (t === 'internal_transfer') continue;
+            if (t === 'capital_injection' || t === 'initial_capital') totalInyeccion += eff;
+            else if (eff >= 0) totalIngresos += eff;
+            else               totalEgresos  += eff;
         }
         const totalCobrado = dayPayments.reduce((s, p) => s + Number(p.amount), 0);
 
@@ -570,11 +580,12 @@ export class AccountService {
             cancellations,
             operations: operationsTable,
             totals: {
-                totalCobrado:  Math.round(totalCobrado   * 100) / 100,
-                numPagos:      dayPayments.length,
-                totalIngresos: Math.round(totalIngresos  * 100) / 100,
-                totalEgresos:  Math.round(Math.abs(totalEgresos) * 100) / 100,
-                neto:          Math.round((totalIngresos + totalEgresos) * 100) / 100,
+                totalCobrado:   Math.round(totalCobrado    * 100) / 100,
+                numPagos:       dayPayments.length,
+                totalIngresos:  Math.round(totalIngresos   * 100) / 100,
+                totalInyeccion: Math.round(totalInyeccion  * 100) / 100,
+                totalEgresos:   Math.round(Math.abs(totalEgresos) * 100) / 100,
+                neto:           Math.round((totalIngresos + totalInyeccion + totalEgresos) * 100) / 100,
             },
         };
     }

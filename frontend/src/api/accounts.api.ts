@@ -92,6 +92,7 @@ export interface CloseReportAccount {
     type: string;
     apertura: number;
     ingresos: number;
+    inyeccion: number;   // capital_injection / initial_capital (aportes de capital, no pagos de clientes)
     traslados: number;   // net de transferencias internas (no son ingresos reales del negocio)
     egresos: number;
     esperado: number;
@@ -181,6 +182,7 @@ export interface CloseReport {
         totalCobrado: number;
         numPagos: number;
         totalIngresos: number;
+        totalInyeccion: number;
         totalEgresos: number;
         neto: number;
     };

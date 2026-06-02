@@ -181,6 +181,15 @@ export class CashService {
         ]);
         if (!from || !to) throw new Error('Cuenta de origen o destino no válida');
 
+        // Validar saldo suficiente en la cuenta origen para evitar saldos negativos
+        const balances = await accountService.getBalances(businessId, userId, role);
+        const fromBal  = balances.accounts.find(a => a.id === fromAccountId)?.balance ?? 0;
+        if (amount > fromBal + 0.01) {
+            throw new Error(
+                `Saldo insuficiente en "${from.name}". Disponible: $${Math.round(fromBal).toLocaleString('es-CO')}`
+            );
+        }
+
         return prisma.$transaction(async (tx) => {
             const business = await tx.business.findUnique({
                 where: { id: businessId },

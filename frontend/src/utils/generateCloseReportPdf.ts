@@ -123,20 +123,22 @@ export function generateCloseReportPdf(report: CloseReport) {
     y += 6;
 
     const hasContado = accounts.some(a => a.contado !== null);
-    // Columnas: Cuenta(35) Apertura(24) Ingresos(24) Traslados(24) Egresos(24) Esperado(26) [Contado(24)] [Dif(16)]
-    const aC = [LM, LM + 35, LM + 59, LM + 83, LM + 107, LM + 131, LM + 157, LM + 175];
+    // Columnas: Cuenta(28) Apertura(21) Ingresos(21) Inyección(21) Traslados(21) Egresos(21) Esperado(22) [Contado(22)] [Dif(20)]
+    // Total sin contado: 155mm; con contado: 197mm — cabe en A4 (182mm útiles = RM-LM)
+    const aC = [LM, LM + 28, LM + 49, LM + 70, LM + 91, LM + 112, LM + 133, LM + 155, LM + 177];
 
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
     doc.text('Cuenta',    aC[0], y);
     doc.text('Apertura',  aC[1], y);
     doc.text('Ingresos',  aC[2], y);
-    doc.text('Traslados', aC[3], y);
-    doc.text('Egresos',   aC[4], y);
-    doc.text('Esperado',  aC[5], y);
+    doc.text('Inyección', aC[3], y);
+    doc.text('Traslados', aC[4], y);
+    doc.text('Egresos',   aC[5], y);
+    doc.text('Esperado',  aC[6], y);
     if (hasContado) {
-        doc.text('Contado',    aC[6], y);
-        doc.text('Diferencia', aC[7], y);
+        doc.text('Contado',    aC[7], y);
+        doc.text('Diferencia', aC[8], y);
     }
     y += 4;
     doc.setDrawColor(200, 200, 200);
@@ -147,23 +149,25 @@ export function generateCloseReportPdf(report: CloseReport) {
     for (const a of accounts) {
         checkPage(7);
         const traslados = (a as any).traslados ?? 0;
+        const inyeccion = (a as any).inyeccion ?? 0;
         tableRow(doc, [
-            { x: aC[0], text: a.name.slice(0, 18), maxW: 33 },
+            { x: aC[0], text: a.name.slice(0, 15), maxW: 26 },
             { x: aC[1], text: FM(a.apertura) },
             { x: aC[2], text: a.ingresos !== 0 ? FMS(Math.abs(a.ingresos)) : '$0' },
-            { x: aC[3], text: traslados !== 0 ? FMS(traslados) : '—' },
-            { x: aC[4], text: a.egresos !== 0 ? FMS(a.egresos) : '$0' },
-            { x: aC[5], text: FM(a.esperado), bold: true },
+            { x: aC[3], text: inyeccion !== 0 ? `+${FM(inyeccion)}` : '—' },
+            { x: aC[4], text: traslados !== 0 ? FMS(traslados) : '—' },
+            { x: aC[5], text: a.egresos !== 0 ? FMS(a.egresos) : '$0' },
+            { x: aC[6], text: FM(a.esperado), bold: true },
         ], y);
         if (hasContado) {
-            doc.text(a.contado !== null ? FM(a.contado) : '—', aC[6], y);
+            doc.text(a.contado !== null ? FM(a.contado) : '—', aC[7], y);
             const dif = a.diferencia;
             if (dif !== null) {
                 doc.setTextColor(dif < 0 ? 200 : 20, dif < 0 ? 30 : 150, 30);
-                doc.text(FM(dif), aC[7], y);
+                doc.text(FM(dif), aC[8], y);
                 doc.setTextColor(0, 0, 0);
             } else {
-                doc.text('—', aC[7], y);
+                doc.text('—', aC[8], y);
             }
         }
         y += 6;

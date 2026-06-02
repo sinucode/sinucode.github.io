@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCashFlow, injectCapital, withdrawFunds, forecastCash, transferFunds } from '../api/cash.api';
-import { listAccounts } from '../api/accounts.api';
+import { listAccounts, getAccountBalances } from '../api/accounts.api';
 import { getBusinesses } from '../api/business.api';
 import { invalidateMoney } from '../utils/invalidate';
 import CashCloseTab from '../components/cash/CashCloseTab';
@@ -427,14 +427,23 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
     const [description, setDescription] = useState('');
     const [error, setError] = useState('');
 
-    const { data: accounts } = useQuery({ queryKey: ['accounts', businessId], queryFn: () => listAccounts(businessId), enabled: !!businessId });
+    // Usamos getAccountBalances para tener el saldo real de cada cuenta
+    const { data: balancesData } = useQuery({
+        queryKey: ['account-balances', businessId],
+        queryFn: () => getAccountBalances(businessId),
+        enabled: !!businessId,
+    });
+    const accounts = balancesData?.accounts ?? [];
 
     useEffect(() => {
-        if (accounts && accounts.length >= 1) {
+        if (accounts.length >= 1) {
             if (!fromAccountId) setFromAccountId((accounts.find(a => a.isDefault) || accounts[0]).id);
-            if (!toAccountId) { const other = accounts.find(a => a.id !== (accounts.find(x => x.isDefault) || accounts[0]).id); if (other) setToAccountId(other.id); }
+            if (!toAccountId) {
+                const other = accounts.find(a => a.id !== (accounts.find(x => x.isDefault) || accounts[0]).id);
+                if (other) setToAccountId(other.id);
+            }
         }
-    }, [accounts]);
+    }, [accounts.length]);
 
     const mutation = useMutation({
         mutationFn: transferFunds,
@@ -445,15 +454,27 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
         },
     });
 
+    const amt        = Number(amount.replace(/[^0-9]/g, ''));
+    const fromAcc    = accounts.find(a => a.id === fromAccountId);
+    const toAcc      = accounts.find(a => a.id === toAccountId);
+    const fromSaldo  = fromAcc?.balance ?? 0;
+    const toSaldo    = toAcc?.balance   ?? 0;
+    const afterFrom  = fromSaldo - amt;
+    const afterTo    = toSaldo   + amt;
+    const saldoInsuf = amt > 0 && afterFrom < -0.01;
+    const sameCuenta = fromAccountId === toAccountId;
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        const amt = Number(amount.replace(/[^0-9]/g, ''));
         if (!fromAccountId || !toAccountId) return setError('Selecciona las cuentas de origen y destino');
-        if (fromAccountId === toAccountId) return setError('El origen y el destino deben ser diferentes');
-        if (amt <= 0) return setError('Ingresa un monto válido');
+        if (sameCuenta)  return setError('El origen y el destino deben ser diferentes');
+        if (amt <= 0)    return setError('Ingresa un monto válido');
+        if (saldoInsuf)  return setError(`Saldo insuficiente en "${fromAcc?.name}". Disponible: $${Math.round(fromSaldo).toLocaleString('es-CO')}`);
         mutation.mutate({ businessId, amount: amt, fromAccountId, toAccountId, description });
     };
+
+    const FM = (v: number) => `$${Math.ceil(Math.abs(v)).toLocaleString('es-CO')}`;
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -467,7 +488,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                         <X size={18} className="text-gray-400" />
                     </button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                <form onSubmit={handleSubmit} className="p-6 space-y-5">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Origen</label>
@@ -476,17 +497,21 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                                 onChange={(e) => setFromAccountId(e.target.value)}
                                 className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm font-bold"
                             >
-                                {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                {accounts.map(a => (
+                                    <option key={a.id} value={a.id}>{a.name} — {FM(a.balance)}</option>
+                                ))}
                             </select>
                         </div>
-                        <div className="space-y-1.5 text-right">
+                        <div className="space-y-1.5">
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Destino</label>
                             <select
                                 value={toAccountId}
                                 onChange={(e) => setToAccountId(e.target.value)}
                                 className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-sm font-bold"
                             >
-                                {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                {accounts.map(a => (
+                                    <option key={a.id} value={a.id}>{a.name} — {FM(a.balance)}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -506,6 +531,35 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                         />
                     </div>
 
+                    {/* Cuadro de saldos antes → después */}
+                    {amt > 0 && fromAcc && toAcc && !sameCuenta && (
+                        <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden text-xs">
+                            <div className="px-3 py-1.5 bg-gray-100 font-bold text-gray-500 uppercase tracking-wider text-[10px]">
+                                Efecto de la transferencia
+                            </div>
+                            <div className="divide-y divide-gray-100">
+                                <div className="flex items-center justify-between px-3 py-2">
+                                    <span className="font-semibold text-gray-700">{fromAcc.name} (origen)</span>
+                                    <span className="font-mono">
+                                        <span className="text-gray-500">{FM(fromSaldo)}</span>
+                                        <span className="text-gray-400 mx-1.5">→</span>
+                                        <span className={afterFrom < 0 ? 'text-rose-600 font-bold' : 'text-gray-800 font-bold'}>
+                                            {afterFrom < 0 ? '-' : ''}{FM(afterFrom)}
+                                        </span>
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between px-3 py-2">
+                                    <span className="font-semibold text-gray-700">{toAcc.name} (destino)</span>
+                                    <span className="font-mono">
+                                        <span className="text-gray-500">{FM(toSaldo)}</span>
+                                        <span className="text-gray-400 mx-1.5">→</span>
+                                        <span className="text-emerald-700 font-bold">{FM(afterTo)}</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Notas adicionales</label>
                         <textarea
@@ -517,12 +571,17 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                         />
                     </div>
 
-                    {fromAccountId === toAccountId && (
+                    {sameCuenta && (
                         <p className="text-xs font-bold text-amber-600 bg-amber-50 p-2 rounded-lg text-center">
                             ⚠️ El origen y el destino no pueden ser el mismo
                         </p>
                     )}
-                    {error && (
+                    {saldoInsuf && (
+                        <p className="text-xs font-bold text-rose-600 bg-rose-50 p-2 rounded-lg text-center">
+                            ❌ Saldo insuficiente en "{fromAcc?.name}". Disponible: {FM(fromSaldo)}
+                        </p>
+                    )}
+                    {error && !saldoInsuf && (
                         <p className="text-xs font-bold text-rose-600 bg-rose-50 p-2 rounded-lg text-center">
                             {error}
                         </p>
@@ -538,7 +597,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                         </button>
                         <button
                             type="submit"
-                            disabled={mutation.isPending || fromAccountId === toAccountId || !amount}
+                            disabled={mutation.isPending || sameCuenta || !amount || saldoInsuf}
                             className="flex-1 px-4 py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 shadow-lg shadow-primary-200 disabled:opacity-50 transition-all"
                         >
                             {mutation.isPending ? 'Procesando...' : 'Confirmar'}
