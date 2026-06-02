@@ -60,6 +60,10 @@ export const createBilling = async (payload: {
     return res.data;
 };
 
+export const deleteBilling = async (id: string): Promise<void> => {
+    await api.delete(`/billing/${id}`);
+};
+
 export const listBillings = async (filters?: {
     businessId?: string;
     startDate?:  string;

@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, Save, DollarSign, TrendingUp, Calendar, History, Building2, Loader2 } from 'lucide-react';
+import {
+    FileText, Save, DollarSign, TrendingUp, Calendar, History,
+    Building2, Loader2, RotateCcw, CheckCircle, XCircle, X,
+} from 'lucide-react';
 import {
     getBillingSummary, updateBusinessPrice, createBilling, listBillings,
-    getUnbilledCredits,
+    getUnbilledCredits, deleteBilling,
     type BillingSummaryItem,
     type CreditBillingItem,
 } from '../api/billing.api';
@@ -33,8 +36,20 @@ function getRange(preset: Preset, custom: { start: string; end: string }): { sta
 
 type PriceMap = Record<string, string>;
 
+interface Banner { type: 'ok' | 'err'; msg: string; }
+
 export default function BillingPage() {
     const qc = useQueryClient();
+
+    // ── Banner de feedback ──
+    const [banner, setBanner] = useState<Banner | null>(null);
+    const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const showBanner = (b: Banner) => {
+        if (bannerTimer.current) clearTimeout(bannerTimer.current);
+        setBanner(b);
+        bannerTimer.current = setTimeout(() => setBanner(null), 5000);
+    };
 
     // ── Período ──
     const [preset, setPreset]   = useState<Preset>('thisMonth');
@@ -61,12 +76,41 @@ export default function BillingPage() {
     });
 
     // ── Guardar cobro ──
-    // Después de guardar, refrescamos el resumen (los créditos quedan marcados)
     const saveMutation = useMutation({
         mutationFn: createBilling,
+        onSuccess: (data) => {
+            qc.invalidateQueries({ queryKey: ['billing-summary'] });
+            qc.invalidateQueries({ queryKey: ['billing-history'] });
+            const total = FM(Number(data.totalAmount));
+            showBanner({
+                type: 'ok',
+                msg:  `Cobro guardado: ${data.businessName} · ${data.creditsCount} créditos cobrables · Total ${total}`,
+            });
+        },
+        onError: (e: any) => {
+            showBanner({
+                type: 'err',
+                msg:  e?.response?.data?.error || 'No se pudo guardar el cobro. Intenta de nuevo.',
+            });
+        },
+    });
+
+    // ── Revertir cobro ──
+    const revertMutation = useMutation({
+        mutationFn: deleteBilling,
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['billing-summary'] });
             qc.invalidateQueries({ queryKey: ['billing-history'] });
+            showBanner({
+                type: 'ok',
+                msg:  'Cobro revertido correctamente. Los créditos vuelven a estar disponibles.',
+            });
+        },
+        onError: (e: any) => {
+            showBanner({
+                type: 'err',
+                msg:  e?.response?.data?.error || 'No se pudo revertir el cobro. Intenta de nuevo.',
+            });
         },
     });
 
@@ -89,6 +133,15 @@ export default function BillingPage() {
 
     const handleSave = (item: BillingSummaryItem) => {
         const price = Number((priceMap[item.businessId] || '0').replace(/[^0-9]/g, ''));
+        const total = FM(item.creditsCount * price);
+        const ok = window.confirm(
+            `¿Guardar cobro de "${item.businessName}"?\n\n` +
+            `  Créditos cobrables: ${item.creditsCount}\n` +
+            `  Precio por crédito: ${FM(price)}\n` +
+            `  Total: ${total}\n\n` +
+            `Los créditos quedarán marcados como cobrados y no volverán a aparecer en futuros períodos.`,
+        );
+        if (!ok) return;
         saveMutation.mutate({
             businessId:   item.businessId,
             businessName: item.businessName,
@@ -98,9 +151,20 @@ export default function BillingPage() {
         });
     };
 
+    const handleRevert = (b: (typeof history)[0]) => {
+        const total = FM(Number(b.totalAmount));
+        const ok = window.confirm(
+            `¿Revertir el cobro de "${b.businessName}"?\n\n` +
+            `  Período: ${b.periodStart.slice(0, 10)} — ${b.periodEnd.slice(0, 10)}\n` +
+            `  Créditos: ${b.creditsCount}  ·  Total: ${total}\n\n` +
+            `Los créditos volverán a quedar disponibles para cobrar en un nuevo período.`,
+        );
+        if (!ok) return;
+        revertMutation.mutate(b.id);
+    };
+
     /**
      * PDF PRE-GUARDADO: obtiene los créditos en tiempo real y genera el PDF.
-     * Los créditos aún NO están marcados como cobrados.
      */
     const handlePdf = async (item: BillingSummaryItem) => {
         const price = Number((priceMap[item.businessId] || '0').replace(/[^0-9]/g, ''));
@@ -154,6 +218,23 @@ export default function BillingPage() {
                 </h1>
                 <p className="text-sm text-gray-500 mt-0.5">Cobro mensual a negocios por créditos creados</p>
             </div>
+
+            {/* Banner de feedback */}
+            {banner && (
+                <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
+                    banner.type === 'ok'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-red-50 border-red-200 text-red-800'
+                }`}>
+                    {banner.type === 'ok'
+                        ? <CheckCircle size={17} className="shrink-0 mt-0.5 text-emerald-600" />
+                        : <XCircle    size={17} className="shrink-0 mt-0.5 text-red-600" />}
+                    <span className="flex-1">{banner.msg}</span>
+                    <button onClick={() => setBanner(null)} className="opacity-50 hover:opacity-100 transition-opacity">
+                        <X size={15} />
+                    </button>
+                </div>
+            )}
 
             {/* Selector de período */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
@@ -261,7 +342,9 @@ export default function BillingPage() {
                                                     title="Guardar cobro (marca créditos como cobrados)"
                                                     className="p-1.5 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                                 >
-                                                    <Save size={15} />
+                                                    {saveMutation.isPending
+                                                        ? <Loader2 size={15} className="animate-spin" />
+                                                        : <Save size={15} />}
                                                 </button>
                                                 <button
                                                     onClick={() => handlePdf(item)}
@@ -318,7 +401,7 @@ export default function BillingPage() {
                                 <th className="px-4 py-2 text-center font-semibold uppercase">Período</th>
                                 <th className="px-4 py-2 text-right font-semibold uppercase">Créditos</th>
                                 <th className="px-4 py-2 text-right font-semibold uppercase">Total</th>
-                                <th className="px-4 py-2 text-center font-semibold uppercase">PDF</th>
+                                <th className="px-4 py-2 text-center font-semibold uppercase">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -340,11 +423,25 @@ export default function BillingPage() {
                                     <td className="px-4 py-2.5 text-right text-blue-700 font-semibold">{b.creditsCount}</td>
                                     <td className="px-4 py-2.5 text-right font-bold text-emerald-700">{FM(Number(b.totalAmount))}</td>
                                     <td className="px-4 py-2.5 text-center">
-                                        <button onClick={() => handleHistoryPdf(b)}
-                                            title="Re-generar PDF del cobro guardado"
-                                            className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg transition-all">
-                                            <FileText size={14} />
-                                        </button>
+                                        <div className="flex items-center justify-center gap-2">
+                                            <button
+                                                onClick={() => handleHistoryPdf(b)}
+                                                title="Re-generar PDF del cobro guardado"
+                                                className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg transition-all"
+                                            >
+                                                <FileText size={14} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleRevert(b)}
+                                                disabled={revertMutation.isPending}
+                                                title="Revertir este cobro (los créditos vuelven a estar disponibles)"
+                                                className="p-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                            >
+                                                {revertMutation.isPending
+                                                    ? <Loader2 size={14} className="animate-spin" />
+                                                    : <RotateCcw size={14} />}
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

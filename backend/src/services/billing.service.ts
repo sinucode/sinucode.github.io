@@ -170,6 +170,11 @@ export class BillingService {
         });
     }
 
+    /** Revierte un cobro: borra el registro; los créditos quedan libres (billingId → null). */
+    async deleteBilling(id: string): Promise<void> {
+        await prisma.businessBilling.delete({ where: { id } });
+    }
+
     /** Lista cobros guardados con crédito detallado incluido. */
     async listBillings(filters: {
         businessId?: string;

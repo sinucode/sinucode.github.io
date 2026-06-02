@@ -8,6 +8,7 @@ import {
     updateBusinessPrice,
     createBilling,
     listBillings,
+    deleteBilling,
 } from '../controllers/billing.controller';
 
 const router = Router();
@@ -57,5 +58,11 @@ router.post(
 );
 
 router.get('/', listBillings);
+
+router.delete(
+    '/:id',
+    [ param('id').isUUID().withMessage('id de cobro inválido') ],
+    deleteBilling,
+);
 
 export default router;
