@@ -15,6 +15,21 @@ export const getCreditsSummary = async (req: Request, res: Response): Promise<vo
     }
 };
 
+export const getUnbilledCredits = async (req: Request, res: Response): Promise<void> => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) { res.status(400).json({ errors: errors.array() }); return; }
+
+    try {
+        const { businessId, startDate, endDate } = req.query as {
+            businessId: string; startDate: string; endDate: string;
+        };
+        const credits = await billingService.getUnbilledCredits(businessId, startDate, endDate);
+        res.json(credits);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 export const updateBusinessPrice = async (req: Request, res: Response): Promise<void> => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) { res.status(400).json({ errors: errors.array() }); return; }
@@ -42,7 +57,7 @@ export const createBilling = async (req: Request, res: Response): Promise<void> 
     }
 };
 
-export const listBillings = async (req: Request, res: Response) => {
+export const listBillings = async (req: Request, res: Response): Promise<void> => {
     try {
         const { businessId, startDate, endDate } = req.query as Record<string, string>;
         const billings = await billingService.listBillings({ businessId, startDate, endDate });

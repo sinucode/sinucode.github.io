@@ -143,6 +143,7 @@ model Credit {
   tithePaid          Boolean          @default(false) @map("tithe_paid")
   tithePaidAt        DateTime?        @map("tithe_paid_at")
   tithePaymentId     String?          @map("tithe_payment_id")
+  billingId          String?          @map("billing_id")
   createdById        String           @map("created_by")
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
@@ -156,12 +157,14 @@ model Credit {
   cashMovements    CashMovement[]
   emailReminders   EmailReminder[]
   tithePayment     TithePayment?     @relation(fields: [tithePaymentId], references: [id], onDelete: SetNull)
+  billing          BusinessBilling?  @relation(fields: [billingId], references: [id], onDelete: SetNull)
 
   @@index([businessId])
   @@index([clientId])
   @@index([status])
   @@index([businessId, status])
   @@index([tithePaid])
+  @@index([billingId])
   @@map("credits")
 }
 
@@ -421,6 +424,7 @@ model BusinessBilling {
 
   business  Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   createdBy User     @relation("BillingCreator", fields: [createdById], references: [id])
+  credits   Credit[]
 
   @@index([businessId])
   @@index([createdAt])

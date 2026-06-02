@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, Save, DollarSign, TrendingUp, Calendar, History, Building2 } from 'lucide-react';
+import { FileText, Save, DollarSign, TrendingUp, Calendar, History, Building2, Loader2 } from 'lucide-react';
 import {
     getBillingSummary, updateBusinessPrice, createBilling, listBillings,
+    getUnbilledCredits,
     type BillingSummaryItem,
+    type CreditBillingItem,
 } from '../api/billing.api';
 import { generateBillingPdf } from '../utils/generateBillingPdf';
 
@@ -12,43 +14,41 @@ const FM = (v: number) => `$${Math.ceil(v).toLocaleString('es-CO')}`;
 type Preset = 'thisMonth' | 'last7' | 'last30' | 'custom';
 
 function getRange(preset: Preset, custom: { start: string; end: string }): { start: string; end: string } {
-    const now   = new Date();
-    const pad   = (n: number) => String(n).padStart(2, '0');
-    const fmt   = (d: Date)   => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (d: Date)   => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     if (preset === 'thisMonth') {
-        const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        return { start: fmt(start), end: fmt(now) };
+        return { start: fmt(new Date(now.getFullYear(), now.getMonth(), 1)), end: fmt(now) };
     }
     if (preset === 'last7') {
-        const start = new Date(now); start.setDate(start.getDate() - 6);
-        return { start: fmt(start), end: fmt(now) };
+        const s = new Date(now); s.setDate(s.getDate() - 6);
+        return { start: fmt(s), end: fmt(now) };
     }
     if (preset === 'last30') {
-        const start = new Date(now); start.setDate(start.getDate() - 29);
-        return { start: fmt(start), end: fmt(now) };
+        const s = new Date(now); s.setDate(s.getDate() - 29);
+        return { start: fmt(s), end: fmt(now) };
     }
     return custom;
 }
 
-// Precios editados localmente antes de guardar
-type PriceMap = Record<string, string>; // businessId → valor string del input
+type PriceMap = Record<string, string>;
 
 export default function BillingPage() {
     const qc = useQueryClient();
 
     // ── Período ──
-    const [preset, setPreset] = useState<Preset>('thisMonth');
-    const [custom, setCustom] = useState({ start: '', end: '' });
+    const [preset, setPreset]   = useState<Preset>('thisMonth');
+    const [custom, setCustom]   = useState({ start: '', end: '' });
     const range = getRange(preset, custom);
 
-    // ── Tabla de resumen ──
+    // ── Resumen ──
     const { data: summary = [], isLoading: summaryLoading } = useQuery({
         queryKey: ['billing-summary', range.start, range.end],
         queryFn:  () => getBillingSummary(range.start, range.end),
         enabled:  !!range.start && !!range.end,
     });
 
-    // Mapa local de precios (inicializa desde los datos del servidor)
+    // Precios locales
     const [priceMap, setPriceMap] = useState<PriceMap>({});
     useEffect(() => {
         const map: PriceMap = {};
@@ -57,13 +57,17 @@ export default function BillingPage() {
     }, [summary]);
 
     const priceMutation = useMutation({
-        mutationFn: ({ id, price }: { id: string; price: number }) =>
-            updateBusinessPrice(id, price),
+        mutationFn: ({ id, price }: { id: string; price: number }) => updateBusinessPrice(id, price),
     });
 
+    // ── Guardar cobro ──
+    // Después de guardar, refrescamos el resumen (los créditos quedan marcados)
     const saveMutation = useMutation({
         mutationFn: createBilling,
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['billing-history'] }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['billing-summary'] });
+            qc.invalidateQueries({ queryKey: ['billing-history'] });
+        },
     });
 
     // ── Historial ──
@@ -74,6 +78,10 @@ export default function BillingPage() {
         queryFn:  () => listBillings({ startDate: histRange.start, endDate: histRange.end }),
     });
 
+    // ── Estado de PDF en progreso (por negocio) ──
+    const [pdfLoading, setPdfLoading] = useState<Record<string, boolean>>({});
+
+    // ── Handlers ──
     const handlePriceBlur = (bizId: string) => {
         const val = Number((priceMap[bizId] || '0').replace(/[^0-9]/g, ''));
         priceMutation.mutate({ id: bizId, price: val });
@@ -86,47 +94,65 @@ export default function BillingPage() {
             businessName: item.businessName,
             periodStart:  range.start,
             periodEnd:    range.end,
-            creditsCount: item.creditsCount,
             pricePerUnit: price,
-            totalAmount:  item.creditsCount * price,
         });
     };
 
-    const handlePdf = (item: BillingSummaryItem) => {
+    /**
+     * PDF PRE-GUARDADO: obtiene los créditos en tiempo real y genera el PDF.
+     * Los créditos aún NO están marcados como cobrados.
+     */
+    const handlePdf = async (item: BillingSummaryItem) => {
         const price = Number((priceMap[item.businessId] || '0').replace(/[^0-9]/g, ''));
-        generateBillingPdf({
-            id:           item.businessId,
-            businessId:   item.businessId,
-            businessName: item.businessName,
-            periodStart:  range.start + 'T00:00:00.000Z',
-            periodEnd:    range.end   + 'T23:59:59.999Z',
-            creditsCount: item.creditsCount,
-            pricePerUnit: price,
-            totalAmount:  item.creditsCount * price,
-            createdAt:    new Date().toISOString(),
-        });
+        setPdfLoading(m => ({ ...m, [item.businessId]: true }));
+        try {
+            const credits: CreditBillingItem[] = await getUnbilledCredits(
+                item.businessId, range.start, range.end,
+            );
+            generateBillingPdf(
+                {
+                    id:           item.businessId,
+                    businessId:   item.businessId,
+                    businessName: item.businessName,
+                    periodStart:  range.start + 'T00:00:00.000Z',
+                    periodEnd:    range.end   + 'T23:59:59.999Z',
+                    creditsCount: item.creditsCount,
+                    pricePerUnit: price,
+                    totalAmount:  item.creditsCount * price,
+                    createdAt:    new Date().toISOString(),
+                },
+                credits,
+            );
+        } finally {
+            setPdfLoading(m => ({ ...m, [item.businessId]: false }));
+        }
     };
 
-    const totalCobro = summary.reduce((s, b) => {
+    /** PDF desde el historial: usa los créditos ya guardados en el registro. */
+    const handleHistoryPdf = (b: (typeof history)[0]) => {
+        generateBillingPdf(b, b.credits ?? []);
+    };
+
+    const totalCobro   = summary.reduce((s, b) => {
         const p = Number((priceMap[b.businessId] || '0').replace(/[^0-9]/g, ''));
         return s + b.creditsCount * p;
     }, 0);
     const totalCredits = summary.reduce((s, b) => s + b.creditsCount, 0);
 
     const presetLabel = (p: Preset) =>
-        p === 'thisMonth' ? 'Este mes' : p === 'last7' ? 'Últimos 7 días' : p === 'last30' ? 'Últimos 30 días' : 'Personalizado';
+        p === 'thisMonth' ? 'Este mes' :
+        p === 'last7'     ? 'Últimos 7 días' :
+        p === 'last30'    ? 'Últimos 30 días' : 'Personalizado';
 
     return (
         <div className="p-4 sm:p-6 space-y-6 max-w-6xl mx-auto">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <DollarSign className="text-primary-600" size={24} />
-                        Facturación
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-0.5">Cobro mensual a negocios por créditos creados</p>
-                </div>
+            <div>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <DollarSign className="text-primary-600" size={24} />
+                    Facturación
+                </h1>
+                <p className="text-sm text-gray-500 mt-0.5">Cobro mensual a negocios por créditos creados</p>
             </div>
 
             {/* Selector de período */}
@@ -136,32 +162,29 @@ export default function BillingPage() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                     {(['thisMonth', 'last7', 'last30', 'custom'] as Preset[]).map(p => (
-                        <button
-                            key={p}
-                            onClick={() => setPreset(p)}
+                        <button key={p} onClick={() => setPreset(p)}
                             className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
                                 preset === p
                                     ? 'bg-primary-600 text-white shadow'
                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}
-                        >
+                            }`}>
                             {presetLabel(p)}
                         </button>
                     ))}
                 </div>
                 {preset === 'custom' && (
                     <div className="flex gap-3">
-                        <input type="date" value={custom.start} onChange={e => setCustom(c => ({ ...c, start: e.target.value }))}
+                        <input type="date" value={custom.start}
+                            onChange={e => setCustom(c => ({ ...c, start: e.target.value }))}
                             className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
                         <span className="self-center text-gray-400">—</span>
-                        <input type="date" value={custom.end} onChange={e => setCustom(c => ({ ...c, end: e.target.value }))}
+                        <input type="date" value={custom.end}
+                            onChange={e => setCustom(c => ({ ...c, end: e.target.value }))}
                             className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
                     </div>
                 )}
                 {range.start && (
-                    <p className="text-xs text-gray-400">
-                        {range.start} — {range.end}
-                    </p>
+                    <p className="text-xs text-gray-400">{range.start} — {range.end}</p>
                 )}
             </div>
 
@@ -170,7 +193,7 @@ export default function BillingPage() {
                 <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-blue-50"><TrendingUp size={18} className="text-blue-600" /></div>
                     <div>
-                        <p className="text-xs text-gray-500">Total créditos</p>
+                        <p className="text-xs text-gray-500">Créditos cobrables</p>
                         <p className="font-bold text-gray-900 text-lg">{totalCredits.toLocaleString('es-CO')}</p>
                     </div>
                 </div>
@@ -185,8 +208,11 @@ export default function BillingPage() {
 
             {/* Tabla de negocios */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2 text-sm font-bold text-gray-800">
-                    <Building2 size={15} /> Cobro por negocio
+                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                        <Building2 size={15} /> Cobro por negocio
+                    </span>
+                    <span className="text-xs text-gray-400">Solo créditos aún no cobrados · cancelados excluidos del total</span>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -201,10 +227,10 @@ export default function BillingPage() {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {summaryLoading && (
-                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">Cargando...</td></tr>
+                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
                             )}
                             {!summaryLoading && summary.length === 0 && (
-                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">No hay negocios registrados</td></tr>
+                                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No hay negocios registrados</td></tr>
                             )}
                             {summary.map(item => {
                                 const price = Number((priceMap[item.businessId] || '0').replace(/[^0-9]/g, ''));
@@ -231,18 +257,21 @@ export default function BillingPage() {
                                             <div className="flex items-center justify-center gap-2">
                                                 <button
                                                     onClick={() => handleSave(item)}
-                                                    disabled={saveMutation.isPending}
-                                                    title="Guardar cobro"
-                                                    className="p-1.5 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-lg transition-all disabled:opacity-50"
+                                                    disabled={saveMutation.isPending || item.creditsCount === 0}
+                                                    title="Guardar cobro (marca créditos como cobrados)"
+                                                    className="p-1.5 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                                 >
                                                     <Save size={15} />
                                                 </button>
                                                 <button
                                                     onClick={() => handlePdf(item)}
-                                                    title="Generar PDF"
-                                                    className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg transition-all"
+                                                    disabled={pdfLoading[item.businessId]}
+                                                    title="Generar PDF con detalle de créditos"
+                                                    className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg transition-all disabled:opacity-40"
                                                 >
-                                                    <FileText size={15} />
+                                                    {pdfLoading[item.businessId]
+                                                        ? <Loader2 size={15} className="animate-spin" />
+                                                        : <FileText size={15} />}
                                                 </button>
                                             </div>
                                         </td>
@@ -263,7 +292,7 @@ export default function BillingPage() {
                 </div>
             </div>
 
-            {/* Historial de cobros */}
+            {/* Historial */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                     <span className="text-sm font-bold text-gray-800 flex items-center gap-2">
@@ -294,10 +323,10 @@ export default function BillingPage() {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {histLoading && (
-                                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400 text-sm">Cargando...</td></tr>
+                                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">Cargando...</td></tr>
                             )}
                             {!histLoading && history.length === 0 && (
-                                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400 text-sm">Aún no hay cobros guardados en este período</td></tr>
+                                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">Aún no hay cobros guardados en este período</td></tr>
                             )}
                             {history.map(b => (
                                 <tr key={b.id} className="hover:bg-gray-50">
@@ -311,7 +340,8 @@ export default function BillingPage() {
                                     <td className="px-4 py-2.5 text-right text-blue-700 font-semibold">{b.creditsCount}</td>
                                     <td className="px-4 py-2.5 text-right font-bold text-emerald-700">{FM(Number(b.totalAmount))}</td>
                                     <td className="px-4 py-2.5 text-center">
-                                        <button onClick={() => generateBillingPdf(b)}
+                                        <button onClick={() => handleHistoryPdf(b)}
+                                            title="Re-generar PDF del cobro guardado"
                                             className="p-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg transition-all">
                                             <FileText size={14} />
                                         </button>
