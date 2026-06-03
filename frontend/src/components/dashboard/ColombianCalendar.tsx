@@ -33,13 +33,18 @@ interface ColombianCalendarProps {
 }
 
 
+// Serializa una Date usando componentes locales (no UTC) para evitar off-by-one
+// en zonas horarias al este de UTC.
+const fmtLocal = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 function nextMonday(date: Date): string {
     const d = new Date(date);
     const day = d.getDay();
-    if (day === 1) return d.toISOString().slice(0, 10); // ya es lunes
+    if (day === 1) return fmtLocal(d); // ya es lunes
     const diff = day === 0 ? 1 : 8 - day;
     d.setDate(d.getDate() + diff);
-    return d.toISOString().slice(0, 10);
+    return fmtLocal(d);
 }
 
 // Semana Santa: Jueves Santo y Viernes Santo (basado en fecha de Pascua)
@@ -85,7 +90,7 @@ function getColombianHolidays(year: number): { date: string; name: string }[] {
 
     // Basados en Pascua
     const easter = getEaster(year);
-    const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+    const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return fmtLocal(x); };
     const easterBased = [
         { date: addDays(easter, -3), name: 'Jueves Santo' },
         { date: addDays(easter, -2), name: 'Viernes Santo' },
