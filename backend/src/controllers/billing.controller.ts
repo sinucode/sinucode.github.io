@@ -49,7 +49,7 @@ export const createBilling = async (req: Request, res: Response): Promise<void> 
     if (!errors.isEmpty()) { res.status(400).json({ errors: errors.array() }); return; }
 
     try {
-        const userId = (req as any).user?.id;
+        const userId = req.user!.userId;
         const billing = await billingService.createBilling(req.body, userId);
         res.status(201).json(billing);
     } catch (err: any) {
