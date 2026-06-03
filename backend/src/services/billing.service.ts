@@ -21,8 +21,8 @@ export class BillingService {
      * Cuenta créditos COBRABLES (no cancelados, no cobrados aún) por negocio.
      */
     async getCreditsSummary(startDate: string, endDate: string): Promise<BillingSummaryItem[]> {
-        const start = new Date(startDate + 'T00:00:00.000Z');
-        const end   = new Date(endDate   + 'T23:59:59.999Z');
+        const start = new Date(startDate + 'T00:00:00.000-05:00');
+        const end   = new Date(endDate   + 'T23:59:59.999-05:00');
 
         const businesses = await prisma.business.findMany({
             select: {
@@ -66,8 +66,8 @@ export class BillingService {
         startDate:  string,
         endDate:    string,
     ): Promise<CreditBillingItem[]> {
-        const start = new Date(startDate + 'T00:00:00.000Z');
-        const end   = new Date(endDate   + 'T23:59:59.999Z');
+        const start = new Date(startDate + 'T00:00:00.000-05:00');
+        const end   = new Date(endDate   + 'T23:59:59.999-05:00');
 
         const credits = await prisma.credit.findMany({
             where: {
@@ -115,8 +115,8 @@ export class BillingService {
         creditsCount?: number;
         totalAmount?:  number;
     }, userId: string) {
-        const start = new Date(payload.periodStart + 'T00:00:00.000Z');
-        const end   = new Date(payload.periodEnd   + 'T23:59:59.999Z');
+        const start = new Date(payload.periodStart + 'T00:00:00.000-05:00');
+        const end   = new Date(payload.periodEnd   + 'T23:59:59.999-05:00');
 
         return prisma.$transaction(async (tx) => {
             // Todos los créditos sin cobrar del período (incluyendo cancelados)
@@ -185,8 +185,8 @@ export class BillingService {
         if (filters.businessId) where.businessId = filters.businessId;
         if (filters.startDate || filters.endDate) {
             where.createdAt = {};
-            if (filters.startDate) where.createdAt.gte = new Date(filters.startDate + 'T00:00:00.000Z');
-            if (filters.endDate)   where.createdAt.lte = new Date(filters.endDate   + 'T23:59:59.999Z');
+            if (filters.startDate) where.createdAt.gte = new Date(filters.startDate + 'T00:00:00.000-05:00');
+            if (filters.endDate)   where.createdAt.lte = new Date(filters.endDate   + 'T23:59:59.999-05:00');
         }
 
         const billings = await prisma.businessBilling.findMany({
