@@ -1,0 +1,17 @@
+# Secretos / credenciales — NUNCA subir
+.env
+.env.*
+!.env.example
+login_response.json
+users.json
+
+# Dependencias y builds
+node_modules/
+dist/
+
+# Config local de Claude Code (permisos por máquina)
+.claude/settings.local.json
+
+# Sistema
+.DS_Store
+*.log

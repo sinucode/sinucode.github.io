@@ -1,0 +1,53 @@
+{
+  "model": "opusplan",
+  "permissions": {
+    "deny": [
+      "Read(./backend/.env*)",
+      "Read(./frontend/.env*)",
+      "Read(./login_response.json)",
+      "Read(./users.json)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": [],
+    "filesystem": {
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws",
+        "~/.config/gh",
+        "~/.gnupg",
+        "~/.netrc",
+        "./login_response.json",
+        "./users.json"
+      ]
+    },
+    "network": {
+      "allowLocalBinding": true,
+      "allowedDomains": [
+        "api.anthropic.com",
+        "registry.npmjs.org",
+        "*.npmjs.org",
+        "binaries.prisma.sh",
+        "github.com",
+        "api.github.com"
+      ]
+    }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v jq >/dev/null || exit 0; f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *frontend/*.ts|*frontend/*.tsx) d=frontend ;; *backend/*.ts) d=backend ;; *) exit 0 ;; esac; (cd \"${CLAUDE_PROJECT_DIR:-.}/$d\" && npx --no-install eslint --fix \"$f\" >/dev/null 2>&1); exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

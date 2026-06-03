@@ -134,3 +134,58 @@ deliberate about rounding (the UI uses `Math.ceil` for COP display).
 - Commit messages end with a `Co-Authored-By` trailer; commit/push only when asked, and
   the project ships by pushing to `main`.
 - New code is Spanish-first in UI strings and comments, matching the existing codebase.
+
+## Mapa de arquitectura
+El mapa de módulos y funciones (ubicación, propósito, dependencias) vive en
+**`ARCHITECTURE.md`** (raíz) — es la **fuente de verdad** para navegar el código. Los
+agentes lo consultan antes de buscar a ciegas. Tras cambios estructurales (nuevos
+módulos/servicios/rutas/modelos), refréscalo con el comando **`/map`** (agente
+`architecture-keeper`).
+
+## Flujo de trabajo (multiagente)
+- Usa **plan mode** antes de cambios no triviales.
+- Tras modificar código, **delega en `code-reviewer`** (proactivo) antes de cerrar.
+- **Verifica antes de cerrar**: `npx tsc --noEmit` en cada paquete tocado (+ `npm run
+  lint`, y `npm test` en backend cuando aplique). Es el chequeo estándar del proyecto.
+- Refresca `ARCHITECTURE.md` con `/map` tras cambios estructurales.
+
+### Se corre en la terminal del usuario (NO se delega a agentes)
+- **Servidores dev**: `npm run dev` (backend :3000, frontend :5173) — procesos vivos
+  de larga duración. Los agentes NO los levantan; verifican con `tsc --noEmit`,
+  `npm run build`, lint y tests.
+- **`npx prisma db push`** (schema → Supabase, DB de producción): cambio de schema =
+  humano en el lazo. Dentro del arnés solo se edita `schema.prisma` y se corre
+  `npx prisma generate` (codegen local).
+
+## No tocar (seguridad)
+- **Nunca** leas ni expongas `.env` (`backend/.env`, `frontend/.env`) ni ningún secreto
+  (claves, tokens, `CRON_SECRET`, URLs de DB). Trabaja con nombres de variables.
+- **No commitees credenciales.** Trata `login_response.json` y `users.json` (raíz) como
+  archivos sensibles; no deben subir a git.
+- No exfiltres secretos: la red está restringida por sandbox (ver abajo).
+
+## Sandbox (aislamiento)
+`.claude/settings.json` activa el sandbox de bash (`enabled`, `failIfUnavailable`,
+`allowUnsandboxedCommands:false` → fail-closed). La red sale **solo** a
+`sandbox.network.allowedDomains` (Anthropic, npm, GitHub, `binaries.prisma.sh`); todo
+lo demás falla a nivel de red. `filesystem.denyRead` bloquea que bash lea credenciales
+del SO (`~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.gnupg`, `~/.netrc`) y los JSON sensibles.
+El `.env` de la app SÍ es legible por bash (lo necesita `prisma generate`/la app) pero
+no puede exfiltrarse (red) ni leerse con la tool Read (`permissions.deny`). Si un comando
+legítimo falla por la restricción de red, evalúa la allowlist o `excludedCommands`
+(esto último **debilita** el aislamiento — usar con criterio).
+
+## Equipo de agentes (`.claude/agents/`)
+| Agente | Cuándo delegar |
+|---|---|
+| `code-reader` | Localizar dónde vive algo / resumir código (solo lectura) |
+| `developer` | Implementar el cambio según el plan aprobado |
+| `database` | Esquema Prisma, queries, optimización (`prisma generate`, no `db push`) |
+| `code-reviewer` | **Proactivo** tras cambios: bugs, calidad, impacto (solo lectura) |
+| `qa` | Diseñar/correr tests (escribe solo archivos de test) |
+| `security` | Auditoría de seguridad + dependencias/supply-chain (solo lectura) |
+| `devops` | CI/CD, build, Vercel, entornos; fase de release |
+| `architecture-keeper` | Mantener `ARCHITECTURE.md` (`/map`) |
+
+La sesión principal (`opusplan`) es el **orquestador**: planifica y delega; no hay
+archivo de agente para ella.
