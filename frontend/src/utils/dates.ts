@@ -64,6 +64,32 @@ export const isOverdueBogota = (dueDate: string | Date): boolean => {
 };
 
 /**
+ * Convierte un string YYYY-MM-DD (de un <input type="date"> o API) a un objeto Date
+ * con medianoche **local** en lugar de medianoche UTC.
+ *
+ * ⚠️ `new Date("2026-06-01")` es medianoche UTC — en Bogotá (UTC-5) queda a
+ *    las 19:00 del día anterior, provocando off-by-one.
+ *    Esta función evita ese problema construyendo la Date con componentes locales.
+ */
+export const parseLocalDate = (dateStr: string): Date => {
+    if (!dateStr || dateStr.length < 10) return new Date();
+    const [year, month, day] = dateStr.slice(0, 10).split('-').map(Number);
+    return new Date(year, month - 1, day); // medianoche local
+};
+
+/**
+ * Serializa un objeto Date a string YYYY-MM-DD usando componentes **locales**,
+ * NO `.toISOString()` que usa UTC.
+ *
+ * ⚠️ `date.toISOString().slice(0, 10)` en zonas al este de UTC retorna el día
+ *    anterior. Esta función es timezone-safe en cualquier zona horaria.
+ *
+ * Usar siempre que necesites YYYY-MM-DD para mostrar en un input o comparar fechas.
+ */
+export const toLocalDateString = (date: Date): string =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+/**
  * Normaliza una fecha al mediodía (12:00 PM) de Colombia (UTC-5).
  * Si recibe un string YYYY-MM-DD, le concatena la zona horaria antes de crear el objeto Date.
  */

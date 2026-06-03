@@ -43,8 +43,10 @@ export default function AuditLogsViewer({ restrictToBusinessId, readOnly = false
     const handleApplyFilters = () => {
         setFilters({
             ...filters,
-            startDate: startDate ? new Date(startDate) : undefined,
-            endDate: endDate ? new Date(endDate) : undefined,
+            // new Date("YYYY-MM-DD") es medianoche UTC, no Bogotá (UTC-5 → 5h de desfase).
+            // Forzamos el offset explícito para que el filtro cubra el día completo en Colombia.
+            startDate: startDate ? new Date(`${startDate}T00:00:00.000-05:00`) : undefined,
+            endDate:   endDate   ? new Date(`${endDate}T23:59:59.999-05:00`)   : undefined,
             page: 1,
             // Mantener siempre el filtro de negocio si aplica
             ...(restrictToBusinessId ? { businessId: restrictToBusinessId } : {}),
@@ -55,8 +57,8 @@ export default function AuditLogsViewer({ restrictToBusinessId, readOnly = false
         setIsExporting(true);
         try {
             const blob = await exportAuditLogs({
-                startDate: startDate ? new Date(startDate) : undefined,
-                endDate: endDate ? new Date(endDate) : undefined,
+                startDate: startDate ? new Date(`${startDate}T00:00:00.000-05:00`) : undefined,
+                endDate:   endDate   ? new Date(`${endDate}T23:59:59.999-05:00`)   : undefined,
             });
 
             // Crear URL y descargar con extensión .xlsx

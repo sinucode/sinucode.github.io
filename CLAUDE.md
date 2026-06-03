@@ -70,6 +70,20 @@ import. All date logic assumes Bogotá (UTC-5). Shared date helpers live in
 reuse these instead of hand-rolling date math; YYYY-MM-DD strings must be parsed as local
 day-start to avoid UTC off-by-one bugs.
 
+**Frontend date rules** — violations cause silent off-by-one bugs:
+- `new Date(year, month, day)` or `new Date("YYYY-MM-DD")` constructs a local/UTC
+  midnight Date. **Never** serialize it with `.toISOString().slice(0,10)` — use
+  `toLocalDateString(d)` from `frontend/src/utils/dates.ts` instead (uses local
+  `getFullYear/getMonth/getDate`).
+- `new Date("YYYY-MM-DD")` alone (no time) is **UTC midnight** per spec — in Bogotá
+  (UTC-5) that's 19:00 the previous day. For date-range filters always use explicit
+  offset: `new Date(\`${dateStr}T00:00:00.000-05:00\`)` / `T23:59:59.999-05:00`.
+- `.toISOString()` on a Date sourced from the API (ISO timestamp) is safe — it's
+  always UTC and timezone-neutral.
+- `parseLocalDate(str)` in `frontend/src/utils/dates.ts` parses a YYYY-MM-DD string
+  as local midnight (safe for display, not for API filter ranges — use explicit
+  `-05:00` offset for those).
+
 ## Frontend architecture
 React 18 + Vite + TypeScript, Tailwind. State: **Zustand** for auth/business
 (`store/authStore.ts`, `store/businessStore.ts`), **TanStack Query** for all server state.
