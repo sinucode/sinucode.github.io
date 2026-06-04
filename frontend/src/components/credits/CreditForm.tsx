@@ -51,15 +51,18 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         amount: '',
         interestRate: '',
         termMonths: '',
-        termUnit: 'months' as 'months' | 'weeks',
+        termUnit: 'months' as 'days' | 'weeks' | 'quincenal' | 'months',
         frequency: 'monthly' as PaymentFrequency,
         startDate: todayBogota(),
         businessId: selectedBusinessId || '',
     });
 
     // Convierte el plazo ingresado (en la unidad elegida) a días
-    const termValueToDays = (value: number, unit: 'months' | 'weeks') =>
-        unit === 'weeks' ? value * 7 : value * DAYS_PER_MONTH;
+    const TERM_UNIT_DAYS: Record<'days' | 'weeks' | 'quincenal' | 'months', number> = {
+        days: 1, weeks: 7, quincenal: 15, months: DAYS_PER_MONTH,
+    };
+    const termValueToDays = (value: number, unit: keyof typeof TERM_UNIT_DAYS) =>
+        value * TERM_UNIT_DAYS[unit];
     const [useFixedInstallment, setUseFixedInstallment] = useState(false);
     const [installmentAmount, setInstallmentAmount] = useState('');
     const [fixedTermUnit, setFixedTermUnit] = useState<'days' | 'weeks' | 'quincenal' | 'months'>('months');
@@ -299,7 +302,8 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         doc.setFontSize(10);
         doc.text(`Cliente: ${selectedClient?.fullName || ''}`, 14, startY + 8);
         doc.text(`Documento: ${selectedClient?.cedula || ''}  Tel: ${selectedClient?.phone || ''}`, 14, startY + 14);
-        doc.text(`Monto: $${formData.amount}  Interés: ${formData.interestRate}%  Plazo: ${formData.termMonths} ${formData.termUnit === 'weeks' ? 'semanas' : 'meses'}`, 14, startY + 20);
+        const termUnitLabels = { days: 'días', weeks: 'semanas', quincenal: 'quincenas', months: 'meses' };
+        doc.text(`Monto: $${formData.amount}  Interés: ${formData.interestRate}%  Plazo: ${formData.termMonths} ${termUnitLabels[formData.termUnit]}`, 14, startY + 20);
         doc.text(`Frecuencia: ${frequencyLabels[formData.frequency] || formData.frequency}  Fecha inicio: ${formData.startDate}`, 14, startY + 26);
         doc.text(`Total con interés: $${formatMoney(simulation.totalWithInterest)}`, 14, startY + 34);
         doc.text(`Cuota estimada: $${formatMoney(simulation.paymentAmount)}  Cuotas: ${simulation.numberOfPayments}`, 14, startY + 40);
@@ -728,44 +732,51 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                 )}
                             </div>
 
-                            {/* Plazo con unidad (semanas / meses) */}
+                            {/* Plazo con unidad (días / semanas / quincenas / meses) */}
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                    Plazo ({formData.termUnit === 'weeks' ? 'semanas' : 'meses'}) *
-                                </label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="number"
-                                        value={formData.termMonths}
-                                        onChange={(e) => setFormData({ ...formData, termMonths: e.target.value })}
-                                        className="flex-1 px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                                        min="1"
-                                        step={formData.termUnit === 'weeks' ? '1' : '0.5'}
-                                        placeholder={formData.termUnit === 'weeks' ? '6' : '2'}
-                                    />
-                                    {/* Selector de unidad */}
-                                    <div className="flex rounded-xl border border-gray-300 overflow-hidden shrink-0">
-                                        <button
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, termUnit: 'weeks' })}
-                                            className={`px-3 text-sm font-medium transition ${formData.termUnit === 'weeks' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                                        >
-                                            Semanas
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, termUnit: 'months' })}
-                                            className={`px-3 text-sm font-medium transition border-l border-gray-300 ${formData.termUnit === 'months' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                                        >
-                                            Meses
-                                        </button>
-                                    </div>
-                                </div>
-                                <p className="text-xs text-gray-500 mt-1">
-                                    {formData.termUnit === 'weeks'
-                                        ? 'Ej: 6 semanas con frecuencia semanal = 6 cuotas.'
-                                        : 'Ej: 2 meses. Si usas cuota fija, el plazo se recalcula automáticamente.'}
-                                </p>
+                                {(() => {
+                                    const unitLabels: Record<'days' | 'weeks' | 'quincenal' | 'months', string> = { days: 'días', weeks: 'semanas', quincenal: 'quincenas', months: 'meses' };
+                                    const unitPlaceholders: Record<'days' | 'weeks' | 'quincenal' | 'months', string> = { days: '30', weeks: '6', quincenal: '4', months: '2' };
+                                    const unitSteps: Record<'days' | 'weeks' | 'quincenal' | 'months', string> = { days: '1', weeks: '1', quincenal: '1', months: '0.5' };
+                                    return (
+                                        <>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                Plazo ({unitLabels[formData.termUnit]}) *
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="number"
+                                                    value={formData.termMonths}
+                                                    onChange={(e) => setFormData({ ...formData, termMonths: e.target.value })}
+                                                    className="flex-1 px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                                    min="1"
+                                                    step={unitSteps[formData.termUnit]}
+                                                    placeholder={unitPlaceholders[formData.termUnit]}
+                                                />
+                                                {/* Selector de unidad */}
+                                                <div className="flex rounded-xl border border-gray-300 overflow-hidden shrink-0 text-xs">
+                                                    {(['days', 'weeks', 'quincenal', 'months'] as const).map((u, i) => {
+                                                        const btnLabels = { days: 'Días', weeks: 'Semanas', quincenal: 'Quincenas', months: 'Meses' };
+                                                        return (
+                                                            <button
+                                                                key={u}
+                                                                type="button"
+                                                                onClick={() => setFormData({ ...formData, termUnit: u })}
+                                                                className={`px-3 py-2 font-medium transition ${i > 0 ? 'border-l border-gray-300' : ''} ${formData.termUnit === u ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                                                            >
+                                                                {btnLabels[u]}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Ej: {unitPlaceholders[formData.termUnit]} {unitLabels[formData.termUnit]}.
+                                                {formData.termUnit === 'months' && ' Si usas cuota fija, el plazo se recalcula automáticamente.'}
+                                            </p>
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             {/* Frecuencia */}
