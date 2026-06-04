@@ -13,6 +13,7 @@ export interface CreateCreditPayload extends SimulateCreditPayload {
     clientId: string;
     businessId?: string;
     accountId?: string;
+    splits?: { accountId: string; amount: number }[];
 }
 
 export interface CreditSimulation {

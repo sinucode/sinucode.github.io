@@ -6,7 +6,7 @@ import { invalidateMoney } from '../../utils/invalidate';
 import { getBusinesses } from '../../api/business.api';
 import { searchClients, getClients } from '../../api/clients.api';
 import { createCredit, simulateCredit, CreditSimulation, CreateCreditPayload } from '../../api/credits.api';
-import { listAccounts, PaymentAccount } from '../../api/accounts.api';
+import { listAccounts, getAccountBalances, PaymentAccount } from '../../api/accounts.api';
 import { injectCapital, transferFunds } from '../../api/cash.api';
 import { Client, PaymentFrequency } from '../../types';
 import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, ArrowRightLeft, PlusCircle } from 'lucide-react';
@@ -75,6 +75,9 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 
     // Cuenta de desembolso
     const [disbursementAccountId, setDisbursementAccountId] = useState<string>('');
+    // Multi-cuenta
+    const [splitEnabled, setSplitEnabled] = useState(false);
+    const [splits, setSplits] = useState<Record<string, string>>({});
     // Modal de recarga cuando la cuenta o el negocio no tiene fondos
     const [rechargeInfo, setRechargeInfo] = useState<{
         accountId: string; accountName: string; available: number; required: number;
@@ -115,6 +118,12 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         enabled: !!effectiveBusinessId,
     });
 
+    const { data: accountBalances } = useQuery({
+        queryKey: ['account-balances', effectiveBusinessId],
+        queryFn: () => getAccountBalances(effectiveBusinessId),
+        enabled: !!effectiveBusinessId,
+    });
+
     // Setear la cuenta predeterminada de desembolso cuando carguen las cuentas
     useEffect(() => {
         if (accounts && accounts.length > 0) {
@@ -128,6 +137,8 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     // Resetear cuenta al cambiar de negocio (super_admin)
     useEffect(() => {
         setDisbursementAccountId('');
+        setSplitEnabled(false);
+        setSplits({});
     }, [effectiveBusinessId]);
 
     const { data: clientResults } = useQuery({
@@ -240,6 +251,28 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         if (isSuperAdmin && !formData.businessId) {
             return setFormError('Selecciona un negocio');
         }
+
+        // Validar reparto multi-cuenta
+        if (splitEnabled && accounts && accounts.length > 0) {
+            const splitEntries = accounts
+                .map(a => ({ accountId: a.id, amount: Number((splits[a.id] || '').replace(/[^0-9]/g, '') || '0') }))
+                .filter(s => s.amount > 0);
+            const splitTotal = splitEntries.reduce((s, e) => s + e.amount, 0);
+            if (Math.abs(splitTotal - amount) > 1) {
+                return setFormError(`El reparto debe sumar exactamente $${amount.toLocaleString('es-CO')} (suma actual: $${Math.ceil(splitTotal).toLocaleString('es-CO')})`);
+            }
+            // Adjuntar al payload
+            const payload: CreateCreditPayload = {
+                clientId: selectedClientId, amount, interestRate, termDays,
+                frequency: formData.frequency, startDate: formData.startDate,
+                businessId: formData.businessId || undefined,
+                splits: splitEntries,
+            };
+            pendingPayloadRef.current = payload;
+            createMutation.mutate(payload);
+            return;
+        }
+
         const payload: CreateCreditPayload = {
             clientId: selectedClientId,
             amount,
@@ -313,6 +346,17 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             scheduledAmount: Number(p.scheduledAmount),
         }));
     }, [simulation]);
+
+    const addToAmount = (delta: number) => {
+        setFormError('');
+        const current = Number(formData.amount.replace(/[^0-9]/g, '') || '0');
+        const next = current + delta;
+        setFormData(prev => ({ ...prev, amount: next.toLocaleString('es-CO') }));
+    };
+    const clearAmount = () => {
+        setFormError('');
+        setFormData(prev => ({ ...prev, amount: '' }));
+    };
 
     return <>
         {rechargeInfo && accounts && (
@@ -425,35 +469,8 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                 </div>
                             )}
 
-                            {/* Cuenta de desembolso */}
-                            {accounts && accounts.length > 0 && (
-                                <div className={isSuperAdmin ? '' : 'md:col-span-2'}>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">¿De qué cuenta sale el dinero?</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {accounts.map(a => {
-                                            const Icon = a.type === 'cash' ? Wallet : a.type === 'wallet' ? Smartphone : Building2;
-                                            const active = disbursementAccountId === a.id;
-                                            return (
-                                                <button
-                                                    key={a.id}
-                                                    type="button"
-                                                    onClick={() => setDisbursementAccountId(a.id)}
-                                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition ${active ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400'}`}
-                                                >
-                                                    <Icon size={15} />
-                                                    {a.name}
-                                                    {a.isDisbursementDefault && !active && (
-                                                        <span className="text-[10px] text-gray-400">(predeterminada)</span>
-                                                    )}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Monto */}
-                            <div>
+                            <div className="md:col-span-2">
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Monto *</label>
                                 <input
                                     type="text"
@@ -462,10 +479,130 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         const raw = e.target.value.replace(/[^0-9]/g, '');
                                         setFormData({ ...formData, amount: raw ? Number(raw).toLocaleString('es-CO') : '' });
                                     }}
-                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 text-lg font-semibold"
                                     placeholder="0"
                                 />
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                    {[
+                                        { label: '+1k', delta: 1_000 },
+                                        { label: '+10k', delta: 10_000 },
+                                        { label: '+50k', delta: 50_000 },
+                                        { label: '+100k', delta: 100_000 },
+                                        { label: '+500k', delta: 500_000 },
+                                        { label: '+1M', delta: 1_000_000 },
+                                    ].map(({ label, delta }) => (
+                                        <button
+                                            key={label}
+                                            type="button"
+                                            onClick={() => addToAmount(delta)}
+                                            className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 active:bg-primary-200 transition"
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={clearAmount}
+                                        className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 active:bg-red-200 transition"
+                                    >
+                                        Borrar
+                                    </button>
+                                </div>
                             </div>
+
+                            {/* Cuenta de desembolso */}
+                            {accounts && accounts.length > 0 && (
+                                <div className="md:col-span-2 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <label className="block text-sm font-semibold text-gray-700">
+                                            ¿De qué cuenta sale el dinero?
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={splitEnabled}
+                                                onChange={(e) => {
+                                                    setSplitEnabled(e.target.checked);
+                                                    setSplits({});
+                                                }}
+                                                className="w-4 h-4 rounded border-gray-300 text-primary-600 cursor-pointer"
+                                            />
+                                            <span className="text-xs text-gray-600 font-medium">Repartir entre varias cuentas</span>
+                                        </label>
+                                    </div>
+
+                                    {!splitEnabled ? (
+                                        /* Modo una cuenta: chips existentes */
+                                        <div className="flex flex-wrap gap-2">
+                                            {accounts.map(a => {
+                                                const Icon = a.type === 'cash' ? Wallet : a.type === 'wallet' ? Smartphone : Building2;
+                                                const active = disbursementAccountId === a.id;
+                                                const bal = accountBalances?.accounts.find(b => b.id === a.id);
+                                                return (
+                                                    <button
+                                                        key={a.id}
+                                                        type="button"
+                                                        onClick={() => setDisbursementAccountId(a.id)}
+                                                        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition ${active ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400'}`}
+                                                    >
+                                                        <Icon size={15} />
+                                                        <span>{a.name}</span>
+                                                        {bal !== undefined && (
+                                                            <span className={`text-[11px] ml-1 ${active ? 'text-primary-100' : 'text-gray-400'}`}>
+                                                                ${Math.ceil(bal.balance).toLocaleString('es-CO')}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        /* Modo multi-cuenta: input por cuenta */
+                                        <div className="space-y-2">
+                                            {accounts.map(a => {
+                                                const Icon = a.type === 'cash' ? Wallet : a.type === 'wallet' ? Smartphone : Building2;
+                                                const bal = accountBalances?.accounts.find(b => b.id === a.id);
+                                                return (
+                                                    <div key={a.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200">
+                                                        <Icon size={16} className="text-gray-400 shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <span className="text-sm font-medium text-gray-800">{a.name}</span>
+                                                                {bal !== undefined && (
+                                                                    <span className="text-xs text-gray-400">Disponible: ${Math.ceil(bal.balance).toLocaleString('es-CO')}</span>
+                                                                )}
+                                                            </div>
+                                                            <input
+                                                                type="text"
+                                                                value={splits[a.id] || ''}
+                                                                onChange={(e) => {
+                                                                    const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                                    setSplits(prev => ({ ...prev, [a.id]: raw ? Number(raw).toLocaleString('es-CO') : '' }));
+                                                                }}
+                                                                className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                                                placeholder="0"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {/* Indicador de cuadre */}
+                                            {(() => {
+                                                const total = Number(formData.amount.replace(/[^0-9]/g, '') || '0');
+                                                const sumado = accounts.reduce((s, a) => s + Number((splits[a.id] || '').replace(/[^0-9]/g, '') || '0'), 0);
+                                                const restante = total - sumado;
+                                                const ok = Math.abs(restante) <= 1;
+                                                return total > 0 ? (
+                                                    <div className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg ${ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                                                        <span>Sumado: <strong>${Math.ceil(sumado).toLocaleString('es-CO')}</strong></span>
+                                                        <span>{ok ? '✓ Cuadra' : `Faltan: $${Math.ceil(restante).toLocaleString('es-CO')}`}</span>
+                                                    </div>
+                                                ) : null;
+                                            })()}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Interés */}
                             <div>

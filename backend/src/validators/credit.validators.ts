@@ -33,6 +33,17 @@ export const createCreditValidators = [
         .optional({ nullable: true, checkFalsy: true })
         .isUUID()
         .withMessage('La cuenta de desembolso es inválida'),
+    body('splits')
+        .optional({ nullable: true })
+        .isArray({ min: 2 })
+        .withMessage('splits debe tener al menos 2 cuentas'),
+    // Cuando splits viene, cada elemento DEBE tener accountId y amount válidos
+    body('splits.*.accountId')
+        .isUUID()
+        .withMessage('splits: accountId inválido (UUID requerido)'),
+    body('splits.*.amount')
+        .isFloat({ gt: 0 })
+        .withMessage('splits: monto debe ser mayor a 0'),
     ...simulateCreditValidators,
 ];
 

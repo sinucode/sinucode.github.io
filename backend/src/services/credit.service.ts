@@ -15,6 +15,7 @@ interface CreateCreditInput {
     frequency: PaymentFrequency;
     startDate?: string;
     accountId?: string;
+    splits?: { accountId: string; amount: number }[];
 }
 
 interface ListFilters {
@@ -126,8 +127,8 @@ export class CreditService {
             throw errBiz;
         }
 
-        // Crear la cuenta por defecto ahora que sabemos que el saldo es suficiente
-        if (needsDefaultAccount) {
+        // Crear la cuenta por defecto solo si NO vienen splits explícitos
+        if (needsDefaultAccount && !(data.splits && data.splits.length > 0)) {
             disbursementAccountId = await accountService.ensureDefaultAccount(targetBusinessId, userId);
         }
 
@@ -135,11 +136,42 @@ export class CreditService {
         const { accounts: accBalances } = await accountService.getBalances(targetBusinessId, userId, role);
         const accBalance = accBalances.find(a => a.id === disbursementAccountId);
         const available = accBalance?.balance ?? 0;
-        if (available < data.amount) {
+        if (!data.splits?.length && available < data.amount) {
             const err: any = new Error(`Saldo insuficiente en la cuenta "${disbursementAccountName}" ($${available.toLocaleString('es-CO')} disponible, se necesitan $${data.amount.toLocaleString('es-CO')})`);
             err.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
             err.details = { accountId: disbursementAccountId, accountName: disbursementAccountName, available, required: data.amount, scope: 'account' };
             throw err;
+        }
+
+        // Validar splits si vienen
+        const resolvedSplits: { accountId: string; accountName: string; amount: number }[] = [];
+        if (data.splits && data.splits.length > 0) {
+            // 1. Validar IDs duplicados
+            const uniqueIds = new Set(data.splits.map(s => s.accountId));
+            if (uniqueIds.size !== data.splits.length) {
+                throw new Error('El reparto no puede incluir la misma cuenta dos veces');
+            }
+            // 2. Validar que la suma cuadra (tolerancia 0: COP son enteros)
+            const splitSum = data.splits.reduce((s, e) => s + e.amount, 0);
+            if (Math.abs(splitSum - data.amount) > 1) {
+                throw new Error(`El reparto de cuentas suma $${Math.ceil(splitSum).toLocaleString('es-CO')} pero el monto del crédito es $${Math.ceil(data.amount).toLocaleString('es-CO')}`);
+            }
+            // 3. Validar cada cuenta y su saldo
+            for (const split of data.splits) {
+                const acc = await prisma.paymentAccount.findFirst({
+                    where: { id: split.accountId, businessId: targetBusinessId, active: true },
+                    select: { id: true, name: true },
+                });
+                if (!acc) throw new Error(`Cuenta de desembolso no válida: ${split.accountId}`);
+                const accBal = accBalances.find(a => a.id === split.accountId)?.balance ?? 0;
+                if (accBal < split.amount) {
+                    const errSplit: any = new Error(`Saldo insuficiente en la cuenta "${acc.name}" ($${Math.ceil(accBal).toLocaleString('es-CO')} disponible, se necesitan $${Math.ceil(split.amount).toLocaleString('es-CO')})`);
+                    errSplit.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
+                    errSplit.details = { accountId: acc.id, accountName: acc.name, available: accBal, required: split.amount, scope: 'account' };
+                    throw errSplit;
+                }
+                resolvedSplits.push({ accountId: acc.id, accountName: acc.name, amount: split.amount });
+            }
         }
 
         const simulation = await this.simulateCredit(data);
@@ -180,19 +212,42 @@ export class CreditService {
             });
 
             const newBalance = new Prisma.Decimal(business.currentBalance).minus(data.amount);
-            await tx.cashMovement.create({
-                data: {
-                    businessId: targetBusinessId,
-                    type: 'loan_disbursement',
-                    amount: new Prisma.Decimal(data.amount),
-                    balanceAfter: newBalance,
-                    description: `Desembolso crédito a ${client.fullName}`,
-                    relatedCreditId: credit.id,
-                    paymentMethod: disbursementAccountName,
-                    accountId: disbursementAccountId,
-                    createdById: userId,
-                },
-            });
+
+            if (resolvedSplits.length > 0) {
+                // Multi-cuenta: un loan_disbursement por split con balanceAfter acumulado
+                let runningBalance = new Prisma.Decimal(business.currentBalance);
+                for (const split of resolvedSplits) {
+                    runningBalance = runningBalance.minus(split.amount);
+                    await tx.cashMovement.create({
+                        data: {
+                            businessId: targetBusinessId,
+                            type: 'loan_disbursement',
+                            amount: new Prisma.Decimal(split.amount),
+                            balanceAfter: runningBalance,
+                            description: `Desembolso crédito a ${client.fullName}`,
+                            relatedCreditId: credit.id,
+                            paymentMethod: split.accountName,
+                            accountId: split.accountId,
+                            createdById: userId,
+                        },
+                    });
+                }
+            } else {
+                // Una cuenta (ruta original)
+                await tx.cashMovement.create({
+                    data: {
+                        businessId: targetBusinessId,
+                        type: 'loan_disbursement',
+                        amount: new Prisma.Decimal(data.amount),
+                        balanceAfter: newBalance,
+                        description: `Desembolso crédito a ${client.fullName}`,
+                        relatedCreditId: credit.id,
+                        paymentMethod: disbursementAccountName,
+                        accountId: disbursementAccountId,
+                        createdById: userId,
+                    },
+                });
+            }
 
             await tx.business.update({
                 where: { id: targetBusinessId },
@@ -869,48 +924,59 @@ export class CreditService {
         if (credit.status === 'cancelled') throw new Error('El crédito ya fue cancelado');
 
         const businessId = credit.business.id;
+        const principal = Number(credit.amount);
 
-        // ── 1. Resolver la cuenta de origen del desembolso ──────────────────────
-        const disbMovement = await tx.cashMovement.findFirst({
+        // ── 1. Resolver las cuentas de origen del desembolso (puede ser 1 o N por reparto)
+        const disbMovements = await tx.cashMovement.findMany({
             where: { relatedCreditId: creditId, type: 'loan_disbursement' },
-            select: { accountId: true, account: { select: { name: true } } },
+            select: { accountId: true, amount: true, account: { select: { name: true } } },
         });
 
-        let originAccountId: string | null = disbMovement?.accountId ?? null;
-        let originAccountName: string      = disbMovement?.account?.name ?? 'Efectivo';
-
-        if (!originAccountId) {
-            // Fallback legacy: cuenta isDisbursementDefault → isDefault → primera activa
+        // Fallback legacy: si no hay movimientos de desembolso (créditos pre-multi-cuenta)
+        if (disbMovements.length === 0) {
             const defAcc = await tx.paymentAccount.findFirst({
                 where: { businessId, active: true },
                 orderBy: [{ isDisbursementDefault: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
                 select: { id: true, name: true },
             });
-            originAccountId   = defAcc?.id    ?? null;
-            originAccountName = defAcc?.name   ?? 'Efectivo';
+            if (!defAcc) {
+                throw new Error('No se puede cancelar el crédito: no hay cuentas activas en el negocio para devolver el capital');
+            }
+            disbMovements.push({
+                accountId: defAcc.id,
+                amount: new Prisma.Decimal(principal),
+                account: { name: defAcc.name },
+            } as any);
         }
 
         // ── 2. Revertir cada pago a la cuenta donde entró ───────────────────────
         let balanceDelta = 0;
+        const movementIdsToUpdate: string[] = [];  // IDs de movimientos creados con balanceAfter=0
+
+        // Necesitamos una cuenta fallback para pagos sin accountId
+        const firstDisbAccountId   = disbMovements[0]?.accountId ?? null;
+        const firstDisbAccountName = disbMovements[0]?.account?.name ?? 'Efectivo';
 
         for (const payment of credit.payments) {
             const payAmt    = Number(payment.amount);
-            const payAccId  = payment.accountId  ?? originAccountId;
-            const payAccName = payment.account?.name ?? originAccountName;
+            const payAccId  = payment.accountId  ?? firstDisbAccountId;
+            const payAccName = payment.account?.name ?? firstDisbAccountName;
 
-            await tx.cashMovement.create({
+            const rev = await tx.cashMovement.create({
                 data: {
                     businessId,
                     type: 'payment_reversion',
                     amount:      new Prisma.Decimal(payAmt),
-                    balanceAfter: new Prisma.Decimal(0), // se recalcula con balance final abajo
+                    balanceAfter: new Prisma.Decimal(0), // se actualiza al final con IDs concretos
                     description: `Reversión (cancelación crédito) - ${credit.client.fullName}`,
                     relatedCreditId: creditId,
                     paymentMethod: payAccName,
                     accountId:    payAccId ?? undefined,
                     createdById:  userId,
                 },
+                select: { id: true },
             });
+            movementIdsToUpdate.push(rev.id);
             balanceDelta -= payAmt;
         }
 
@@ -920,27 +986,33 @@ export class CreditService {
             data:  { paidAmount: new Prisma.Decimal(0), status: 'pending' },
         });
 
-        // ── 3. Devolver capital a la cuenta de origen ────────────────────────────
-        const principal = Number(credit.amount);
-        balanceDelta += principal;
-
+        // ── 3. Devolver capital a cada cuenta de origen según su porción ─────────────
         const startDateStr = credit.startDate
             ? new Date(credit.startDate).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' })
             : '—';
 
-        await tx.cashMovement.create({
-            data: {
-                businessId,
-                type:        'credit_cancellation',
-                amount:      new Prisma.Decimal(principal),
-                balanceAfter: new Prisma.Decimal(0), // se actualiza con la actualización real abajo
-                description: `Cancelación crédito #${creditId.slice(0, 8)} | Cliente: ${credit.client.fullName} | Apertura: ${startDateStr}`,
-                relatedCreditId:  creditId,
-                paymentMethod:   originAccountName,
-                accountId:       originAccountId ?? undefined,
-                createdById:     userId,
-            },
-        });
+        for (const disb of disbMovements) {
+            const portion = Number(disb.amount);
+            const accId   = disb.accountId ?? undefined;
+            const accName = disb.account?.name ?? 'Efectivo';
+            balanceDelta += portion;
+
+            const canc = await tx.cashMovement.create({
+                data: {
+                    businessId,
+                    type:        'credit_cancellation',
+                    amount:      new Prisma.Decimal(portion),
+                    balanceAfter: new Prisma.Decimal(0), // se actualiza al final con IDs concretos
+                    description: `Cancelación crédito #${creditId.slice(0, 8)} | Cliente: ${credit.client.fullName} | Apertura: ${startDateStr}`,
+                    relatedCreditId:  creditId,
+                    paymentMethod:   accName,
+                    accountId:       accId,
+                    createdById:     userId,
+                },
+                select: { id: true },
+            });
+            movementIdsToUpdate.push(canc.id);
+        }
 
         // ── 4. Un solo update del saldo del negocio ──────────────────────────────
         const newBalance = new Prisma.Decimal(credit.business.currentBalance).plus(balanceDelta);
@@ -949,18 +1021,10 @@ export class CreditService {
             data:  { currentBalance: newBalance },
         });
 
-        // Actualizar balanceAfter en los dos últimos movimientos creados
-        // (no crítico para cuadre, pero mejora la legibilidad del historial)
-        // Nota: Prisma no devuelve IDs de los movimientos creados en el loop,
-        // lo más limpio es un updateMany con el valor final.
+        // Actualizar balanceAfter con IDs concretos (seguro y determinista)
         await tx.cashMovement.updateMany({
-            where: {
-                businessId,
-                createdById: userId,
-                balanceAfter: new Prisma.Decimal(0),
-                createdAt:    { gte: new Date(Date.now() - 10_000) }, // creados en esta transacción
-            },
-            data: { balanceAfter: newBalance },
+            where: { id: { in: movementIdsToUpdate } },
+            data:  { balanceAfter: newBalance },
         });
 
         // ── 5. Soft-cancel del crédito ───────────────────────────────────────────
@@ -980,7 +1044,7 @@ export class CreditService {
                 userId,
                 businessId,
                 action:      'CANCEL_CREDIT',
-                description: `Cancelación de crédito de ${credit.client.fullName} | Capital $${principal.toLocaleString('es-CO')} devuelto a ${originAccountName}${credit.payments.length > 0 ? ` | ${credit.payments.length} pago(s) revertidos` : ''}`,
+                description: `Cancelación de crédito de ${credit.client.fullName} | Capital $${principal.toLocaleString('es-CO')} devuelto a ${disbMovements.map(d => d.account?.name ?? 'Efectivo').join(', ')}${credit.payments.length > 0 ? ` | ${credit.payments.length} pago(s) revertidos` : ''}`,
                 entityType:  'Credit',
                 entityId:    creditId,
                 oldValues:   { status: credit.status, remainingBalance: credit.remainingBalance, paymentsCount: credit.payments.length },

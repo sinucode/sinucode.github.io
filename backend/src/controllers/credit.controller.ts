@@ -39,6 +39,9 @@ export const createCredit = async (req: Request, res: Response) => {
                 interestRate: Number(req.body.interestRate),
                 termDays: Number(req.body.termDays),
                 accountId: req.body.accountId || undefined,
+                splits: Array.isArray(req.body.splits)
+                    ? req.body.splits.map((s: any) => ({ accountId: s.accountId, amount: Number(s.amount) }))
+                    : undefined,
             },
             userId,
             role,
