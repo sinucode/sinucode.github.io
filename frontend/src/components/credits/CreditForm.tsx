@@ -133,7 +133,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     const { data: clientResults } = useQuery({
         queryKey: ['clients', 'search', clientSearch, formData.businessId],
         queryFn: () => searchClients(clientSearch, formData.businessId),
-        enabled: clientSearch.length > 2,
+        enabled: clientSearch.length > 0,
     });
 
     const { data: clientList } = useQuery({
@@ -393,7 +393,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                     />
                                     <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
                                 </div>
-                                {clientSearch.length > 2 && clientResults && clientResults.length > 0 && (
+                                {clientSearch.length > 0 && clientResults && clientResults.length > 0 && (
                                     <div className="mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">
                                         {clientResults.map((c) => (
                                             <button
