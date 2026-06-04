@@ -547,7 +547,18 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                 <td className="px-4 py-2.5 text-gray-500 text-xs tabular-nums">{FHour(d.hora)}</td>
                                                 <td className="px-4 py-2.5 font-medium text-gray-900">{d.cliente}</td>
                                                 <td className="px-4 py-2.5 text-right font-bold text-blue-700">{FM(d.monto)}</td>
-                                                <td className="px-4 py-2.5 text-gray-600">{d.cuenta}</td>
+                                                <td className="px-4 py-2.5 text-gray-600">
+                                                    {d.splits ? (
+                                                        <div className="flex flex-col gap-0.5">
+                                                            {d.splits.map((s, i) => (
+                                                                <span key={i} className="text-xs leading-tight">
+                                                                    {s.cuenta}{' '}
+                                                                    <span className="text-blue-600 font-medium">{FM(s.monto)}</span>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : d.cuenta}
+                                                </td>
                                                 <td className="px-4 py-2.5 text-gray-600">{d.usuario}</td>
                                             </tr>
                                         ))}

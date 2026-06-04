@@ -357,6 +357,15 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         setFormError('');
         setFormData(prev => ({ ...prev, amount: '' }));
     };
+    const addToSplit = (accountId: string, delta: number) => {
+        setFormError('');
+        const current = Number((splits[accountId] || '').replace(/[^0-9]/g, '') || '0');
+        setSplits(prev => ({ ...prev, [accountId]: (current + delta).toLocaleString('es-CO') }));
+    };
+    const clearSplit = (accountId: string) => {
+        setFormError('');
+        setSplits(prev => ({ ...prev, [accountId]: '' }));
+    };
 
     return <>
         {rechargeInfo && accounts && (
@@ -582,6 +591,25 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                                                 className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                                                                 placeholder="0"
                                                             />
+                                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                                                {[
+                                                                    { label: '+1k',   delta: 1_000 },
+                                                                    { label: '+10k',  delta: 10_000 },
+                                                                    { label: '+50k',  delta: 50_000 },
+                                                                    { label: '+100k', delta: 100_000 },
+                                                                    { label: '+500k', delta: 500_000 },
+                                                                    { label: '+1M',   delta: 1_000_000 },
+                                                                ].map(({ label, delta }) => (
+                                                                    <button key={label} type="button" onClick={() => addToSplit(a.id, delta)}
+                                                                        className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 active:bg-primary-200 transition">
+                                                                        {label}
+                                                                    </button>
+                                                                ))}
+                                                                <button type="button" onClick={() => clearSplit(a.id)}
+                                                                    className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 active:bg-red-200 transition">
+                                                                    Borrar
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 );

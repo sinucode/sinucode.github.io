@@ -492,20 +492,39 @@ export class AccountService {
                 usuario:       m.createdBy.fullName,
             }));
 
-        // ─── Tabla individual de créditos colocados (una fila por crédito) ───
-        const disbursementsTable = dayMovements
-            .filter(m => m.type === 'loan_disbursement')
-            .map(m => ({
-                id:       m.id,
-                hora:     m.createdAt,
-                creditId: m.relatedCreditId ?? null,
-                cliente:  (m.relatedCredit as any)?.client?.fullName ?? m.description,
-                monto:    Math.round(Number(m.amount) * 100) / 100,
-                cuenta:   m.account?.name ?? '—',
-                usuario:  m.createdBy.fullName,
-            }));
+        // ─── Tabla de créditos colocados: una fila por crédito, agrupando splits multi-cuenta ───
+        // Asunción: los loan_disbursement siempre llevan relatedCreditId (fijado en credit.service.ts).
+        // El fallback m.id protege contra registros con relatedCreditId=null (borrado en cascada SetNull).
+        const disbGrouped = new Map<string, typeof dayMovements>();
+        for (const m of dayMovements.filter(m => m.type === 'loan_disbursement')) {
+            const key = m.relatedCreditId ?? m.id;
+            if (!disbGrouped.has(key)) disbGrouped.set(key, []);
+            disbGrouped.get(key)!.push(m);
+        }
 
-        // ─── Resumen de créditos colocados por usuario ───
+        const disbursementsTableRaw = Array.from(disbGrouped.values()).map(movs => {
+            const first = movs[0];
+            const totalMonto = movs.reduce((s, m) => s + Number(m.amount), 0);
+            const splitsCuentas = movs.map(m => ({
+                cuenta: m.account?.name ?? '—',
+                monto:  Math.round(Number(m.amount) * 100) / 100,
+            }));
+            return {
+                id:         first.relatedCreditId ?? first.id,
+                hora:       first.createdAt,
+                creditId:   first.relatedCreditId ?? null,
+                cliente:    (first.relatedCredit as any)?.client?.fullName ?? first.description,
+                monto:      Math.round(totalMonto * 100) / 100,
+                cuenta:     splitsCuentas.length > 1
+                                ? splitsCuentas.map(s => s.cuenta).join(' + ')
+                                : (splitsCuentas[0]?.cuenta ?? '—'),
+                splits:     splitsCuentas.length > 1 ? splitsCuentas : undefined,
+                usuario:    first.createdBy.fullName,
+                _usuarioId: first.createdBy.id,
+            };
+        });
+
+        // ─── Resumen de créditos colocados por usuario (construido desde disbursementsTableRaw) ───
         const disbursersMap: Record<string, {
             usuarioId: string;
             usuarioNombre: string;
@@ -513,22 +532,25 @@ export class AccountService {
             totalDesembolsado: number;
         }> = {};
 
-        for (const m of dayMovements.filter(m => m.type === 'loan_disbursement')) {
-            const uid = m.createdBy.id;
+        for (const d of disbursementsTableRaw) {
+            const uid = d._usuarioId;
             if (!disbursersMap[uid]) {
                 disbursersMap[uid] = {
                     usuarioId: uid,
-                    usuarioNombre: m.createdBy.fullName,
+                    usuarioNombre: d.usuario,
                     numCreditos: 0,
                     totalDesembolsado: 0,
                 };
             }
             disbursersMap[uid].numCreditos    += 1;
             disbursersMap[uid].totalDesembolsado =
-                Math.round((disbursersMap[uid].totalDesembolsado + Number(m.amount)) * 100) / 100;
+                Math.round((disbursersMap[uid].totalDesembolsado + d.monto) * 100) / 100;
         }
 
         const disbursers = Object.values(disbursersMap).sort((a, b) => b.totalDesembolsado - a.totalDesembolsado);
+
+        // Limpiar campo interno antes de serializar
+        const disbursementsTable = disbursementsTableRaw.map(({ _usuarioId, ...rest }) => rest);
 
         // Tabla de operaciones: excluye pagos (van en pagos), créditos (van en créditos) y cancelaciones (van en cancelaciones)
         const operationsTable = dayMovements
