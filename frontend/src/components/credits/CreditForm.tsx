@@ -11,7 +11,8 @@ import { injectCapital, transferFunds } from '../../api/cash.api';
 import { Client, PaymentFrequency } from '../../types';
 import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, ArrowRightLeft, PlusCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { todayBogota } from '../../utils/dates';
+import { todayBogota, toLocalDateString } from '../../utils/dates';
+import { getHolidaySet } from '../../utils/holidays';
 
 interface CreditFormProps {
     onClose: () => void;
@@ -66,6 +67,10 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     const [useFixedInstallment, setUseFixedInstallment] = useState(false);
     const [installmentAmount, setInstallmentAmount] = useState('');
     const [fixedTermUnit, setFixedTermUnit] = useState<'days' | 'weeks' | 'quincenal' | 'months'>('months');
+    const [excludedWeekdays, setExcludedWeekdays] = useState<number[]>([]);
+    const [excludeHolidays, setExcludeHolidays] = useState(false);
+    const [customRounding, setCustomRounding] = useState(false);
+    const [showFechasPanel, setShowFechasPanel] = useState(false);
 
     const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
@@ -203,6 +208,13 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         },
     });
 
+    // Re-simular automáticamente cuando cambian las opciones de fechas/personalizar
+    useEffect(() => {
+        if (!simulation) return;
+        handleSimulate();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [excludedWeekdays, excludeHolidays, customRounding]);
+
     const handleSimulate = () => {
         setFormError('');
         if (!selectedClientId) return setFormError('Selecciona un cliente');
@@ -226,6 +238,9 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             termDays,
             frequency: formData.frequency,
             startDate: formData.startDate,
+            excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
+            excludeHolidays: excludeHolidays || undefined,
+            customRounding: customRounding || undefined,
         });
     };
 
@@ -267,6 +282,9 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 frequency: formData.frequency, startDate: formData.startDate,
                 businessId: formData.businessId || undefined,
                 splits: splitEntries,
+                excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
+                excludeHolidays: excludeHolidays || undefined,
+                customRounding: customRounding || undefined,
             };
             pendingPayloadRef.current = payload;
             createMutation.mutate(payload);
@@ -282,6 +300,9 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             startDate: formData.startDate,
             businessId: formData.businessId || undefined,
             accountId: disbursementAccountId || undefined,
+            excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
+            excludeHolidays: excludeHolidays || undefined,
+            customRounding: customRounding || undefined,
         };
         pendingPayloadRef.current = payload;
         createMutation.mutate(payload);
@@ -367,6 +388,16 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             scheduledAmount: Number(p.scheduledAmount),
         }));
     }, [simulation]);
+
+    /** Set de festivos colombianos para el rango del plan actual — evita recalcular por fila */
+    const planHolidaySet = useMemo(() => {
+        if (paymentPlanView.length === 0) return new Set<string>();
+        const years = new Set<number>();
+        for (const p of paymentPlanView) {
+            if (p.dueDate) years.add(new Date(p.dueDate).getFullYear());
+        }
+        return getHolidaySet(Array.from(years));
+    }, [paymentPlanView]);
 
     const addToAmount = (delta: number) => {
         setFormError('');
@@ -827,13 +858,94 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                     <span><strong>Cuota estimada:</strong> ${formatMoney(simulation.paymentAmount)}</span>
                                     <span><strong>Cuotas:</strong> {simulation.numberOfPayments}</span>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={handleDownloadPDF}
-                                    className="inline-flex items-center gap-2 px-3 py-2 border border-primary-600 text-primary-700 bg-white rounded-lg text-sm font-medium hover:bg-primary-50 transition"
-                                >
-                                    <Download size={16} /> Descargar PDF
-                                </button>
+
+                                {/* Botones de acción */}
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadPDF}
+                                        className="inline-flex items-center gap-2 px-3 py-2 border border-primary-600 text-primary-700 bg-white rounded-lg text-sm font-medium hover:bg-primary-50 transition"
+                                    >
+                                        <Download size={16} /> Descargar PDF
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowFechasPanel(v => !v)}
+                                        className={`inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition ${showFechasPanel ? 'bg-primary-600 text-white border-primary-600' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}
+                                    >
+                                        📅 Fechas
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCustomRounding(v => !v)}
+                                        className={`inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition ${customRounding ? 'bg-primary-600 text-white border-primary-600' : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'}`}
+                                    >
+                                        ✨ Personalizar
+                                    </button>
+                                </div>
+
+                                {/* Panel de Fechas */}
+                                {showFechasPanel && (
+                                    <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-3">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Excluir días de cobro</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {[
+                                                { day: 1, label: 'Lun' },
+                                                { day: 2, label: 'Mar' },
+                                                { day: 3, label: 'Mié' },
+                                                { day: 4, label: 'Jue' },
+                                                { day: 5, label: 'Vie' },
+                                                { day: 6, label: 'Sáb' },
+                                                { day: 0, label: 'Dom' },
+                                            ].map(({ day, label }) => {
+                                                const isSelected = excludedWeekdays.includes(day);
+                                                const wouldExcludeAll = !isSelected && excludedWeekdays.length >= 6;
+                                                return (
+                                                    <button
+                                                        key={day}
+                                                        type="button"
+                                                        disabled={wouldExcludeAll}
+                                                        onClick={() => setExcludedWeekdays(prev =>
+                                                            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                                                        )}
+                                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                                                            isSelected
+                                                                ? 'bg-red-500 text-white border-red-500'
+                                                                : wouldExcludeAll
+                                                                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={excludeHolidays}
+                                                onChange={e => setExcludeHolidays(e.target.checked)}
+                                                className="w-4 h-4 rounded border-gray-300 text-primary-600"
+                                            />
+                                            Excluir festivos colombianos
+                                        </label>
+                                        {(excludedWeekdays.length > 0 || excludeHolidays) && (
+                                            <p className="text-xs text-blue-600">
+                                                Los días excluidos no tendrán cuota. El plazo se amplía automáticamente.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Info de personalizar */}
+                                {customRounding && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                                        <strong>Personalizar activo:</strong> cuotas &lt; $10.000 → múltiplo de $1.000; ≥ $10.000 → múltiplo de $10.000. La última cuota absorbe el remanente.
+                                    </div>
+                                )}
+
+                                {/* Tabla de pagos */}
                                 <div className="max-h-48 overflow-y-auto bg-white rounded-lg border border-gray-200">
                                     <table className="w-full text-left text-sm">
                                         <thead className="bg-gray-50 text-gray-600 sticky top-0">
@@ -850,8 +962,11 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                                 const due = dueDate ? dueDate.toLocaleDateString() : '-';
                                                 const day = dueDate ? new Intl.DateTimeFormat('es-CO', { weekday: 'short' }).format(dueDate) : '-';
                                                 const amount = p.scheduledAmount ? formatMoney(p.scheduledAmount) : '-';
+                                                const isSunday = dueDate ? dueDate.getDay() === 0 : false;
+                                                const isFestivo = dueDate ? planHolidaySet.has(toLocalDateString(dueDate)) : false;
+                                                const isRed = isSunday || isFestivo;
                                                 return (
-                                                    <tr key={p.installmentNumber || idx} className="text-gray-800">
+                                                    <tr key={p.installmentNumber || idx} className={isRed ? 'bg-red-50 text-red-700' : 'text-gray-800'}>
                                                         <td className="py-2 px-3">{p.installmentNumber ?? idx + 1}</td>
                                                         <td className="py-2 px-3 capitalize hidden sm:table-cell">{day}</td>
                                                         <td className="py-2 px-3">{due}</td>

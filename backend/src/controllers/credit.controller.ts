@@ -14,6 +14,11 @@ export const simulateCredit = async (req: Request, res: Response) => {
             amount: Number(req.body.amount),
             interestRate: Number(req.body.interestRate),
             termDays: Number(req.body.termDays),
+            excludedWeekdays: Array.isArray(req.body.excludedWeekdays)
+                ? req.body.excludedWeekdays.map(Number)
+                : undefined,
+            excludeHolidays: req.body.excludeHolidays === true || req.body.excludeHolidays === 'true',
+            customRounding: req.body.customRounding === true || req.body.customRounding === 'true',
         });
         return res.json(simulation);
     } catch (error: any) {
@@ -42,6 +47,11 @@ export const createCredit = async (req: Request, res: Response) => {
                 splits: Array.isArray(req.body.splits)
                     ? req.body.splits.map((s: any) => ({ accountId: s.accountId, amount: Number(s.amount) }))
                     : undefined,
+                excludedWeekdays: Array.isArray(req.body.excludedWeekdays)
+                    ? req.body.excludedWeekdays.map(Number)
+                    : undefined,
+                excludeHolidays: req.body.excludeHolidays === true || req.body.excludeHolidays === 'true',
+                customRounding: req.body.customRounding === true || req.body.customRounding === 'true',
             },
             userId,
             role,

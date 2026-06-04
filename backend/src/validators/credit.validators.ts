@@ -19,6 +19,28 @@ export const simulateCreditValidators = [
         .optional()
         .isISO8601()
         .withMessage('La fecha de inicio es inválida'),
+    body('excludedWeekdays')
+        .optional({ nullable: true })
+        .isArray()
+        .withMessage('excludedWeekdays debe ser un arreglo')
+        .custom((val) => {
+            if (Array.isArray(val) && val.length >= 7) {
+                throw new Error('No puedes excluir todos los días de la semana');
+            }
+            return true;
+        }),
+    body('excludedWeekdays.*')
+        .optional()
+        .isInt({ min: 0, max: 6 })
+        .withMessage('Cada día debe ser un número entre 0 y 6'),
+    body('excludeHolidays')
+        .optional({ nullable: true })
+        .isBoolean({ strict: true })
+        .withMessage('excludeHolidays debe ser booleano'),
+    body('customRounding')
+        .optional({ nullable: true })
+        .isBoolean({ strict: true })
+        .withMessage('customRounding debe ser booleano'),
 ];
 
 export const createCreditValidators = [

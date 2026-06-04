@@ -1,4 +1,5 @@
 import { normalizeToNoon } from './dates';
+import { getHolidaySet, isHoliday } from './holidays';
 
 /**
  * Cálculos de intereses y plan de pagos para créditos
@@ -16,6 +17,40 @@ export interface CreditCalculation {
     numberOfPayments: number;
     paymentAmount: number;
     paymentPlan: PaymentPlan[];
+}
+
+/** Opciones opcionales para el plan de pagos */
+export interface ScheduleOptions {
+    excludedWeekdays?: number[];   // Date.getDay(): 0=Dom, 1=Lun, ..., 6=Sáb
+    excludeHolidays?: boolean;
+    customRounding?: boolean;
+}
+
+/**
+ * Redondea una cuota hacia arriba al múltiplo "limpio" más cercano.
+ * < $10.000 → múltiplo de $1.000; ≥ $10.000 → múltiplo de $10.000.
+ */
+export function roundUpInstallment(v: number): number {
+    if (v < 10000) return Math.ceil(v / 1000) * 1000;
+    return Math.ceil(v / 10000) * 10000;
+}
+
+/** Devuelve true si la fecha debe excluirse según las opciones */
+function isExcludedDate(date: Date, opts: ScheduleOptions, holidaySet: Set<string>): boolean {
+    if (opts.excludedWeekdays?.includes(date.getDay())) return true;
+    if (opts.excludeHolidays && isHoliday(date, holidaySet)) return true;
+    return false;
+}
+
+/** Avanza la fecha hacia adelante hasta encontrar un día permitido (max 400 días) */
+function rollToAllowed(date: Date, opts: ScheduleOptions, holidaySet: Set<string>): Date {
+    let d = new Date(date);
+    let guard = 0;
+    while (isExcludedDate(d, opts, holidaySet)) {
+        if (++guard > 400) throw new Error('rollToAllowed: no se encontró un día de cobro permitido en 400 días consecutivos');
+        d.setDate(d.getDate() + 1);
+    }
+    return normalizeToNoon(d);
 }
 
 /**
@@ -48,6 +83,7 @@ const getNextQuincena = (currentDate: Date): Date => {
  * @param startDate - Fecha de inicio del crédito
  * @param termDays - Plazo en días
  * @param frequency - Frecuencia de pago (daily, weekly, bisemanal, quincenal, monthly)
+ * @param options - Opciones opcionales (excludedWeekdays, excludeHolidays, customRounding)
  * @returns Calculation con plan de pagos completo
  */
 export const calculateCreditPlan = (
@@ -55,7 +91,8 @@ export const calculateCreditPlan = (
     interestRate: number,
     startDate: Date,
     termDays: number,
-    frequency: 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly'
+    frequency: 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly',
+    options: ScheduleOptions = {}
 ): CreditCalculation => {
     // Calcular número de cuotas según frecuencia
     let numberOfPayments = 0;
@@ -104,11 +141,42 @@ export const calculateCreditPlan = (
     // Cuota base entera; la última = totalWithInterest − base*(n−1) para cuadrar exacto
     const paymentAmount = Math.round(totalWithInterest / numberOfPayments);
 
-    // Generar plan de pagos
+    // ── Montos por cuota ────────────────────────────────────────────────────
+    let amounts: number[];
+    if (options.customRounding) {
+        const rounded = roundUpInstallment(paymentAmount);
+        const k = Math.floor(totalWithInterest / rounded);
+        const remainder = totalWithInterest - k * rounded;
+        if (k === 0) {
+            amounts = [totalWithInterest];
+        } else if (remainder > 0) {
+            amounts = [...Array(k).fill(rounded), remainder];
+        } else {
+            amounts = Array(k).fill(rounded);
+        }
+    } else {
+        // Comportamiento original: cuotas iguales, la última absorbe el residuo de redondeo
+        amounts = Array.from({ length: numberOfPayments }, (_, i) =>
+            i === numberOfPayments - 1
+                ? totalWithInterest - paymentAmount * (numberOfPayments - 1)
+                : paymentAmount
+        );
+    }
+    const count = amounts.length;
+
+    // ── Holiday set (solo cuando se necesita) ──────────────────────────────
+    const hasExclusions = (options.excludedWeekdays?.length ?? 0) > 0 || options.excludeHolidays;
+    const startYear = startDate.getFullYear();
+    const endYear = startYear + Math.ceil(termDays / 365) + 1;
+    const holidaySet = options.excludeHolidays
+        ? getHolidaySet(Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i))
+        : new Set<string>();
+
+    // ── Generar plan de pagos ───────────────────────────────────────────────
     const paymentPlan: PaymentPlan[] = [];
     let currentDueDate = normalizeToNoon(startDate);
 
-    for (let i = 0; i < numberOfPayments; i++) {
+    for (let i = 0; i < count; i++) {
         if (frequency === 'quincenal') {
             currentDueDate = getNextQuincena(currentDueDate);
         } else {
@@ -116,24 +184,21 @@ export const calculateCreditPlan = (
             nextDate.setDate(currentDueDate.getDate() + daysBetweenPayments);
             currentDueDate = normalizeToNoon(nextDate);
         }
-
-        const isLast = i === numberOfPayments - 1;
-        const scheduledAmount = isLast
-            ? totalWithInterest - paymentAmount * (numberOfPayments - 1)
-            : paymentAmount;
-
+        if (hasExclusions) {
+            currentDueDate = rollToAllowed(currentDueDate, options, holidaySet);
+        }
         paymentPlan.push({
             installmentNumber: i + 1,
             dueDate: currentDueDate,
-            scheduledAmount,
+            scheduledAmount: amounts[i],
         });
     }
 
     return {
         totalInterest,
         totalWithInterest,
-        numberOfPayments,
-        paymentAmount,
+        numberOfPayments: count,
+        paymentAmount: amounts[0],
         paymentPlan,
     };
 };

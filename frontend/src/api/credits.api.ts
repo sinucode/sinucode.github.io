@@ -7,6 +7,9 @@ export interface SimulateCreditPayload {
     termDays: number;
     frequency: PaymentFrequency;
     startDate?: string;
+    excludedWeekdays?: number[];
+    excludeHolidays?: boolean;
+    customRounding?: boolean;
 }
 
 export interface CreateCreditPayload extends SimulateCreditPayload {

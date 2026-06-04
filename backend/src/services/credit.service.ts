@@ -16,6 +16,9 @@ interface CreateCreditInput {
     startDate?: string;
     accountId?: string;
     splits?: { accountId: string; amount: number }[];
+    excludedWeekdays?: number[];
+    excludeHolidays?: boolean;
+    customRounding?: boolean;
 }
 
 interface ListFilters {
@@ -40,14 +43,30 @@ export class CreditService {
 
     async simulateCredit(data: CreateCreditInput) {
         const start = this.normalizeDate(data.startDate);
+        const options = {
+            excludedWeekdays: data.excludedWeekdays,
+            excludeHolidays: data.excludeHolidays,
+            customRounding: data.customRounding,
+        };
         const plan = calculateCreditPlan(
             data.amount,
             data.interestRate,
             start,
             data.termDays,
-            data.frequency
+            data.frequency,
+            options
         );
-        return { ...plan, endDate: calculateEndDate(start, data.termDays) };
+        // Cuando hay exclusiones o redondeo personalizado, la fecha de fin real
+        // es la del último pago (más precisa que termDays desde startDate).
+        const hasOptions =
+            (options.excludedWeekdays?.length ?? 0) > 0 ||
+            options.excludeHolidays ||
+            options.customRounding;
+        const endDate =
+            hasOptions && plan.paymentPlan.length > 0
+                ? plan.paymentPlan[plan.paymentPlan.length - 1].dueDate
+                : calculateEndDate(start, data.termDays);
+        return { ...plan, endDate };
     }
 
     async createCredit(data: CreateCreditInput, userId: string, role: UserRole, ipAddress = '') {
@@ -211,11 +230,17 @@ export class CreditService {
                 })),
             });
 
-            const newBalance = new Prisma.Decimal(business.currentBalance).minus(data.amount);
+            // Re-leer el balance dentro de la tx para evitar TOCTOU: otra operación
+            // concurrente pudo modificar currentBalance entre la validación previa y este write.
+            const { currentBalance: balanceAtTx } = await tx.business.findUniqueOrThrow({
+                where: { id: targetBusinessId },
+                select: { currentBalance: true },
+            });
+            const newBalance = new Prisma.Decimal(balanceAtTx).minus(data.amount);
 
             if (resolvedSplits.length > 0) {
                 // Multi-cuenta: un loan_disbursement por split con balanceAfter acumulado
-                let runningBalance = new Prisma.Decimal(business.currentBalance);
+                let runningBalance = new Prisma.Decimal(balanceAtTx);
                 for (const split of resolvedSplits) {
                     runningBalance = runningBalance.minus(split.amount);
                     await tx.cashMovement.create({
