@@ -81,6 +81,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     // Multi-cuenta
     const [splitEnabled, setSplitEnabled] = useState(false);
     const [splits, setSplits] = useState<Record<string, string>>({});
+    const [noDaysModal, setNoDaysModal] = useState(false);
     // Modal de recarga cuando la cuenta o el negocio no tiene fondos
     const [rechargeInfo, setRechargeInfo] = useState<{
         accountId: string; accountName: string; available: number; required: number;
@@ -159,7 +160,13 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     const simulateMutation = useMutation({
         mutationFn: simulateCredit,
         onSuccess: (data) => setSimulation(data),
-        onError: (err: any) => setFormError(err.response?.data?.error || 'Error al simular crédito'),
+        onError: (err: any) => {
+            if (err.response?.data?.code === 'NO_COLLECTION_DAYS') {
+                setNoDaysModal(true);
+                return;
+            }
+            setFormError(err.response?.data?.error || 'Error al simular crédito');
+        },
     });
 
     const estimateTermDays = (amount: number, interestRate: number, installment: number, frequency: PaymentFrequency) => {
@@ -191,6 +198,10 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         },
         onError: (err: any) => {
             const data = err.response?.data;
+            if (data?.code === 'NO_COLLECTION_DAYS') {
+                setNoDaysModal(true);
+                return;
+            }
             if (data?.code === 'INSUFFICIENT_ACCOUNT_BALANCE' ||
                 data?.code === 'INSUFFICIENT_BUSINESS_BALANCE') {
                 if (isAdmin) {
@@ -335,7 +346,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         y += 6;
         paymentPlanView.forEach((p, idx) => {
             const dueDate = p.dueDate ? new Date(p.dueDate) : null;
-            const due = dueDate ? dueDate.toLocaleDateString() : '-';
+            const due = dueDate ? toLocalDateString(dueDate) : '-';
             const day = dueDate ? new Intl.DateTimeFormat('es-CO', { weekday: 'long' }).format(dueDate) : '-';
             const amount = p.scheduledAmount ? formatMoney(p.scheduledAmount) : '-';
             doc.text(String(p.installmentNumber ?? idx + 1), 14, y);
@@ -435,6 +446,27 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     };
 
     return <>
+        {noDaysModal && createPortal(
+            <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/60 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+                    <div className="flex items-center gap-2 text-amber-700">
+                        <AlertTriangle size={20} />
+                        <h3 className="text-base font-bold">Sin días de cobro</h3>
+                    </div>
+                    <p className="text-sm text-gray-700">
+                        Has excluido demasiados días. Debe quedar al menos un día disponible para generar el plan de pagos.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => setNoDaysModal(false)}
+                        className="w-full py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 transition"
+                    >
+                        Entendido
+                    </button>
+                </div>
+            </div>,
+            document.body
+        )}
         {rechargeInfo && accounts && (
             <RechargeAccountModal
                 businessId={effectiveBusinessId}
@@ -945,7 +977,10 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         </label>
                                         {(excludedWeekdays.length > 0 || excludeHolidays) && (
                                             <p className="text-xs text-blue-600">
-                                                Los días excluidos no tendrán cuota: el total se reparte en menos cuotas dentro del mismo plazo, por lo que cada cuota sube.
+                                                {formData.frequency === 'daily'
+                                                    ? 'Los días excluidos no se cobran: su valor se reparte entre los días restantes dentro del plazo (menos cuotas, cada una sube).'
+                                                    : 'Si una cuota cae en un día excluido, se mueve al siguiente día disponible. El número de cuotas no cambia; el plazo puede extenderse unos días.'
+                                                }
                                             </p>
                                         )}
                                     </div>

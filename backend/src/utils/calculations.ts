@@ -137,9 +137,12 @@ export const calculateCreditPlan = (
         : new Set<string>();
 
     // ── Generar fechas candidatas dentro de la ventana del plazo ───────────
-    // Con exclusiones: se saltan los días excluidos (no se reagendan); el total
-    // se reparte en las fechas permitidas → menos cuotas, cada una más alta.
-    // Sin exclusiones: todas las fechas del plan pasan → comportamiento idéntico al anterior.
+    // Sin exclusiones: todas las fechas del plan pasan.
+    // DIARIO con exclusiones: se descartan los días excluidos; el total se reparte en
+    //   menos cuotas dentro del plazo (menos cuotas, cada una más alta).
+    // SEMANAL/BISEMANAL/QUINCENAL/MENSUAL con exclusiones: corrimiento fijo por cuota;
+    //   la fecha base (cadencia) nunca se arrastra, solo se mueve la cuota afectada.
+    const isDaily = frequency === 'daily';
     const allowedDates: Date[] = [];
     let currentDueDate = normalizeToNoon(startDate);
 
@@ -151,18 +154,34 @@ export const calculateCreditPlan = (
             nextDate.setDate(currentDueDate.getDate() + daysBetweenPayments);
             currentDueDate = normalizeToNoon(nextDate);
         }
-        if (hasExclusions && isExcludedDate(currentDueDate, options, holidaySet)) {
-            continue; // Día excluido: se descarta, no se reagenda
-        }
-        allowedDates.push(currentDueDate);
-    }
 
-    const slots = allowedDates.length;
-    if (slots === 0) {
-        throw new Error('No quedan días de cobro válidos en el plazo con las exclusiones aplicadas.');
+        if (!hasExclusions) {
+            allowedDates.push(currentDueDate);
+        } else if (isDaily) {
+            // DIARIO: descartar los días excluidos; el total se reparte en menos cuotas
+            if (!isExcludedDate(currentDueDate, options, holidaySet)) {
+                allowedDates.push(currentDueDate);
+            }
+        } else {
+            // SEMANAL / BISEMANAL / QUINCENAL / MENSUAL: corrimiento fijo por cuota
+            // Solo se mueve la cuota afectada; la cadencia base (currentDueDate) nunca se arrastra
+            let bumped = currentDueDate;
+            let guard = 0;
+            while (isExcludedDate(bumped, options, holidaySet)) {
+                const n = new Date(bumped);
+                n.setDate(bumped.getDate() + 1);
+                bumped = normalizeToNoon(n);
+                if (++guard > 14) throw new Error('NO_COLLECTION_DAYS');
+            }
+            allowedDates.push(bumped);
+            // IMPORTANTE: NO actualizar currentDueDate con bumped → corrimiento fijo
+        }
     }
 
     // ── Montos por cuota (distribuidos entre `slots` fechas permitidas) ────
+    const slots = allowedDates.length;
+    // Puede quedar 0 en el path diario si todos los días del plazo son excluidos
+    if (slots === 0) throw new Error('NO_COLLECTION_DAYS');
     const baseInstallment = Math.round(totalWithInterest / slots);
     let amounts: number[];
     if (options.customRounding) {

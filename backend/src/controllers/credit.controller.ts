@@ -23,9 +23,12 @@ export const simulateCredit = async (req: Request, res: Response) => {
         return res.json(simulation);
     } catch (error: any) {
         console.error('Error simulando crédito:', error);
-        // Errores de entrada del usuario (exclusiones que vacían el plan) → 400
-        if (error.message?.includes('No quedan días de cobro válidos')) {
-            return res.status(400).json({ error: error.message });
+        if (error.message === 'NO_COLLECTION_DAYS') {
+            res.status(400).json({
+                code: 'NO_COLLECTION_DAYS',
+                error: 'No quedan días de cobro disponibles con las exclusiones seleccionadas. Deja al menos un día disponible.',
+            });
+            return;
         }
         return res.status(500).json({ error: error.message || 'Error al simular crédito' });
     }
@@ -64,6 +67,13 @@ export const createCredit = async (req: Request, res: Response) => {
         return res.status(201).json(credit);
     } catch (error: any) {
         console.error('Error creando crédito:', error);
+        if (error.message === 'NO_COLLECTION_DAYS') {
+            res.status(400).json({
+                code: 'NO_COLLECTION_DAYS',
+                error: 'No quedan días de cobro disponibles con las exclusiones seleccionadas. Deja al menos un día disponible.',
+            });
+            return;
+        }
         // Errores de saldo insuficiente (por cuenta o total del negocio): devolver code+details
         // para que el frontend pueda abrir el modal de recarga.
         if ((error as any).code === 'INSUFFICIENT_ACCOUNT_BALANCE' ||
