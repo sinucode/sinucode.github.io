@@ -69,6 +69,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         unit === 'weeks' ? value * 7 : value * DAYS_PER_MONTH;
     const [useFixedInstallment, setUseFixedInstallment] = useState(false);
     const [installmentAmount, setInstallmentAmount] = useState('');
+    const [fixedTermUnit, setFixedTermUnit] = useState<'days' | 'weeks' | 'quincenal' | 'months'>('months');
 
     const isSuperAdmin = user?.role === 'super_admin';
     const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
@@ -332,10 +333,16 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         const installment = Number(installmentAmount.replace(/[^0-9]/g, ''));
         if (useFixedInstallment && amount > 0 && interestRate > 0 && installment > 0) {
             const termDays = estimateTermDays(amount, interestRate, installment, formData.frequency);
-            return { termDays, termMonths: Math.ceil(termDays / 30) };
+            const divisorMap: Record<typeof fixedTermUnit, number> = { days: 1, weeks: 7, quincenal: 15, months: 30 };
+            const labelMap: Record<typeof fixedTermUnit, string> = { days: 'días', weeks: 'semanas', quincenal: 'quincenas', months: 'meses' };
+            return {
+                termDays,
+                termInUnit: Math.ceil(termDays / divisorMap[fixedTermUnit]),
+                unitLabel: labelMap[fixedTermUnit],
+            };
         }
         return null;
-    }, [formData.amount, formData.frequency, formData.interestRate, installmentAmount, useFixedInstallment]);
+    }, [formData.amount, formData.frequency, formData.interestRate, installmentAmount, useFixedInstallment, fixedTermUnit]);
 
     const paymentPlanView = useMemo(() => {
         if (!simulation || !Array.isArray(simulation.paymentPlan)) return [];
@@ -655,24 +662,51 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                     />
                                     <span className="text-sm font-medium text-gray-800">Usar cuota fija (ingresa la cuota deseada en COP)</span>
                                 </label>
-                                <div>
-                                    <label className="block text-sm font-semibold text-primary-700 mb-1">Cuota deseada</label>
-                                    <input
-                                        type="text"
-                                        value={installmentAmount}
-                                        onChange={(e) => {
-                                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                                            setInstallmentAmount(raw ? Number(raw).toLocaleString('es-CO') : '');
-                                        }}
-                                        className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 disabled:bg-gray-100 disabled:text-gray-400"
-                                        placeholder="Ej: 100.000"
-                                        disabled={!useFixedInstallment}
-                                    />
-                                    <p className="text-xs text-primary-600 mt-1">Recalcularemos el plazo estimado según esta cuota.</p>
-                                </div>
-                                {derivedTermInfo && (
-                                    <div className="text-sm text-primary-900 bg-primary-50 rounded-lg p-3">
-                                        <strong>Plazo estimado:</strong> {derivedTermInfo.termMonths} meses ({derivedTermInfo.termDays} días)
+
+                                {useFixedInstallment && (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-primary-700 mb-1">Cuota deseada</label>
+                                            <input
+                                                type="text"
+                                                value={installmentAmount}
+                                                onChange={(e) => {
+                                                    const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                    setInstallmentAmount(raw ? Number(raw).toLocaleString('es-CO') : '');
+                                                }}
+                                                className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                                placeholder="Ej: 100.000"
+                                            />
+                                            <p className="text-xs text-primary-600 mt-1">Recalcularemos el plazo estimado según esta cuota.</p>
+                                        </div>
+
+                                        {/* Selector de unidad del plazo estimado */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">
+                                                Mostrar plazo estimado en
+                                            </label>
+                                            <div className="flex rounded-xl border border-gray-300 overflow-hidden text-xs w-fit">
+                                                {(['days', 'weeks', 'quincenal', 'months'] as const).map((u, i) => {
+                                                    const labels: Record<typeof u, string> = { days: 'Días', weeks: 'Semanas', quincenal: 'Quincenas', months: 'Meses' };
+                                                    return (
+                                                        <button
+                                                            key={u}
+                                                            type="button"
+                                                            onClick={() => setFixedTermUnit(u)}
+                                                            className={`px-3 py-2 font-medium transition ${i > 0 ? 'border-l border-gray-300' : ''} ${fixedTermUnit === u ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                                                        >
+                                                            {labels[u]}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {derivedTermInfo && (
+                                            <div className="text-sm text-primary-900 bg-primary-50 rounded-lg p-3">
+                                                <strong>Plazo estimado:</strong> {derivedTermInfo.termInUnit} {derivedTermInfo.unitLabel} ({derivedTermInfo.termDays} días)
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
