@@ -13,6 +13,7 @@ import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, A
 import jsPDF from 'jspdf';
 import { todayBogota, toLocalDateString } from '../../utils/dates';
 import { getHolidaySet } from '../../utils/holidays';
+import { fetchHolidays } from '../../api/holidays.api';
 
 interface CreditFormProps {
     onClose: () => void;
@@ -389,15 +390,29 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         }));
     }, [simulation]);
 
-    /** Set de festivos colombianos para el rango del plan actual — evita recalcular por fila */
-    const planHolidaySet = useMemo(() => {
-        if (paymentPlanView.length === 0) return new Set<string>();
+    // Años presentes en el plan visible
+    const planYears = useMemo(() => {
         const years = new Set<number>();
         for (const p of paymentPlanView) {
             if (p.dueDate) years.add(new Date(p.dueDate).getFullYear());
         }
-        return getHolidaySet(Array.from(years));
+        return Array.from(years).sort();
     }, [paymentPlanView]);
+
+    // Festivos desde API (DB + fallback algoritmo en el servidor)
+    const { data: apiHolidayDates } = useQuery({
+        queryKey: ['holidays', planYears],
+        queryFn: () => fetchHolidays(planYears),
+        enabled: planYears.length > 0,
+        staleTime: 1000 * 60 * 60, // 1 hora
+    });
+
+    /** Set de festivos colombianos para el rango del plan actual — evita recalcular por fila */
+    const planHolidaySet = useMemo(() => {
+        if (apiHolidayDates) return new Set(apiHolidayDates);
+        if (planYears.length === 0) return new Set<string>();
+        return getHolidaySet(planYears);
+    }, [apiHolidayDates, planYears]);
 
     const addToAmount = (delta: number) => {
         setFormError('');

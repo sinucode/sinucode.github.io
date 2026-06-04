@@ -24,6 +24,7 @@ export interface ScheduleOptions {
     excludedWeekdays?: number[];   // Date.getDay(): 0=Dom, 1=Lun, ..., 6=Sáb
     excludeHolidays?: boolean;
     customRounding?: boolean;
+    precomputedHolidaySet?: Set<string>;
 }
 
 /**
@@ -132,7 +133,7 @@ export const calculateCreditPlan = (
     const startYear = startDate.getFullYear();
     const endYear = startYear + Math.ceil(termDays / 365) + 1;
     const holidaySet = options.excludeHolidays
-        ? getHolidaySet(Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i))
+        ? (options.precomputedHolidaySet ?? getHolidaySet(Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i)))
         : new Set<string>();
 
     // ── Generar fechas candidatas dentro de la ventana del plazo ───────────

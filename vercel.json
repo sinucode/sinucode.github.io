@@ -5,6 +5,10 @@
         {
             "path": "/api/accounts/closes/auto-run",
             "schedule": "59 4 * * *"
+        },
+        {
+            "path": "/api/holidays/sync",
+            "schedule": "0 8 1 * *"
         }
     ],
     "builds": [

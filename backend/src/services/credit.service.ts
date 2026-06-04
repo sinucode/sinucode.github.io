@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { calculateCreditPlan, calculateEndDate } from '../utils/calculations';
 import { normalizeToNoon } from '../utils/dates';
 import { accountService } from './account.service';
+import { getHolidayDatesFromDB } from './holiday.service';
 
 export type PaymentFrequency = 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly';
 
@@ -43,10 +44,35 @@ export class CreditService {
 
     async simulateCredit(data: CreateCreditInput) {
         const start = this.normalizeDate(data.startDate);
+
+        // Pre-fetch festivos desde DB (solo si la DB tiene cobertura completa para el rango)
+        let precomputedHolidaySet: Set<string> | undefined;
+        if (data.excludeHolidays) {
+            const startYear = start.getFullYear();
+            const termDaysNum = Number(data.termDays);
+            const endYear = startYear + Math.ceil(termDaysNum / 365) + 1;
+            const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
+            // Verificar que la DB tiene filas para CADA año del rango
+            const coveredYears = new Set(
+                (await prisma.publicHoliday.findMany({
+                    where: { year: { in: years }, country: 'CO' },
+                    select: { year: true },
+                    distinct: ['year'],
+                })).map((r: { year: number }) => r.year)
+            );
+            const allCovered = years.every(y => coveredYears.has(y));
+            if (allCovered) {
+                const dbSet = await getHolidayDatesFromDB(years);
+                if (dbSet.size > 0) precomputedHolidaySet = dbSet;
+            }
+            // Si no hay cobertura completa → precomputedHolidaySet queda undefined → calculateCreditPlan usa algoritmo
+        }
+
         const options = {
             excludedWeekdays: data.excludedWeekdays,
             excludeHolidays: data.excludeHolidays,
             customRounding: data.customRounding,
+            precomputedHolidaySet,
         };
         const plan = calculateCreditPlan(
             data.amount,

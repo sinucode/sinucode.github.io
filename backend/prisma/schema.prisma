@@ -430,3 +430,16 @@ model BusinessBilling {
   @@index([createdAt])
   @@map("business_billings")
 }
+
+// FESTIVOS COLOMBIANOS (sincronizados desde nager.date)
+model PublicHoliday {
+  id        String   @id @default(cuid())
+  date      String   // YYYY-MM-DD
+  name      String
+  year      Int
+  country   String   @default("CO")
+  syncedAt  DateTime @default(now()) @updatedAt
+
+  @@unique([date, country])
+  @@index([year, country])
+}
