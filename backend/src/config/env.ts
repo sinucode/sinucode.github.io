@@ -9,7 +9,7 @@ export const config = {
     jwt: {
         secret: process.env.JWT_SECRET || 'fallback-secret-change-me',
         refreshSecret: process.env.JWT_REFRESH_SECRET || 'fallback-refresh-secret-change-me',
-        expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+        expiresIn: process.env.JWT_EXPIRES_IN || '3h',
         refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
     },
 
