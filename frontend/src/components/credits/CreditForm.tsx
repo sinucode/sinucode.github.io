@@ -712,6 +712,18 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                 </div>
                             </div>
 
+                            {/* Frecuencia — col 2 junto a Interés, sin celdas vacías */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Frecuencia *</label>
+                                <select
+                                    value={formData.frequency}
+                                    onChange={(e) => setFormData({ ...formData, frequency: e.target.value as PaymentFrequency })}
+                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                                >
+                                    {frequencies.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                </select>
+                            </div>
+
                             {/* Cuota fija */}
                             <div className="md:col-span-2 bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
                                 <label className="flex items-center gap-3 cursor-pointer">
@@ -780,7 +792,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                             </div>
 
                             {/* Plazo con unidad (días / semanas / quincenas / meses) */}
-                            <div>
+                            <div className="md:col-span-2">
                                 {(() => {
                                     const unitLabels: Record<'days' | 'weeks' | 'quincenal' | 'months', string> = { days: 'días', weeks: 'semanas', quincenal: 'quincenas', months: 'meses' };
                                     const unitPlaceholders: Record<'days' | 'weeks' | 'quincenal' | 'months', string> = { days: '30', weeks: '6', quincenal: '4', months: '2' };
@@ -790,32 +802,30 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                             <label className="block text-sm font-semibold text-gray-700 mb-1">
                                                 Plazo ({unitLabels[formData.termUnit]}) *
                                             </label>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="number"
-                                                    value={formData.termMonths}
-                                                    onChange={(e) => setFormData({ ...formData, termMonths: e.target.value })}
-                                                    className="flex-1 px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                                                    min="1"
-                                                    step={unitSteps[formData.termUnit]}
-                                                    placeholder={unitPlaceholders[formData.termUnit]}
-                                                />
-                                                {/* Selector de unidad */}
-                                                <div className="flex rounded-xl border border-gray-300 overflow-hidden shrink-0 text-xs">
-                                                    {(['days', 'weeks', 'quincenal', 'months'] as const).map((u, i) => {
-                                                        const btnLabels = { days: 'Días', weeks: 'Semanas', quincenal: 'Quincenas', months: 'Meses' };
-                                                        return (
-                                                            <button
-                                                                key={u}
-                                                                type="button"
-                                                                onClick={() => setFormData({ ...formData, termUnit: u })}
-                                                                className={`px-3 py-2 font-medium transition ${i > 0 ? 'border-l border-gray-300' : ''} ${formData.termUnit === u ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                                                            >
-                                                                {btnLabels[u]}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
+                                            <input
+                                                type="number"
+                                                value={formData.termMonths}
+                                                onChange={(e) => setFormData({ ...formData, termMonths: e.target.value })}
+                                                className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                                min="1"
+                                                step={unitSteps[formData.termUnit]}
+                                                placeholder={unitPlaceholders[formData.termUnit]}
+                                            />
+                                            {/* Selector de unidad — fila propia para que los 4 botones siempre quepan */}
+                                            <div className="flex rounded-xl border border-gray-300 overflow-hidden text-xs mt-1.5">
+                                                {(['days', 'weeks', 'quincenal', 'months'] as const).map((u, i) => {
+                                                    const btnLabels = { days: 'Días', weeks: 'Semanas', quincenal: 'Quincenas', months: 'Meses' };
+                                                    return (
+                                                        <button
+                                                            key={u}
+                                                            type="button"
+                                                            onClick={() => setFormData({ ...formData, termUnit: u })}
+                                                            className={`flex-1 py-2 font-medium transition ${i > 0 ? 'border-l border-gray-300' : ''} ${formData.termUnit === u ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                                                        >
+                                                            {btnLabels[u]}
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
                                             <p className="text-xs text-gray-500 mt-1">
                                                 Ej: {unitPlaceholders[formData.termUnit]} {unitLabels[formData.termUnit]}.
@@ -824,18 +834,6 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         </>
                                     );
                                 })()}
-                            </div>
-
-                            {/* Frecuencia */}
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Frecuencia *</label>
-                                <select
-                                    value={formData.frequency}
-                                    onChange={(e) => setFormData({ ...formData, frequency: e.target.value as PaymentFrequency })}
-                                    className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                                >
-                                    {frequencies.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                </select>
                             </div>
 
                             {/* Fecha inicio */}
@@ -932,7 +930,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         </label>
                                         {(excludedWeekdays.length > 0 || excludeHolidays) && (
                                             <p className="text-xs text-blue-600">
-                                                Los días excluidos no tendrán cuota. El plazo se amplía automáticamente.
+                                                Los días excluidos no tendrán cuota: el total se reparte en menos cuotas dentro del mismo plazo, por lo que cada cuota sube.
                                             </p>
                                         )}
                                     </div>
@@ -941,7 +939,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                 {/* Info de personalizar */}
                                 {customRounding && (
                                     <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
-                                        <strong>Personalizar activo:</strong> cuotas &lt; $10.000 → múltiplo de $1.000; ≥ $10.000 → múltiplo de $10.000. La última cuota absorbe el remanente.
+                                        <strong>Personalizar activo:</strong> cuotas &lt; $10.000 → múltiplo de $1.000; ≥ $10.000 → múltiplo de $10.000. El número de cuotas puede ser menor al del plazo (la última absorbe el remanente).
                                     </div>
                                 )}
 
@@ -951,7 +949,6 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         <thead className="bg-gray-50 text-gray-600 sticky top-0">
                                             <tr>
                                                 <th className="py-2 px-3">#</th>
-                                                <th className="py-2 px-3 hidden sm:table-cell">Día</th>
                                                 <th className="py-2 px-3">Fecha</th>
                                                 <th className="py-2 px-3">Monto</th>
                                             </tr>
@@ -959,8 +956,8 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         <tbody className="divide-y">
                                             {paymentPlanView.map((p, idx) => {
                                                 const dueDate = p.dueDate ? new Date(p.dueDate) : null;
-                                                const due = dueDate ? dueDate.toLocaleDateString() : '-';
-                                                const day = dueDate ? new Intl.DateTimeFormat('es-CO', { weekday: 'short' }).format(dueDate) : '-';
+                                                const due = dueDate ? toLocalDateString(dueDate) : '-';
+                                                const day = dueDate ? new Intl.DateTimeFormat('es-CO', { weekday: 'short' }).format(dueDate) : '';
                                                 const amount = p.scheduledAmount ? formatMoney(p.scheduledAmount) : '-';
                                                 const isSunday = dueDate ? dueDate.getDay() === 0 : false;
                                                 const isFestivo = dueDate ? planHolidaySet.has(toLocalDateString(dueDate)) : false;
@@ -968,8 +965,10 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                                 return (
                                                     <tr key={p.installmentNumber || idx} className={isRed ? 'bg-red-50 text-red-700' : 'text-gray-800'}>
                                                         <td className="py-2 px-3">{p.installmentNumber ?? idx + 1}</td>
-                                                        <td className="py-2 px-3 capitalize hidden sm:table-cell">{day}</td>
-                                                        <td className="py-2 px-3">{due}</td>
+                                                        <td className="py-2 px-3">
+                                                            {day && <span className="capitalize font-medium mr-1">{day}</span>}
+                                                            {due}
+                                                        </td>
                                                         <td className="py-2 px-3">{amount === '-' ? '-' : `$${amount}`}</td>
                                                     </tr>
                                                 );

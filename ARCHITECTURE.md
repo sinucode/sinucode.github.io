@@ -43,7 +43,7 @@ Cada dominio tiene típicamente los tres archivos homónimos. Resumen por domini
 | user | `user.service.ts` | CRUD de usuarios, roles y permisos granulares |
 | business | `business.service.ts` | Negocios; al crear, auto-crea `PaymentAccount`s |
 | client | `client.service.ts` | Clientes por negocio, referidos |
-| credit | `credit.service.ts` | Créditos + `PaymentSchedule[]`; estados; cálculo de interés/plazo |
+| credit | `credit.service.ts` | Créditos + `PaymentSchedule[]`; estados; cálculo de interés/plazo; opciones de exclusión de días y redondeo |
 | payment | `payment.service.ts` | Pagos sobre cuotas; sobrepago (rollover o donación → `interest_earned`) |
 | account | `account.service.ts` | Cuentas de pago (buckets de efectivo) por negocio |
 | cash | `cash.service.ts` | `CashMovement` (libro mayor), `CashClose` (cierre diario), transferencias |
@@ -55,11 +55,16 @@ Cada dominio tiene típicamente los tres archivos homónimos. Resumen por domini
 
 Rutas extra sin service propio: `setup.routes.ts` (bootstrap inicial).
 
-### Utilidades compartidas
+### Utilidades backend (`utils/`)
 | Archivo | Funciones clave | Propósito |
 |---|---|---|
-| `shared/utils/dates.ts` | `todayBogota`, `parseISO`, `isOverdueBogota`, `formatDate` | Fechas en zona Bogotá (UTC-5); evitar off-by-one |
-| `backend/src/utils/`, `validators/`, `types/` | — | Helpers, cadenas de express-validator, tipos compartidos |
+| `dates.ts` | `todayBogota`, `parseISO`, `isOverdueBogota`, `formatDate` | Fechas en zona Bogotá (UTC-5); evitar off-by-one |
+| `calculations.ts` | `calculateCreditPlan`, `calculateEndDate`, `roundUpInstallment`, `ScheduleOptions` | Cálculo de plan de pagos; soporte para exclusión de días y redondeo personalizado |
+| `holidays.ts` | `getColombianHolidays`, `getHolidaySet`, `isHoliday` | Festivos colombianos (algorítmico): Pascua, Ley Emiliani, fijos. Usado por `calculations.ts` |
+| `validators/`, `types/` | — | Helpers y cadenas de express-validator |
+
+**Dependencias en `calculations.ts`**: usa `holidays.ts` (`getHolidaySet`, `isHoliday`) para
+excluir festivos al avanzar fechas de vencimiento.
 
 ---
 
@@ -82,6 +87,10 @@ Un módulo por dominio backend: `accounts`, `audit`, `auth` (`auth.ts`), `billin
 `business`, `cash`, `clients`, `credits`, `dashboard`, `payments`, `tithe`, `users`,
 `whatsapp`. Cada uno envuelve los endpoints `/api/<dominio>`.
 
+`credits.api.ts` exporta:
+- `SimulateCreditPayload`: incluye `excludedWeekdays?`, `excludeHolidays?`, `customRounding?`
+- `CreateCreditPayload`: extiende `SimulateCreditPayload`
+
 ### Páginas (`pages/`)
 `LoginPage`, `DashboardHome`, `BusinessPage`, `ClientsPage`, `CreditsPage`,
 `CreditDetailPage`, `PaymentsPage`, `CashPage`, `BillingPage`, `TithePage`,
@@ -91,6 +100,7 @@ Un módulo por dominio backend: `accounts`, `audit`, `auth` (`auth.ts`), `billin
 | Archivo | Propósito |
 |---|---|
 | `dates.ts` | `parseLocalDate`, `toLocalDateString`, `normalizeToNoon`, `todayBogota`, `formatDate`… — fechas TZ-safe (ver reglas en `CLAUDE.md`) |
+| `holidays.ts` | `getColombianHolidays`, `getHolidaySet`, `isColombianHoliday` — mismo cálculo de festivos que backend para preview en UI |
 | `invalidate.ts` | `invalidateMoney(qc)` — invalida todas las query keys de dinero tras una mutación |
 | `exportCsv.ts` | Export a CSV |
 | `generateBillingPdf.ts`, `generateCloseReportPdf.ts`, `generateReceipt.ts` | PDFs client-side con jsPDF (paginación manual) |
@@ -99,6 +109,12 @@ Un módulo por dominio backend: `accounts`, `audit`, `auth` (`auth.ts`), `billin
 Por dominio: `auth`, `business`, `cash`, `clients`, `common` (incl. `Sidebar`),
 `credits`, `dashboard` (incl. `ColombianCalendar`, `ProximosVencimientos`,
 `TopDeudores`), `payments`, `settings`.
+
+**`CreditForm.tsx`** (`credits/`):
+- Usa `getHolidaySet` de `utils/holidays.ts` para preview de festivos
+- Estado: `excludedWeekdays`, `excludeHolidays`, `customRounding`
+- Botones **Fechas** (excluir días de semana) y **Personalizar** (redondeo) con paneles
+- Re-simula al cambiar opciones; incluye en payloads `simulateCredit` y `createCredit`
 
 ---
 

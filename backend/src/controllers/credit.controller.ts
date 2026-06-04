@@ -23,6 +23,10 @@ export const simulateCredit = async (req: Request, res: Response) => {
         return res.json(simulation);
     } catch (error: any) {
         console.error('Error simulando crédito:', error);
+        // Errores de entrada del usuario (exclusiones que vacían el plan) → 400
+        if (error.message?.includes('No quedan días de cobro válidos')) {
+            return res.status(400).json({ error: error.message });
+        }
         return res.status(500).json({ error: error.message || 'Error al simular crédito' });
     }
 };

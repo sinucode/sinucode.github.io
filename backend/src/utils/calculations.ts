@@ -42,17 +42,6 @@ function isExcludedDate(date: Date, opts: ScheduleOptions, holidaySet: Set<strin
     return false;
 }
 
-/** Avanza la fecha hacia adelante hasta encontrar un día permitido (max 400 días) */
-function rollToAllowed(date: Date, opts: ScheduleOptions, holidaySet: Set<string>): Date {
-    let d = new Date(date);
-    let guard = 0;
-    while (isExcludedDate(d, opts, holidaySet)) {
-        if (++guard > 400) throw new Error('rollToAllowed: no se encontró un día de cobro permitido en 400 días consecutivos');
-        d.setDate(d.getDate() + 1);
-    }
-    return normalizeToNoon(d);
-}
-
 /**
  * Función auxiliar para obtener la siguiente fecha quincenal (15 o 30 de cada mes)
  */
@@ -138,13 +127,45 @@ export const calculateCreditPlan = (
     const totalWithInterest = Math.round(amount + amount * interestPerPayment * numberOfPayments);
     const totalInterest = totalWithInterest - amount;
 
-    // Cuota base entera; la última = totalWithInterest − base*(n−1) para cuadrar exacto
-    const paymentAmount = Math.round(totalWithInterest / numberOfPayments);
+    // ── Holiday set (solo cuando se necesita) ──────────────────────────────
+    const hasExclusions = (options.excludedWeekdays?.length ?? 0) > 0 || !!options.excludeHolidays;
+    const startYear = startDate.getFullYear();
+    const endYear = startYear + Math.ceil(termDays / 365) + 1;
+    const holidaySet = options.excludeHolidays
+        ? getHolidaySet(Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i))
+        : new Set<string>();
 
-    // ── Montos por cuota ────────────────────────────────────────────────────
+    // ── Generar fechas candidatas dentro de la ventana del plazo ───────────
+    // Con exclusiones: se saltan los días excluidos (no se reagendan); el total
+    // se reparte en las fechas permitidas → menos cuotas, cada una más alta.
+    // Sin exclusiones: todas las fechas del plan pasan → comportamiento idéntico al anterior.
+    const allowedDates: Date[] = [];
+    let currentDueDate = normalizeToNoon(startDate);
+
+    for (let i = 0; i < numberOfPayments; i++) {
+        if (frequency === 'quincenal') {
+            currentDueDate = getNextQuincena(currentDueDate);
+        } else {
+            const nextDate = new Date(currentDueDate);
+            nextDate.setDate(currentDueDate.getDate() + daysBetweenPayments);
+            currentDueDate = normalizeToNoon(nextDate);
+        }
+        if (hasExclusions && isExcludedDate(currentDueDate, options, holidaySet)) {
+            continue; // Día excluido: se descarta, no se reagenda
+        }
+        allowedDates.push(currentDueDate);
+    }
+
+    const slots = allowedDates.length;
+    if (slots === 0) {
+        throw new Error('No quedan días de cobro válidos en el plazo con las exclusiones aplicadas.');
+    }
+
+    // ── Montos por cuota (distribuidos entre `slots` fechas permitidas) ────
+    const baseInstallment = Math.round(totalWithInterest / slots);
     let amounts: number[];
     if (options.customRounding) {
-        const rounded = roundUpInstallment(paymentAmount);
+        const rounded = roundUpInstallment(baseInstallment);
         const k = Math.floor(totalWithInterest / rounded);
         const remainder = totalWithInterest - k * rounded;
         if (k === 0) {
@@ -155,44 +176,22 @@ export const calculateCreditPlan = (
             amounts = Array(k).fill(rounded);
         }
     } else {
-        // Comportamiento original: cuotas iguales, la última absorbe el residuo de redondeo
-        amounts = Array.from({ length: numberOfPayments }, (_, i) =>
-            i === numberOfPayments - 1
-                ? totalWithInterest - paymentAmount * (numberOfPayments - 1)
-                : paymentAmount
+        // Cuotas iguales; la última absorbe el residuo de redondeo
+        amounts = Array.from({ length: slots }, (_, i) =>
+            i === slots - 1
+                ? totalWithInterest - baseInstallment * (slots - 1)
+                : baseInstallment
         );
     }
     const count = amounts.length;
 
-    // ── Holiday set (solo cuando se necesita) ──────────────────────────────
-    const hasExclusions = (options.excludedWeekdays?.length ?? 0) > 0 || options.excludeHolidays;
-    const startYear = startDate.getFullYear();
-    const endYear = startYear + Math.ceil(termDays / 365) + 1;
-    const holidaySet = options.excludeHolidays
-        ? getHolidaySet(Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i))
-        : new Set<string>();
-
-    // ── Generar plan de pagos ───────────────────────────────────────────────
-    const paymentPlan: PaymentPlan[] = [];
-    let currentDueDate = normalizeToNoon(startDate);
-
-    for (let i = 0; i < count; i++) {
-        if (frequency === 'quincenal') {
-            currentDueDate = getNextQuincena(currentDueDate);
-        } else {
-            const nextDate = new Date(currentDueDate);
-            nextDate.setDate(currentDueDate.getDate() + daysBetweenPayments);
-            currentDueDate = normalizeToNoon(nextDate);
-        }
-        if (hasExclusions) {
-            currentDueDate = rollToAllowed(currentDueDate, options, holidaySet);
-        }
-        paymentPlan.push({
-            installmentNumber: i + 1,
-            dueDate: currentDueDate,
-            scheduledAmount: amounts[i],
-        });
-    }
+    // ── Construir plan de pagos ────────────────────────────────────────────
+    // Si customRounding produjo menos cuotas que slots, tomamos solo las primeras fechas
+    const paymentPlan: PaymentPlan[] = allowedDates.slice(0, count).map((dueDate, i) => ({
+        installmentNumber: i + 1,
+        dueDate,
+        scheduledAmount: amounts[i],
+    }));
 
     return {
         totalInterest,
