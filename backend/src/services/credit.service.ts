@@ -74,11 +74,13 @@ export class CreditService {
             select: { id: true, currentBalance: true, name: true },
         });
         if (!business) throw new Error('Negocio no encontrado');
-        if (Number(business.currentBalance) < data.amount) throw new Error('El monto excede el saldo disponible en caja');
 
-        // Resolver cuenta de desembolso
-        let disbursementAccountId: string;
+        // Resolver cuenta de desembolso sin efectos secundarios (solo lectura).
+        // ensureDefaultAccount (que escribe en DB) se difiere hasta después de todas
+        // las validaciones para no crear una cuenta huérfana si el saldo es insuficiente.
+        let disbursementAccountId: string | null = null;
         let disbursementAccountName: string;
+        let needsDefaultAccount = false;
 
         if (data.accountId) {
             // Cuenta explícita: validar que pertenece al negocio y está activa
@@ -98,13 +100,35 @@ export class CreditService {
             });
             const defAcc = accounts[0];
             if (!defAcc) {
-                // Crear la cuenta Efectivo por defecto
-                disbursementAccountId = await accountService.ensureDefaultAccount(targetBusinessId, userId);
+                // No hay cuentas activas: crear "Efectivo" más adelante (después de validar saldo)
+                needsDefaultAccount = true;
                 disbursementAccountName = 'Efectivo';
             } else {
                 disbursementAccountId   = defAcc.id;
                 disbursementAccountName = defAcc.name;
             }
+        }
+
+        // Validar que el saldo TOTAL del negocio alcanza (error estructurado → abre modal de recarga)
+        if (Number(business.currentBalance) < data.amount) {
+            const errBiz: any = new Error(
+                `Saldo insuficiente en caja. Disponible: $${Math.ceil(Number(business.currentBalance)).toLocaleString('es-CO')}, ` +
+                `se necesitan $${Math.ceil(data.amount).toLocaleString('es-CO')}`
+            );
+            errBiz.code    = 'INSUFFICIENT_BUSINESS_BALANCE';
+            errBiz.details = {
+                accountId:   disbursementAccountId ?? '',
+                accountName: disbursementAccountName,
+                available:   Number(business.currentBalance),
+                required:    data.amount,
+                scope:       'business',
+            };
+            throw errBiz;
+        }
+
+        // Crear la cuenta por defecto ahora que sabemos que el saldo es suficiente
+        if (needsDefaultAccount) {
+            disbursementAccountId = await accountService.ensureDefaultAccount(targetBusinessId, userId);
         }
 
         // Validar saldo de la cuenta de desembolso
@@ -114,7 +138,7 @@ export class CreditService {
         if (available < data.amount) {
             const err: any = new Error(`Saldo insuficiente en la cuenta "${disbursementAccountName}" ($${available.toLocaleString('es-CO')} disponible, se necesitan $${data.amount.toLocaleString('es-CO')})`);
             err.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
-            err.details = { accountId: disbursementAccountId, accountName: disbursementAccountName, available, required: data.amount };
+            err.details = { accountId: disbursementAccountId, accountName: disbursementAccountName, available, required: data.amount, scope: 'account' };
             throw err;
         }
 

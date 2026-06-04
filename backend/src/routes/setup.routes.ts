@@ -24,9 +24,16 @@ router.post('/create-admin', async (_req: Request, res: Response) => {
 
         logger.info('Creating initial super admin user...');
 
-        // Create super admin
+        // Create super admin — la contraseña DEBE venir por entorno (sin fallback hardcodeado).
         const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@gestioncredifacil.com';
-        const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'Admin123!';
+        const adminPassword = process.env.INITIAL_ADMIN_PASSWORD;
+
+        if (!adminPassword) {
+            return res.status(500).json({
+                success: false,
+                error: 'INITIAL_ADMIN_PASSWORD no está configurada en el entorno. Defínela antes de ejecutar el setup.',
+            });
+        }
 
         const passwordHash = await bcrypt.hash(adminPassword, 12);
 

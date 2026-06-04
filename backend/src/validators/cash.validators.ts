@@ -1,10 +1,11 @@
 import { body, query } from 'express-validator';
 
+// loan_disbursement se excluye intencionalmente: solo puede crearse desde credit.service
+// dentro de una transacción; permitirlo en el endpoint genérico habilita doble-débito.
 const movementTypes = [
     'initial_capital',
     'capital_injection',
     'withdrawal',
-    'loan_disbursement',
     'payment_received',
     'interest_earned',
     'internal_transfer',

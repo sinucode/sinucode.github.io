@@ -75,9 +75,10 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 
     // Cuenta de desembolso
     const [disbursementAccountId, setDisbursementAccountId] = useState<string>('');
-    // Modal de recarga cuando la cuenta no tiene fondos
+    // Modal de recarga cuando la cuenta o el negocio no tiene fondos
     const [rechargeInfo, setRechargeInfo] = useState<{
         accountId: string; accountName: string; available: number; required: number;
+        scope?: 'business' | 'account';
     } | null>(null);
     // Guardamos el último payload intentado para reintentar tras recargar
     const pendingPayloadRef = useRef<CreateCreditPayload | null>(null);
@@ -175,11 +176,12 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         },
         onError: (err: any) => {
             const data = err.response?.data;
-            if (data?.code === 'INSUFFICIENT_ACCOUNT_BALANCE') {
+            if (data?.code === 'INSUFFICIENT_ACCOUNT_BALANCE' ||
+                data?.code === 'INSUFFICIENT_BUSINESS_BALANCE') {
                 if (isAdmin) {
                     setRechargeInfo(data.details);
                 } else {
-                    setFormError(data.error || 'Saldo insuficiente en la cuenta seleccionada. Pide a un administrador que la recargue.');
+                    setFormError(data.error || 'Saldo insuficiente. Pide a un administrador que recargue la caja.');
                 }
                 return;
             }
@@ -653,13 +655,15 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 
 interface RechargeModalProps {
     businessId: string;
-    info: { accountId: string; accountName: string; available: number; required: number };
+    info: { accountId: string; accountName: string; available: number; required: number; scope?: 'business' | 'account' };
     allAccounts: PaymentAccount[];
     onClose: () => void;
     onSuccess: () => void;
 }
 
 const RechargeAccountModal: React.FC<RechargeModalProps> = ({ businessId, info, allAccounts, onClose, onSuccess }) => {
+    // scope='business' → el saldo TOTAL del negocio es insuficiente; solo inyectar tiene sentido
+    const injectOnly = info.scope === 'business';
     const [mode, setMode] = useState<'inject' | 'transfer'>('inject');
     const [fromAccountId, setFromAccountId] = useState(() => {
         const other = allAccounts.find(a => a.id !== info.accountId);
@@ -707,29 +711,36 @@ const RechargeAccountModal: React.FC<RechargeModalProps> = ({ businessId, info, 
                 </div>
 
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
-                    La cuenta <strong>{info.accountName}</strong> tiene {fmtCOP(info.available)} y el crédito requiere {fmtCOP(info.required)}.
-                    {falta > 0 && <> Faltan <strong>{fmtCOP(falta)}</strong>.</>}
+                    {injectOnly
+                        ? <>El saldo total de la caja es {fmtCOP(info.available)} y el crédito requiere {fmtCOP(info.required)}.
+                           {falta > 0 && <> Faltan <strong>{fmtCOP(falta)}</strong>.</>}{' '}
+                           El dinero se ingresará a la cuenta <strong>{info.accountName}</strong>.</>
+                        : <>La cuenta <strong>{info.accountName}</strong> tiene {fmtCOP(info.available)} y el crédito requiere {fmtCOP(info.required)}.
+                           {falta > 0 && <> Faltan <strong>{fmtCOP(falta)}</strong>.</> }</>
+                    }
                 </div>
 
-                {/* Modo */}
-                <div className="flex gap-2">
-                    <button
-                        type="button"
-                        onClick={() => setMode('inject')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'inject' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
-                    >
-                        <PlusCircle size={15} /> Recargar cuenta
-                    </button>
-                    {otherAccounts.length > 0 && (
+                {/* Modo — solo mostrar el selector si hay más de una opción */}
+                {!injectOnly && (
+                    <div className="flex gap-2">
                         <button
                             type="button"
-                            onClick={() => setMode('transfer')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'transfer' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                            onClick={() => setMode('inject')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'inject' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
                         >
-                            <ArrowRightLeft size={15} /> Transferir
+                            <PlusCircle size={15} /> Recargar cuenta
                         </button>
-                    )}
-                </div>
+                        {otherAccounts.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setMode('transfer')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'transfer' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                            >
+                                <ArrowRightLeft size={15} /> Transferir
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {mode === 'transfer' && (
                     <div>

@@ -47,11 +47,11 @@ export const createCredit = async (req: Request, res: Response) => {
         return res.status(201).json(credit);
     } catch (error: any) {
         console.error('Error creando crédito:', error);
-        if ((error as any).code === 'INSUFFICIENT_ACCOUNT_BALANCE') {
+        // Errores de saldo insuficiente (por cuenta o total del negocio): devolver code+details
+        // para que el frontend pueda abrir el modal de recarga.
+        if ((error as any).code === 'INSUFFICIENT_ACCOUNT_BALANCE' ||
+            (error as any).code === 'INSUFFICIENT_BUSINESS_BALANCE') {
             return res.status(400).json({ error: error.message, code: error.code, details: error.details });
-        }
-        if (error.message?.includes('monto excede')) {
-            return res.status(409).json({ error: error.message });
         }
         return res.status(400).json({ error: error.message || 'Error al crear crédito' });
     }

@@ -85,17 +85,26 @@ export class CashService {
 
         const effectiveAccountId = await this.resolveAccountId(data.businessId, data.accountId);
 
-        // Validar saldo de la cuenta específica para retiros y transferencias salientes
-        if (effectiveAccountId && (data.type === 'withdrawal')) {
+        // Validar saldo de la cuenta específica para TODOS los egresos
+        // (withdrawal, tithe, payment_reversion, egresos genéricos del endpoint /movements)
+        if (effectiveAccountId && !isIncome) {
             const { accounts: accList } = await accountService.getBalances(data.businessId, userId, userRole);
             const accEntry = accList.find(a => a.id === effectiveAccountId);
             if (accEntry && accEntry.balance < Math.abs(data.amount)) {
-                const accName = accEntry.name;
-                throw new Error(
-                    `Saldo insuficiente en la cuenta "${accName}". ` +
+                const err: any = new Error(
+                    `Saldo insuficiente en la cuenta "${accEntry.name}". ` +
                     `Disponible: $${Math.ceil(accEntry.balance).toLocaleString('es-CO')}, ` +
                     `solicitado: $${Math.ceil(Math.abs(data.amount)).toLocaleString('es-CO')}`
                 );
+                err.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
+                err.details = {
+                    accountId:   effectiveAccountId,
+                    accountName: accEntry.name,
+                    available:   accEntry.balance,
+                    required:    Math.abs(data.amount),
+                    scope:       'account',
+                };
+                throw err;
             }
         }
 

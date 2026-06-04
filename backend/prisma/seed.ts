@@ -22,9 +22,18 @@ async function main() {
     // 1. Crear usuarios
     console.log('👤 Creando usuarios...');
 
-    const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'Admin123!';
-    const userPassword = process.env.SEED_USER_PASSWORD || 'Usuario123!';
+    // Sin fallbacks hardcodeados: las contraseñas semilla DEBEN venir por entorno
+    // (los defaults anteriores quedaron expuestos en un repo público — incidente de seguridad).
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    const userPassword = process.env.SEED_USER_PASSWORD;
     const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@gestioncredifacil.com';
+
+    if (!adminPassword || !userPassword) {
+        throw new Error(
+            'Faltan SEED_ADMIN_PASSWORD y/o SEED_USER_PASSWORD en el entorno. ' +
+            'Defínelas (p. ej. en backend/.env) antes de correr el seed; ya no hay contraseñas por defecto.'
+        );
+    }
 
     const passwordHash = await bcrypt.hash(adminPassword, 12);
     const userPasswordHash = await bcrypt.hash(userPassword, 12);

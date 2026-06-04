@@ -50,7 +50,8 @@ postgresql://postgres.[PROYECTO]:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:
 
 ### 3.1 Navegar al directorio del backend:
 ```bash
-cd "/Users/sinuco/Gravity google/gestioncredifacil/backend"
+# desde la raíz del proyecto
+cd backend
 ```
 
 ### 3.2 Instalar dependencias:
@@ -131,7 +132,8 @@ Deberías ver:
 
 ### 4.1 Abrir una NUEVA terminal y navegar al frontend:
 ```bash
-cd "/Users/sinuco/Gravity google/gestioncredifacil/frontend"
+# desde la raíz del proyecto
+cd frontend
 ```
 
 ### 4.2 Instalar dependencias:
@@ -168,19 +170,17 @@ VITE v5.x.x  ready in XXX ms
 2. Ve a: **http://localhost:5173**
 3. Deberías ver la página de login
 
-### 🔑 Credenciales de Prueba:
+### 🔑 Credenciales:
+
+Las contraseñas se definen por entorno (sin valores por defecto):
 
 **Super Administrador:**
-- Email: `admin@gestioncredifacil.com`
-- Contraseña: `Admin123!`
+- Email: el de `INITIAL_ADMIN_EMAIL` (por defecto `admin@gestioncredifacil.com`)
+- Contraseña: la de `SEED_ADMIN_PASSWORD` (en `backend/.env`)
 
-**Usuario de Negocio 1:**
-- Email: `usuario1@example.com`
-- Contraseña: `Usuario123!`
-
-**Usuario de Negocio 2:**
-- Email: `usuario2@example.com`
-- Contraseña: `Usuario123!`
+**Usuarios de Negocio (1 y 2):**
+- Emails: `usuario1@example.com`, `usuario2@example.com`
+- Contraseña: la de `SEED_USER_PASSWORD` (en `backend/.env`)
 
 ## 🎉 ¡Listo!
 

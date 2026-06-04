@@ -47,13 +47,17 @@ Luego abre: **http://localhost:5173**
 
 ## 🔑 Login
 
-Usa cualquiera de estas credenciales:
+Las contraseñas de los usuarios semilla se definen por variables de entorno
+(`SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD` en `backend/.env`); **no hay
+contraseñas por defecto**. Entra con el email del admin inicial
+(`INITIAL_ADMIN_EMAIL`, por defecto `admin@gestioncredifacil.com`) y la contraseña
+que hayas configurado.
 
 | Usuario | Email | Contraseña |
 |---------|-------|------------|
-| Super Admin | admin@gestioncredifacil.com | Admin123! |
-| Usuario 1 | usuario1@example.com | Usuario123! |
-| Usuario 2 | usuario2@example.com | Usuario123! |
+| Super Admin | `INITIAL_ADMIN_EMAIL` | `SEED_ADMIN_PASSWORD` |
+| Usuario 1 | usuario1@example.com | `SEED_USER_PASSWORD` |
+| Usuario 2 | usuario2@example.com | `SEED_USER_PASSWORD` |
 
 ## 📚 Documentación Completa
 
