@@ -36,13 +36,6 @@ const frequencyLabels: Record<PaymentFrequency, string> = {
 };
 
 const formatMoney = (value: any) => Math.ceil(Number(value || 0)).toLocaleString('es-CO');
-const gapDaysMap: Record<PaymentFrequency, number> = {
-    daily: 1,
-    weekly: 7,
-    bisemanal: 14,
-    quincenal: 15,
-    monthly: 30,
-};
 const DAYS_PER_MONTH = 30; // 1 mes = 30 días (alineado con backend y detalles)
 
 const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBusinessId }) => {
@@ -161,7 +154,6 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     });
 
     const estimateTermDays = (amount: number, interestRate: number, installment: number, frequency: PaymentFrequency) => {
-        const gap = gapDaysMap[frequency] || 7;
         const rateDecimal = interestRate / 100;
 
         // Calcular pagos por mes para estimar interés por cuota
@@ -173,8 +165,10 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         const interestPerPayment = rateDecimal / paymentsPerMonth;
 
         const denominator = installment - (amount * interestPerPayment);
-        const payments = denominator > 0 ? Math.max(1, Math.ceil(amount / denominator)) : Math.ceil(365 / gap);
+        // Si la cuota no supera el interés del período, el crédito nunca se paga → retornar 0 como señal de error
+        if (denominator < 1) return 0;
 
+        const payments = Math.max(1, Math.ceil(amount / denominator));
         return Math.ceil((payments / paymentsPerMonth) * 30);
     };
 
@@ -217,6 +211,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         if (useFixedInstallment) {
             if (Number.isNaN(installment) || installment <= 0) return setFormError('Ingresa una cuota válida');
             termDays = estimateTermDays(amount, interestRate, installment, formData.frequency);
+            if (termDays <= 0) return setFormError('La cuota no cubre los intereses del período. Auméntala.');
         }
 
         if (Number.isNaN(amount) || amount <= 0 || Number.isNaN(interestRate) || interestRate <= 0 || Number.isNaN(termDays) || termDays <= 0) {
@@ -244,6 +239,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         if (useFixedInstallment) {
             if (Number.isNaN(installment) || installment <= 0) return setFormError('Ingresa una cuota válida');
             termDays = estimateTermDays(amount, interestRate, installment, formData.frequency);
+            if (termDays <= 0) return setFormError('La cuota no cubre los intereses del período. Auméntala.');
         }
 
         if (Number.isNaN(amount) || amount <= 0 || Number.isNaN(interestRate) || interestRate <= 0 || Number.isNaN(termDays) || termDays <= 0) {
@@ -332,6 +328,20 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         const interestRate = Number(formData.interestRate);
         const installment = Number(installmentAmount.replace(/[^0-9]/g, ''));
         if (useFixedInstallment && amount > 0 && interestRate > 0 && installment > 0) {
+            // Calcular interés mínimo por período para validar
+            let paymentsPerMonth = 1;
+            if (formData.frequency === 'weekly') paymentsPerMonth = 4;
+            else if (formData.frequency === 'bisemanal' || formData.frequency === 'quincenal') paymentsPerMonth = 2;
+            else if (formData.frequency === 'daily') paymentsPerMonth = 30;
+            const interestCostPerPeriod = amount * (interestRate / 100) / paymentsPerMonth;
+            const minInstallment = Math.ceil(interestCostPerPeriod) + 1;
+
+            if (installment <= interestCostPerPeriod) {
+                return {
+                    error: `La cuota no cubre los intereses del período ($${Math.ceil(interestCostPerPeriod).toLocaleString('es-CO')}). Mínimo requerido: $${minInstallment.toLocaleString('es-CO')}`,
+                };
+            }
+
             const termDays = estimateTermDays(amount, interestRate, installment, formData.frequency);
             const divisorMap: Record<typeof fixedTermUnit, number> = { days: 1, weeks: 7, quincenal: 15, months: 30 };
             const labelMap: Record<typeof fixedTermUnit, string> = { days: 'días', weeks: 'semanas', quincenal: 'quincenas', months: 'meses' };
@@ -703,9 +713,16 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         </div>
 
                                         {derivedTermInfo && (
-                                            <div className="text-sm text-primary-900 bg-primary-50 rounded-lg p-3">
-                                                <strong>Plazo estimado:</strong> {derivedTermInfo.termInUnit} {derivedTermInfo.unitLabel} ({derivedTermInfo.termDays} días)
-                                            </div>
+                                            'error' in derivedTermInfo ? (
+                                                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                                                    <span className="mt-0.5 shrink-0">⚠️</span>
+                                                    <span>{derivedTermInfo.error}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="text-sm text-primary-900 bg-primary-50 rounded-lg p-3">
+                                                    <strong>Plazo estimado:</strong> {derivedTermInfo.termInUnit} {derivedTermInfo.unitLabel} ({derivedTermInfo.termDays} días)
+                                                </div>
+                                            )
                                         )}
                                     </div>
                                 )}
