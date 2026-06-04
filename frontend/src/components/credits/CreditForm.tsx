@@ -663,6 +663,22 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                                     min="0" step="0.01" placeholder="0"
                                 />
+                                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                    {[5, 6, 7, 10].map((v) => (
+                                        <button
+                                            key={v}
+                                            type="button"
+                                            onClick={() => { setFormError(''); setFormData({ ...formData, interestRate: String(v) }); }}
+                                            className={`px-3 py-1 text-xs font-semibold rounded-lg border transition ${
+                                                Number(formData.interestRate) === v
+                                                    ? 'bg-primary-600 text-white border-primary-600'
+                                                    : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
+                                            }`}
+                                        >
+                                            {v}%
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* Cuota fija */}
