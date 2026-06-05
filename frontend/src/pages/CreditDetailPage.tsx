@@ -5,12 +5,13 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import { registerPayment } from '../api/payments.api';
 import { invalidateMoney } from '../utils/invalidate';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import PaymentModal from '../components/credits/PaymentModal';
 import { PaymentSchedule, PaymentFrequency } from '../types';
 import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, X, Undo2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
-import { formatDate, formatDateTime } from '../utils/dates';
+import { formatDate, formatDateTime, toLocalDateString } from '../utils/dates';
 
 const statusColors: Record<PaymentSchedule['status'], string> = {
     paid: 'text-green-600 bg-green-50',
@@ -648,230 +649,260 @@ export default function CreditDetailPage() {
 
 
 
-            {isEditOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between p-5 border-b">
-                            <h3 className="text-lg font-semibold text-gray-800">Editar plan de pagos</h3>
-                            <button onClick={() => setIsEditOpen(false)} className="text-primary-600 hover:text-primary-900">
-                                <X size={20} />
+            {isEditOpen && createPortal(
+                /* Portal al body: nunca tapado por el bottom nav ni el layout */
+                <div className="fixed inset-0 z-[9999] flex flex-col bg-black/60">
+                    {/* En móvil: pantalla completa. En desktop: modal centrado */}
+                    <div className="
+                        flex flex-col bg-white w-full h-full
+                        sm:rounded-xl sm:shadow-2xl sm:w-full sm:max-w-4xl
+                        sm:h-auto sm:max-h-[92vh]
+                        sm:m-auto
+                    ">
+                        {/* ── HEADER FIJO ── */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white shrink-0 panel-header-safe sm:pt-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Editar plan de pagos</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">Ajusta fechas, montos o regenera el plan</p>
+                            </div>
+                            <button onClick={() => setIsEditOpen(false)} className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition">
+                                <X size={22} />
                             </button>
                         </div>
-                        <div className="p-5 space-y-4">
-                            {editError && <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{editError}</div>}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-primary-900 mb-1">Monto *</label>
-                                    <input
-                                        type="text"
-                                        value={editForm.amount}
-                                        onChange={(e) => {
-                                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                                            const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
-                                            setEditForm((prev) => ({ ...prev, amount: formatted }));
-                                        }}
-                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-primary-900 mb-1">Interés (%) *</label>
-                                    <input
-                                        type="number"
-                                        value={editForm.interestRate}
-                                        onChange={(e) => setEditForm((prev) => ({ ...prev, interestRate: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                        min="0"
-                                        step="0.01"
-                                    />
-                                </div>
-                                <div className="grid grid-cols-12 gap-2">
-                                    <div className="col-span-7">
-                                        <label className="block text-sm font-medium text-primary-900 mb-1">Plazo</label>
+
+                        {/* ── CONTENIDO SCROLLABLE ── */}
+                        <div className="flex-1 overflow-y-auto overscroll-contain">
+                            <div className="px-5 py-4 space-y-4">
+                                {editError && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm border border-red-200">{editError}</div>}
+
+                                {/* Parámetros del plan */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-primary-900 mb-1">Monto *</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.amount}
+                                            onChange={(e) => {
+                                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
+                                                setEditForm((prev) => ({ ...prev, amount: formatted }));
+                                            }}
+                                            className="w-full px-3 py-2.5 border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-primary-900 mb-1">Interés (%) *</label>
                                         <input
                                             type="number"
-                                            value={editForm.termValue}
-                                            onChange={(e) => setEditForm((prev) => ({ ...prev, termValue: e.target.value }))}
-                                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                            min="1"
-                                            step="1"
+                                            value={editForm.interestRate}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, interestRate: e.target.value }))}
+                                            className="w-full px-3 py-2.5 border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            min="0"
+                                            step="0.01"
                                         />
                                     </div>
-                                    <div className="col-span-5">
-                                        <label className="block text-sm font-medium text-primary-900 mb-1">Unidad</label>
+                                    <div className="grid grid-cols-12 gap-2">
+                                        <div className="col-span-7">
+                                            <label className="block text-sm font-medium text-primary-900 mb-1">Plazo</label>
+                                            <input
+                                                type="number"
+                                                value={editForm.termValue}
+                                                onChange={(e) => setEditForm((prev) => ({ ...prev, termValue: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                                min="1"
+                                                step="1"
+                                            />
+                                        </div>
+                                        <div className="col-span-5">
+                                            <label className="block text-sm font-medium text-primary-900 mb-1">Unidad</label>
+                                            <select
+                                                value={editForm.termUnit}
+                                                onChange={(e) => setEditForm((prev) => ({ ...prev, termUnit: e.target.value as any }))}
+                                                className="w-full px-3 py-2.5 border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                                            >
+                                                <option value="daily">Días</option>
+                                                <option value="weekly">Semanas</option>
+                                                <option value="monthly">Meses</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-primary-900 mb-1">Frecuencia</label>
                                         <select
-                                            value={editForm.termUnit}
-                                            onChange={(e) => setEditForm((prev) => ({ ...prev, termUnit: e.target.value as any }))}
-                                            className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            value={editForm.frequency}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, frequency: e.target.value as PaymentFrequency }))}
+                                            className="w-full px-3 py-2.5 border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                                         >
-                                            <option value="daily">Días</option>
-                                            <option value="weekly">Semanas</option>
-                                            <option value="monthly">Meses</option>
+                                            <option value="daily">Diario</option>
+                                            <option value="weekly">Semanal</option>
+                                            <option value="bisemanal">Bisemanal (14 días)</option>
+                                            <option value="quincenal">Quincenal (15 y 30)</option>
+                                            <option value="monthly">Mensual</option>
                                         </select>
                                     </div>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-primary-900 mb-1">Frecuencia</label>
-                                    <select
-                                        value={editForm.frequency}
-                                        onChange={(e) => setEditForm((prev) => ({ ...prev, frequency: e.target.value as PaymentFrequency }))}
-                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    >
-                                        <option value="daily">Diario</option>
-                                        <option value="weekly">Semanal</option>
-                                        <option value="bisemanal">Bisemanal (14 días)</option>
-                                        <option value="quincenal">Quincenal (15 y 30)</option>
-                                        <option value="monthly">Mensual</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de inicio</label>
-                                    <input
-                                        type="date"
-                                        value={editForm.startDate}
-                                        onChange={(e) => setEditForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    />
-                                </div>
-                                <div className="md:col-span-1">
-                                    <label className="inline-flex items-center gap-2 text-sm text-gray-800 mb-1">
+                                    <div>
+                                        <label className="block text-sm font-medium text-primary-900 mb-1">Fecha de inicio</label>
                                         <input
-                                            type="checkbox"
-                                            checked={editForm.useFixedInstallment}
-                                            onChange={(e) => setEditForm((prev) => ({ ...prev, useFixedInstallment: e.target.checked }))}
-                                            className="w-4 h-4 text-primary-600 border-primary-200 rounded"
+                                            type="date"
+                                            value={editForm.startDate}
+                                            onChange={(e) => setEditForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                                            className="w-full px-3 py-2.5 border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
                                         />
-                                        Usar cuota fija
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={editForm.installmentAmount}
-                                        onChange={(e) => {
-                                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                                            const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
-                                            setEditForm((prev) => ({ ...prev, installmentAmount: formatted }));
-                                        }}
-                                        className="w-full px-3 py-2 border border-primary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                        placeholder="Ej: 100.000"
-                                        disabled={!editForm.useFixedInstallment}
-                                    />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="inline-flex items-center gap-2 text-sm text-gray-800 mb-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={editForm.useFixedInstallment}
+                                                onChange={(e) => setEditForm((prev) => ({ ...prev, useFixedInstallment: e.target.checked }))}
+                                                className="w-4 h-4 text-primary-600 border-primary-200 rounded"
+                                            />
+                                            Usar cuota fija
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editForm.installmentAmount}
+                                            onChange={(e) => {
+                                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                const formatted = raw ? Number(raw).toLocaleString('es-CO') : '';
+                                                setEditForm((prev) => ({ ...prev, installmentAmount: formatted }));
+                                            }}
+                                            className="w-full px-3 py-2.5 border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            placeholder="Ej: 100.000"
+                                            disabled={!editForm.useFixedInstallment}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleSimulateEdit}
-                                    className="px-4 py-2 bg-slate-50 text-gray-800 rounded-md hover:bg-gray-200 text-sm"
-                                    type="button"
-                                >
-                                    Simular nuevo plan
-                                </button>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-white text-gray-600">
-                                        <tr>
-                                            <th className="px-3 py-2">#</th>
-                                            <th className="px-3 py-2 hidden sm:table-cell">Día</th>
-                                            <th className="px-3 py-2">Fecha</th>
-                                            <th className="px-3 py-2">Monto</th>
-                                            <th className="px-3 py-2">Pagado</th>
-                                            <th className="px-3 py-2">Estado</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                        {editRows.map((row, idx) => (
-                                            <tr key={row.id || idx} className="text-gray-800">
-                                                <td className="px-3 py-2 text-gray-900 font-medium">{row.installmentNumber ?? idx + 1}</td>
-                                                <td className="px-3 py-2 text-gray-900 capitalize hidden sm:table-cell">{getDayOfWeek(row.dueDate)}</td>
-                                                <td className="px-3 py-2">
-                                                    <input
-                                                        type="date"
-                                                        value={new Date(row.dueDate).toISOString().slice(0, 10)}
-                                                        onChange={(e) =>
-                                                            setEditRows((prev) =>
-                                                                prev.map((r: any, i: number) =>
-                                                                    i === idx ? { ...r, dueDate: e.target.value as any } : r
-                                                                )
-                                                            )
-                                                        }
-                                                        className="px-2 py-1 border border-primary-200 rounded-md bg-white text-gray-900"
-                                                    />
-                                                </td>
-                                                <td className="px-3 py-2">
-                                                    <input
-                                                        type="text"
-                                                        value={Math.ceil(Number(row.scheduledAmount || 0)).toLocaleString('es-CO')}
-                                                        onChange={(e) => {
-                                                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                                                            const num = raw ? Number(raw) : 0;
-                                                            setEditRows((prev) =>
-                                                                prev.map((r: any, i: number) =>
-                                                                    i === idx ? { ...r, scheduledAmount: num as any } : r
-                                                                )
-                                                            );
-                                                        }}
-                                                        className="px-2 py-1 border border-primary-200 rounded-md bg-white text-gray-900"
-                                                    />
-                                                </td>
-                                                <td className="px-3 py-2 text-primary-900">{formatMoney(row.paidAmount)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                    <tfoot className="border-t-2 border-primary-200 bg-white font-semibold">
-                                        <tr>
-                                            <td colSpan={3} className="px-3 py-3 text-right text-primary-900">Total de cuotas:</td>
-                                            <td className="px-3 py-3 text-gray-900">
-                                                {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.scheduledAmount || 0), 0))}
-                                            </td>
-                                            <td></td>
-                                        </tr>
-                                        <tr>
-                                            <td colSpan={3} className="px-3 py-3 text-right text-primary-900">Total pagado:</td>
-                                            <td className="px-3 py-3 text-gray-900">
-                                                {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.paidAmount || 0), 0))}
-                                            </td>
-                                            <td></td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    onClick={() => setIsEditOpen(false)}
-                                    className="px-4 py-2 bg-slate-50 text-primary-900 rounded-md hover:bg-gray-200"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setEditError('');
-                                        const payload = editRows.map((r: any, idx: number) => ({
-                                            id: r.id,
-                                            dueDate: new Date(r.dueDate).toISOString(),
-                                            scheduledAmount: Math.ceil(Number(r.scheduledAmount || 0)),
-                                            installmentNumber: r.installmentNumber || idx + 1,
-                                        }));
-                                        const calculatedTermDays = editForm.useFixedInstallment && parseMoney(editForm.installmentAmount) > 0
-                                            ? estimateTermDays(parseMoney(editForm.amount), Number(editForm.interestRate), parseMoney(editForm.installmentAmount), editForm.frequency)
-                                            : termDaysFromUnit(Number(editForm.termValue), editForm.termUnit);
 
-                                        updateMutation.mutate({
-                                            schedules: payload,
-                                            amount: parseMoney(editForm.amount),
-                                            interestRate: Number(editForm.interestRate),
-                                            termDays: calculatedTermDays,
-                                            frequency: editForm.frequency,
-                                            startDate: editForm.startDate ? new Date(editForm.startDate).toISOString() : undefined,
-                                        });
-                                    }}
-                                    disabled={updateMutation.isPending}
-                                    className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50"
-                                >
-                                    {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
-                                </button>
+                                {/* Botón simular */}
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={handleSimulateEdit}
+                                        className="px-4 py-2 bg-slate-50 text-gray-800 rounded-xl hover:bg-gray-200 text-sm border border-gray-200 transition"
+                                        type="button"
+                                    >
+                                        Simular nuevo plan
+                                    </button>
+                                </div>
+
+                                {/* Tabla de cuotas */}
+                                <div className="overflow-x-auto rounded-xl border border-gray-100">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-50 text-gray-600">
+                                            <tr>
+                                                <th className="px-3 py-2">#</th>
+                                                <th className="px-3 py-2 hidden sm:table-cell">Día</th>
+                                                <th className="px-3 py-2">Fecha</th>
+                                                <th className="px-3 py-2">Monto</th>
+                                                <th className="px-3 py-2">Pagado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {editRows.map((row, idx) => (
+                                                <tr key={row.id || idx} className="text-gray-800">
+                                                    <td className="px-3 py-2 text-gray-900 font-medium">{row.installmentNumber ?? idx + 1}</td>
+                                                    <td className="px-3 py-2 text-gray-900 capitalize hidden sm:table-cell">{getDayOfWeek(row.dueDate)}</td>
+                                                    <td className="px-3 py-2">
+                                                        <input
+                                                            type="date"
+                                                            value={toLocalDateString(new Date(row.dueDate))}
+                                                            onChange={(e) =>
+                                                                setEditRows((prev) =>
+                                                                    prev.map((r: any, i: number) =>
+                                                                        i === idx ? { ...r, dueDate: e.target.value } : r
+                                                                    )
+                                                                )
+                                                            }
+                                                            className="px-2 py-1 border border-primary-200 rounded-lg bg-white text-gray-900 text-sm"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        <input
+                                                            type="text"
+                                                            value={Math.ceil(Number(row.scheduledAmount || 0)).toLocaleString('es-CO')}
+                                                            onChange={(e) => {
+                                                                const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                                const num = raw ? Number(raw) : 0;
+                                                                setEditRows((prev) =>
+                                                                    prev.map((r: any, i: number) =>
+                                                                        i === idx ? { ...r, scheduledAmount: num as any } : r
+                                                                    )
+                                                                );
+                                                            }}
+                                                            className="px-2 py-1 border border-primary-200 rounded-lg bg-white text-gray-900 w-28 text-sm"
+                                                        />
+                                                    </td>
+                                                    <td className="px-3 py-2 text-primary-900">{formatMoney(row.paidAmount)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="border-t-2 border-primary-200 bg-gray-50 font-semibold">
+                                            <tr>
+                                                <td colSpan={3} className="px-3 py-3 text-right text-primary-900">Total cuotas:</td>
+                                                <td className="px-3 py-3 text-gray-900">
+                                                    {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.scheduledAmount || 0), 0))}
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                            <tr>
+                                                <td colSpan={3} className="px-3 py-3 text-right text-primary-900">Total pagado:</td>
+                                                <td className="px-3 py-3 text-gray-900">
+                                                    {formatMoney(editRows.reduce((sum: number, r: any) => sum + Number(r.paidAmount || 0), 0))}
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
                             </div>
                         </div>
+
+                        {/* ── FOOTER FIJO ── */}
+                        <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3 panel-footer-safe sm:pb-4">
+                            <button
+                                onClick={() => setIsEditOpen(false)}
+                                className="flex-1 sm:flex-none px-5 py-2.5 bg-gray-100 text-gray-800 rounded-xl hover:bg-gray-200 font-medium text-sm transition"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setEditError('');
+                                    const payload = editRows.map((r: any, idx: number) => {
+                                        // r.dueDate puede ser "YYYY-MM-DD" (del input) o un Date/ISO del servidor.
+                                        // Normalizamos a mediodía Bogotá para evitar off-by-one UTC.
+                                        const dateStr = typeof r.dueDate === 'string' && r.dueDate.length === 10
+                                            ? r.dueDate
+                                            : toLocalDateString(new Date(r.dueDate));
+                                        return {
+                                            id: r.id,
+                                            dueDate: `${dateStr}T12:00:00.000-05:00`,
+                                            scheduledAmount: Math.ceil(Number(r.scheduledAmount || 0)),
+                                            installmentNumber: r.installmentNumber || idx + 1,
+                                        };
+                                    });
+                                    const calculatedTermDays = editForm.useFixedInstallment && parseMoney(editForm.installmentAmount) > 0
+                                        ? estimateTermDays(parseMoney(editForm.amount), Number(editForm.interestRate), parseMoney(editForm.installmentAmount), editForm.frequency)
+                                        : termDaysFromUnit(Number(editForm.termValue), editForm.termUnit);
+
+                                    updateMutation.mutate({
+                                        schedules: payload,
+                                        amount: parseMoney(editForm.amount),
+                                        interestRate: Number(editForm.interestRate),
+                                        termDays: calculatedTermDays,
+                                        frequency: editForm.frequency,
+                                        startDate: editForm.startDate ? `${editForm.startDate}T12:00:00.000-05:00` : undefined,
+                                    });
+                                }}
+                                disabled={updateMutation.isPending}
+                                className="flex-1 sm:flex-none px-5 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium text-sm transition"
+                            >
+                                {updateMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+                            </button>
+                        </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             <ConfirmDialog
