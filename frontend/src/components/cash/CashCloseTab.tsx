@@ -51,6 +51,8 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
     const [error, setError] = useState('');
     const [showOps, setShowOps] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    const [countedBalances, setCountedBalances] = useState<Record<string, string>>({});
+    const [closeNotes, setCloseNotes] = useState('');
 
     const isToday = selectedDate === todayStr;
 
@@ -85,8 +87,20 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
     const closeId  = isToday ? today?.id : report?.meta?.close?.id;
 
     const closeMut = useMutation({
-        mutationFn: () => createClose({ businessId }),
-        onSuccess: () => { setError(''); refresh(); },
+        mutationFn: () => {
+            const parsed: Record<string, number> = {};
+            let hasCount = false;
+            for (const [id, val] of Object.entries(countedBalances)) {
+                const n = Number(val);
+                if (!isNaN(n) && val.trim() !== '') { parsed[id] = n; hasCount = true; }
+            }
+            return createClose({
+                businessId,
+                countedBalances: hasCount ? parsed : undefined,
+                notes: closeNotes.trim() || undefined,
+            });
+        },
+        onSuccess: () => { setError(''); setCountedBalances({}); setCloseNotes(''); refresh(); },
         onError: (e: any) => setError(e?.response?.data?.error || 'No se pudo cerrar la caja'),
     });
 
@@ -271,7 +285,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                     : 'Caja ABIERTA — aún no se ha cerrado la caja de hoy.'}
                         </p>
                         <div className="flex gap-2">
-                            {!isClosed && canCloseCash && (
+                            {!isClosed && canCloseCash && (today?.status !== 'reopened' || isSuper) && (
                                 <button
                                     onClick={() => closeMut.mutate()}
                                     disabled={closeMut.isPending}
@@ -279,6 +293,11 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                 >
                                     <Lock size={15} /> {closeMut.isPending ? 'Cerrando…' : 'Cerrar caja'}
                                 </button>
+                            )}
+                            {today?.status === 'reopened' && !isSuper && (
+                                <span className="text-xs font-medium text-amber-700 bg-amber-100 px-3 py-2 rounded-lg">
+                                    Solo un Super Admin puede re-cerrar un día reabierto
+                                </span>
                             )}
                             {isSuper && isClosed && closeId && (
                                 <button
@@ -291,6 +310,35 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                             )}
                         </div>
                     </div>
+                    {/* Formulario de arqueo físico (cuando la caja está abierta o reabierta como super_admin) */}
+                    {!isClosed && report?.accounts && report.accounts.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-current/10 space-y-2">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Arqueo físico (opcional)</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {report.accounts.map(a => (
+                                    <div key={a.accountId} className="flex items-center gap-2">
+                                        <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{a.name}</span>
+                                        <span className="text-xs text-gray-400 shrink-0">Esp: {FM(a.esperado)}</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            placeholder="Contado"
+                                            value={countedBalances[a.accountId] ?? ''}
+                                            onChange={e => setCountedBalances(prev => ({ ...prev, [a.accountId]: e.target.value }))}
+                                            className="w-28 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Notas del cierre (opcional)"
+                                value={closeNotes}
+                                onChange={e => setCloseNotes(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary-500"
+                            />
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -389,7 +437,12 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                         <td className="px-4 py-2.5 text-right text-emerald-700">{FM(report.totals.totalIngresos)}</td>
                                         <td className="px-4 py-2.5 text-right text-teal-600">{report.totals.totalInyeccion ? FM(report.totals.totalInyeccion) : <span className="text-gray-300 font-normal">—</span>}</td>
                                         <td className="px-4 py-2.5 text-right text-indigo-600">
-                                            <span className="text-gray-300 font-normal">—</span>
+                                            {(() => {
+                                                const totalT = report.accounts.reduce((s, a) => s + (a.traslados ?? 0), 0);
+                                                return Math.abs(totalT) > 0.5
+                                                    ? <span>{totalT > 0 ? '+' : ''}{FM(totalT)}</span>
+                                                    : <span className="text-gray-300 font-normal">—</span>;
+                                            })()}
                                         </td>
                                         <td className="px-4 py-2.5 text-right text-rose-700">{FM(report.totals.totalEgresos)}</td>
                                         <td className="px-4 py-2.5 text-right text-primary-700">{FM(report.accounts.reduce((s, a) => s + a.esperado, 0))}</td>

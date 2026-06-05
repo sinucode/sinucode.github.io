@@ -130,7 +130,9 @@ export default function CashPage() {
 
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 <TabItem label="Movimientos" active={activeTab === 'movements'} onClick={() => setActiveTab('movements')} />
-                <TabItem label="Cierre" active={activeTab === 'cierre'} onClick={() => setActiveTab('cierre')} />
+                {isAdmin && (
+                    <TabItem label="Cierre" active={activeTab === 'cierre'} onClick={() => setActiveTab('cierre')} />
+                )}
                 <TabItem label="Proyección" active={activeTab === 'summary'} onClick={() => setActiveTab('summary')} />
                 {isAdmin && (
                     <TabItem label="Operaciones" active={activeTab === 'ops'} onClick={() => setActiveTab('ops')} />
@@ -193,7 +195,7 @@ export default function CashPage() {
                 <Operations businessId={businessId} />
             )}
 
-            {activeTab === 'cierre' && businessId && (
+            {isAdmin && activeTab === 'cierre' && businessId && (
                 <CashCloseTab businessId={businessId} />
             )}
 

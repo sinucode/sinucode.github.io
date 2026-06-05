@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireMinRole } from '../middleware/roleHierarchy.middleware';
 import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount, setDefaultAccount, getTodayClose, listCloses, createClose, reopenClose, autoCloseRun, getCloseReport } from '../controllers/account.controller';
@@ -39,13 +39,16 @@ router.patch('/:id/default', requireMinRole('admin'), [
 
 // Cierre diario
 router.get('/closes/today', requireMinRole('user'), [query('businessId').isUUID()], getTodayClose);
-router.get('/closes', requireMinRole('user'), [query('businessId').isUUID()], listCloses);
-router.get('/closes/report', requireMinRole('user'), [
+router.get('/closes', requireMinRole('admin'), [query('businessId').isUUID()], listCloses);
+router.get('/closes/report', requireMinRole('admin'), [
     query('businessId').isUUID().withMessage('businessId inválido'),
     query('date').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('date debe ser YYYY-MM-DD'),
 ], getCloseReport);
 // Cerrar caja — solo admin y super_admin
 router.post('/closes', requireMinRole('admin'), [body('businessId').isUUID().withMessage('businessId inválido')], createClose);
-router.post('/closes/:id/reopen', requireMinRole('super_admin'), reopenClose);
+router.post('/closes/:id/reopen', requireMinRole('super_admin'), [
+    param('id').isUUID().withMessage('ID de cierre inválido'),
+    body('reason').optional().isString().isLength({ max: 500 }).withMessage('Motivo demasiado largo (máx. 500 caracteres)'),
+], reopenClose);
 
 export default router;

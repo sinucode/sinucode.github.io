@@ -258,11 +258,33 @@ export class AccountService {
         }
 
         // Modo manual: upsert para permitir re-snapshot del día actual
-        return prisma.cashClose.upsert({
+        // Proteger: un admin NO puede re-cerrar un día que fue reabierto por super_admin
+        const existingForReopen = await prisma.cashClose.findFirst({
+            where: { businessId, closeDate: { gte: closeDate, lt: new Date(closeDate.getTime() + 24 * 3600 * 1000) } },
+            select: { id: true, status: true },
+        });
+        if (existingForReopen?.status === 'reopened' && role !== 'super_admin') {
+            throw new Error('El día fue reabierto por un Super Admin. Solo un Super Admin puede volver a cerrarlo.');
+        }
+
+        const result = await prisma.cashClose.upsert({
             where: { businessId_closeDate: { businessId, closeDate } },
             create: createData,
             update: { status: 'closed', closeMode: mode, totalBalance: new Prisma.Decimal(total), accountBalances: accountBalances as any, notes: opts.notes, closedById: userId, closedAt: new Date(), reopenedById: null, reopenedAt: null, reopenReason: null },
         });
+
+        // Registrar en auditoría el cierre manual
+        await prisma.auditLog.create({
+            data: {
+                userId, businessId,
+                action: 'CREATE_CASH_CLOSE',
+                description: `Cerró la caja del día manualmente (saldo: $${Math.round(total).toLocaleString('es-CO')})`,
+                entityType: 'CashClose',
+                entityId: result.id,
+            },
+        }).catch(() => {});
+
+        return result;
     }
 
     /** Reabre un cierre. Solo super_admin. */
@@ -270,11 +292,13 @@ export class AccountService {
         if (role !== 'super_admin') throw new Error('Solo el Super Admin puede reabrir un cierre');
         const close = await prisma.cashClose.findUnique({ where: { id: closeId } });
         if (!close) throw new Error('Cierre no encontrado');
+        await this.validateAccess(close.businessId, userId, role);
         const updated = await prisma.cashClose.update({
             where: { id: closeId },
             data: { status: 'reopened', reopenedById: userId, reopenedAt: new Date(), reopenReason: reason || null },
         });
-        await prisma.auditLog.create({ data: { userId, businessId: close.businessId, action: 'REOPEN_CASH_CLOSE', description: `Reabrió el cierre del ${close.closeDate.toISOString().slice(0, 10)}. Motivo: ${reason || '—'}`, entityType: 'CashClose', entityId: closeId } }).catch(() => { });
+        const dateLabel = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(close.closeDate);
+        await prisma.auditLog.create({ data: { userId, businessId: close.businessId, action: 'REOPEN_CASH_CLOSE', description: `Reabrió el cierre del ${dateLabel}. Motivo: ${reason || '—'}`, entityType: 'CashClose', entityId: closeId } }).catch(() => { });
         return updated;
     }
 
@@ -294,6 +318,8 @@ export class AccountService {
 
         // Validar formato
         if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) throw new Error('Fecha inválida. Use YYYY-MM-DD');
+        const todayLabel = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+        if (dateStr > todayLabel) throw new Error('No se puede consultar el reporte de una fecha futura');
 
         const dayStart = new Date(`${dateStr}T00:00:00.000-05:00`);
         const dayEnd   = new Date(`${dateStr}T23:59:59.999-05:00`);
@@ -628,14 +654,14 @@ export class AccountService {
         const businesses = await prisma.business.findMany({ select: { id: true, name: true, createdById: true } });
         let closed = 0;
         for (const b of businesses) {
-            const already = await prisma.cashClose.findFirst({ where: { businessId: b.id, closeDate: { gte: start, lt: end } }, select: { id: true } });
+            const already = await prisma.cashClose.findFirst({ where: { businessId: b.id, status: 'closed', closeDate: { gte: start, lt: end } }, select: { id: true } });
             if (already) continue;
             const activity = await prisma.cashMovement.count({ where: { businessId: b.id, createdAt: { gte: start, lt: end } } });
             if (activity === 0) continue;
             try {
                 await this.createClose(b.id, {}, b.createdById, 'super_admin', 'auto');
                 closed++;
-            } catch { /* continuar con los demás */ }
+            } catch (e: any) { console.error(`[autoClose] Error cerrando negocio ${b.id} (${b.name}):`, e?.message ?? e); }
         }
         return { closed, total: businesses.length };
     }

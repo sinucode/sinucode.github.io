@@ -96,6 +96,8 @@ export const createClose = async (req: Request, res: Response) => {
 
 export const reopenClose = async (req: Request, res: Response) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
         const close = await accountService.reopenClose(req.params.id, req.body.reason, req.user!.userId, req.user!.role as UserRole);
         return res.json(close);
     } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
@@ -124,5 +126,5 @@ export const autoCloseRun = async (req: Request, res: Response) => {
         if (!ok) return res.status(401).json({ error: 'No autorizado' });
         const result = await accountService.autoCloseAll();
         return res.json(result);
-    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
 };

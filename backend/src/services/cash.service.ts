@@ -104,6 +104,18 @@ export class CashService {
         }
 
         return prisma.$transaction(async (tx) => {
+            // Verificar que el día esté abierto dentro de la tx (protección TOCTOU vs createClose)
+            const _dayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+            const _dayStart = new Date(`${_dayStr}T00:00:00.000-05:00`);
+            const _dayEnd = new Date(_dayStart.getTime() + 24 * 3600 * 1000);
+            const _closedDay = await tx.cashClose.findFirst({
+                where: { businessId: data.businessId, status: 'closed', closeDate: { gte: _dayStart, lt: _dayEnd } },
+                select: { id: true },
+            });
+            if (_closedDay) {
+                const _label = new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
+                throw new Error(`El día ${_label} está cerrado. Un super admin debe reabrir el cierre para registrar este movimiento.`);
+            }
             // Re-leer el saldo dentro de la transacción para evitar TOCTOU: otra operación
             // concurrente pudo haber cambiado currentBalance entre la validación previa y este
             // write (mismo patrón que createCredit que ya hace findUniqueOrThrow dentro de tx).
@@ -211,6 +223,18 @@ export class CashService {
         }
 
         return prisma.$transaction(async (tx) => {
+            // Verificar que el día esté abierto dentro de la tx (protección TOCTOU vs createClose)
+            const _dayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+            const _dayStart = new Date(`${_dayStr}T00:00:00.000-05:00`);
+            const _dayEnd = new Date(_dayStart.getTime() + 24 * 3600 * 1000);
+            const _closedDay = await tx.cashClose.findFirst({
+                where: { businessId, status: 'closed', closeDate: { gte: _dayStart, lt: _dayEnd } },
+                select: { id: true },
+            });
+            if (_closedDay) {
+                const _label = new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
+                throw new Error(`El día ${_label} está cerrado. Un super admin debe reabrir el cierre para registrar este movimiento.`);
+            }
             const business = await tx.business.findUnique({
                 where: { id: businessId },
                 select: { currentBalance: true },
