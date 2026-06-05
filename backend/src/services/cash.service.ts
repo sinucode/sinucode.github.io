@@ -47,7 +47,10 @@ export class CashService {
 
     private isIncome(type: CashMovementType, amount: number) {
         if (type === 'internal_transfer') return amount > 0;
-        // Mantener alineado con signedEffect() en account.service.ts
+        // OJO: esta función NO contempla la regla de relatedPaymentId. El `interest_earned` de
+        // cierre (sin relatedPaymentId) NO es caja real y debe excluirse ANTES de llamar aquí
+        // (ver los guards `interest_earned && !relatedPaymentId` en los loops de esta clase).
+        // Cualquier nuevo consumidor de isIncome debe aplicar ese guard primero.
         return ['payment_received', 'capital_injection', 'interest_earned',
                 'credit_cancellation', 'initial_capital'].includes(type);
     }
@@ -260,7 +263,7 @@ export class CashService {
 
         const allMovements = await prisma.cashMovement.findMany({
             where: { businessId: filters.businessId },
-            select: { type: true, amount: true, paymentMethod: true }
+            select: { type: true, amount: true, paymentMethod: true, relatedPaymentId: true }
         });
 
         let cashBalance = 0;
@@ -268,6 +271,10 @@ export class CashService {
 
         allMovements.forEach(mov => {
             const amount = Number(mov.amount);
+            // interest_earned de cierre (sin relatedPaymentId): reclasificación de la ganancia
+            // ya contabilizada vía payment_received a lo largo del crédito → NO mueve caja.
+            // Contarla duplicaría el saldo. Las donaciones (con relatedPaymentId) sí son caja real.
+            if (mov.type === 'interest_earned' && !mov.relatedPaymentId) return;
             const isInc = this.isIncome(mov.type, amount);
             // Si es ingreso suma, si es egreso resta. Transferencias internas ya vienen con + o -
             const effectAmount = mov.type === 'internal_transfer' ? amount : (isInc ? amount : -amount);
@@ -316,6 +323,9 @@ export class CashService {
         const periodSummary = filteredMovements.reduce(
             (acc, mov) => {
                 const amount = Number(mov.amount);
+                // interest_earned de cierre (sin relatedPaymentId): no es flujo de caja real
+                // (ya entró vía payment_received). Se excluye de ingresos para no inflar el neto.
+                if (mov.type === 'interest_earned' && !mov.relatedPaymentId) return acc;
                 const isInc = this.isIncome(mov.type, amount);
 
                 if (mov.type !== 'internal_transfer') {

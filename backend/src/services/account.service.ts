@@ -18,9 +18,18 @@ export class AccountService {
         if (!ub) throw new Error('No tiene permisos para acceder a los datos de este negocio');
     }
 
-    /** Efecto firmado de un movimiento sobre el saldo (+ ingreso, − egreso). */
-    private signedEffect(type: CashMovementType, amount: number): number {
+    /** Efecto firmado de un movimiento sobre el saldo (+ ingreso, − egreso).
+     *  `relatedPaymentId` distingue los dos usos de `interest_earned`:
+     *   • CON relatedPaymentId → donación inmediata: efectivo real que entró aparte del
+     *     payment_received (este sí mueve caja).
+     *   • SIN relatedPaymentId → reclasificación de la ganancia al SALDAR un crédito: esa
+     *     plata YA entró como efectivo vía los payment_received a lo largo del crédito y ya
+     *     está en business.currentBalance. Contarla aquí la duplicaría (infla la cuenta del
+     *     pago y empuja la cuenta ancla a negativo vía la reconciliación). Es solo reporte de
+     *     ganancia → efecto de caja CERO. */
+    private signedEffect(type: CashMovementType, amount: number, relatedPaymentId?: string | null): number {
         if (type === 'internal_transfer') return amount; // ya viene con signo
+        if (type === 'interest_earned' && !relatedPaymentId) return 0; // ganancia al saldar: solo reporte
         const income: CashMovementType[] = [
             'payment_received', 'capital_injection', 'interest_earned',
             'initial_capital', 'credit_cancellation',
@@ -70,7 +79,7 @@ export class AccountService {
         const [accounts, business, movements] = await Promise.all([
             prisma.paymentAccount.findMany({ where: { businessId, active: true }, orderBy: [{ createdAt: 'asc' }, { name: 'asc' }] }),
             prisma.business.findUnique({ where: { id: businessId }, select: { currentBalance: true } }),
-            prisma.cashMovement.findMany({ where: { businessId }, select: { type: true, amount: true, accountId: true } }),
+            prisma.cashMovement.findMany({ where: { businessId }, select: { type: true, amount: true, accountId: true, relatedPaymentId: true } }),
         ]);
         if (!business) throw new Error('Negocio no encontrado');
 
@@ -82,7 +91,7 @@ export class AccountService {
         accounts.forEach(a => { balByAcc[a.id] = 0; });
 
         for (const mov of movements) {
-            const eff = this.signedEffect(mov.type, Number(mov.amount));
+            const eff = this.signedEffect(mov.type, Number(mov.amount), mov.relatedPaymentId);
             // Movimientos sin cuenta (legacy) caen en la cuenta ancla (estable, no en la default mutable)
             const accId = mov.accountId && balByAcc[mov.accountId] !== undefined ? mov.accountId : anchorAcc?.id;
             if (accId) balByAcc[accId] = (balByAcc[accId] || 0) + eff;
@@ -303,7 +312,7 @@ export class AccountService {
             // Movimientos ANTES del día (para calcular apertura)
             prisma.cashMovement.findMany({
                 where: { businessId, createdAt: { lt: dayStart } },
-                select: { type: true, amount: true, accountId: true },
+                select: { type: true, amount: true, accountId: true, relatedPaymentId: true },
             }),
             // Movimientos DEL día
             prisma.cashMovement.findMany({
@@ -334,7 +343,7 @@ export class AccountService {
             // Todos los movimientos históricos (tipo + monto) para calcular el offset del capital inicial
             prisma.cashMovement.findMany({
                 where: { businessId },
-                select: { type: true, amount: true },
+                select: { type: true, amount: true, relatedPaymentId: true },
             }),
         ]);
 
@@ -359,7 +368,7 @@ export class AccountService {
 
         // Apertura: suma de movimientos ANTES del día
         for (const mov of preMovements) {
-            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
+            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount), mov.relatedPaymentId);
             const accId = (mov.accountId && aperturaByAcc[mov.accountId] !== undefined)
                 ? mov.accountId : anchorAcc?.id;
             if (accId) aperturaByAcc[accId] = (aperturaByAcc[accId] || 0) + eff;
@@ -370,7 +379,7 @@ export class AccountService {
         // getBalances() y deja la apertura cuadrada con el saldo real.
         if (anchorAcc && business) {
             const rawSumAll = allMovements.reduce(
-                (s, m) => s + this.signedEffect(m.type as CashMovementType, Number(m.amount)), 0);
+                (s, m) => s + this.signedEffect(m.type as CashMovementType, Number(m.amount), m.relatedPaymentId), 0);
             const offset = Number(business.currentBalance) - rawSumAll;
             if (Math.abs(offset) > 0.01) {
                 aperturaByAcc[anchorAcc.id] = (aperturaByAcc[anchorAcc.id] || 0) + offset;
@@ -381,7 +390,7 @@ export class AccountService {
         // Las transferencias internas se separan en su propio acumulador para que
         // no queden mezcladas con ingresos reales del negocio.
         for (const mov of dayMovements) {
-            const eff   = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
+            const eff   = this.signedEffect(mov.type as CashMovementType, Number(mov.amount), mov.relatedPaymentId);
             const accId = (mov.accountId && ingresosByAcc[mov.accountId] !== undefined)
                 ? mov.accountId : anchorAcc?.id;
             if (!accId) continue;
@@ -561,7 +570,7 @@ export class AccountService {
                 tipo:         m.type as string,
                 cuenta:       m.account?.name ?? '—',
                 monto:        Math.round(Number(m.amount) * 100) / 100,
-                efectoSignado: this.signedEffect(m.type as CashMovementType, Number(m.amount)),
+                efectoSignado: this.signedEffect(m.type as CashMovementType, Number(m.amount), m.relatedPaymentId),
                 descripcion:  m.description || '',
                 usuario:      m.createdBy.fullName,
             }));
@@ -572,7 +581,7 @@ export class AccountService {
         let totalEgresos   = 0;
         for (const mov of dayMovements) {
             const t   = mov.type as string;
-            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount));
+            const eff = this.signedEffect(mov.type as CashMovementType, Number(mov.amount), mov.relatedPaymentId);
             if (t === 'internal_transfer') continue;
             if (t === 'capital_injection' || t === 'initial_capital') totalInyeccion += eff;
             else if (eff >= 0) totalIngresos += eff;

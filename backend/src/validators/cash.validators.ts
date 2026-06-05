@@ -1,13 +1,17 @@
 import { body, query } from 'express-validator';
 
-// loan_disbursement se excluye intencionalmente: solo puede crearse desde credit.service
-// dentro de una transacción; permitirlo en el endpoint genérico habilita doble-débito.
+// loan_disbursement e interest_earned se excluyen intencionalmente: solo pueden crearse desde
+// credit.service dentro de una transacción.
+//  • loan_disbursement: permitirlo en el endpoint genérico habilita doble-débito.
+//  • interest_earned: tiene doble semántica (donación con relatedPaymentId = caja real; ganancia
+//    de cierre sin relatedPaymentId = solo reporte, NO caja). La reconstrucción de saldos trata
+//    el segundo caso como efecto cero; un interest_earned manual sin relatedPaymentId sumaría a
+//    business.currentBalance pero se ignoraría por cuenta, rompiendo la invariante de saldos.
 const movementTypes = [
     'initial_capital',
     'capital_injection',
     'withdrawal',
     'payment_received',
-    'interest_earned',
     'internal_transfer',
 ];
 

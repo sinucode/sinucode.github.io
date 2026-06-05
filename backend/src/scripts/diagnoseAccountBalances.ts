@@ -13,8 +13,9 @@ import { PrismaClient, CashMovementType } from '@prisma/client';
 const prisma = new PrismaClient();
 
 /** Misma lógica que AccountService.signedEffect */
-function signedEffect(type: CashMovementType | string, amount: number): number {
+function signedEffect(type: CashMovementType | string, amount: number, relatedPaymentId?: string | null): number {
     if (type === 'internal_transfer') return amount; // ya viene con signo
+    if (type === 'interest_earned' && !relatedPaymentId) return 0; // ganancia al saldar: solo reporte
     const income = [
         'payment_received', 'capital_injection', 'interest_earned',
         'initial_capital', 'credit_cancellation',
@@ -59,7 +60,7 @@ async function main() {
         }),
         prisma.cashMovement.findMany({
             where: { businessId },
-            select: { type: true, amount: true, accountId: true },
+            select: { type: true, amount: true, accountId: true, relatedPaymentId: true },
         }),
     ]);
 
@@ -85,7 +86,7 @@ async function main() {
     let legacySum   = 0;
 
     for (const mov of movements) {
-        const eff   = signedEffect(mov.type as CashMovementType, Number(mov.amount));
+        const eff   = signedEffect(mov.type as CashMovementType, Number(mov.amount), mov.relatedPaymentId);
         const accId = mov.accountId && balByAcc[mov.accountId] !== undefined
             ? mov.accountId
             : anchorAcc?.id;
