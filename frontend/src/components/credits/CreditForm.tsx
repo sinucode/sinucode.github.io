@@ -494,7 +494,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 sm:m-auto
             ">
                 {/* ── HEADER FIJO ── */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white shrink-0">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white shrink-0 panel-header-safe sm:pt-4">
                     <div>
                         <h2 className="text-lg font-bold text-gray-900">Nuevo Crédito</h2>
                         <p className="text-sm text-primary-600">Crea el crédito y genera su plan de pagos</p>
@@ -1032,7 +1032,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 </div>
 
                 {/* ── FOOTER FIJO - SIEMPRE VISIBLE ── */}
-                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3">
+                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3 panel-footer-safe sm:pb-4">
                     <button
                         type="button"
                         onClick={handleSimulate}

@@ -125,7 +125,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                 sm:m-auto
             ">
                 {/* ── HEADER FIJO ── */}
-                <div className="flex justify-between items-center px-5 py-4 border-b border-gray-200 bg-white shrink-0">
+                <div className="flex justify-between items-center px-5 py-4 border-b border-gray-200 bg-white shrink-0 panel-header-safe sm:pt-4">
                     <h2 className="text-lg font-bold text-gray-900">
                         {client ? 'Editar Cliente' : 'Nuevo Cliente'}
                     </h2>
@@ -264,7 +264,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
                 </div>
 
                 {/* ── FOOTER FIJO - SIEMPRE VISIBLE ── */}
-                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3">
+                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3 panel-footer-safe sm:pb-4">
                     <button
                         type="button"
                         onClick={onClose}

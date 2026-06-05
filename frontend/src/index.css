@@ -93,6 +93,23 @@ nav.fixed.bottom-0 {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Paneles a pantalla completa (fixed inset-0 + h-full en móvil):
+   el header suma env(safe-area-inset-top) para no quedar detrás del status bar / Dynamic Island;
+   el footer suma env(safe-area-inset-bottom) para no quedar detrás del home indicator.
+   max(1rem, ...) garantiza mínimo 16px aunque safe area sea 0 (Android / desktop).
+   En desktop (sm:) se sobreescribe con py-4 normal porque el modal es centrado, no fullscreen. */
+.panel-header-safe {
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+}
+.panel-footer-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Área de scroll principal: deja espacio para bottom nav (~56px) + home indicator */
+.main-pb-safe {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Scroll suave en toda la app */
 html {
   scroll-behavior: smooth;

@@ -236,7 +236,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 sm:m-auto
             ">
                 {/* ── HEADER ── */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white shrink-0">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white shrink-0 panel-header-safe sm:pt-4">
                     <div>
                         <h3 className="text-lg font-bold text-gray-900">Registrar Pago</h3>
                         <p className="text-xs text-gray-500 mt-0.5">Saldo pendiente total: {formatMoney(remainingBalance)}</p>
@@ -430,7 +430,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 </div>
 
                 {/* ── FOOTER FIJO ── */}
-                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3">
+                <div className="shrink-0 border-t border-gray-200 bg-white px-5 py-4 flex gap-3 panel-footer-safe sm:pb-4">
                     <button
                         type="button"
                         onClick={onClose}
