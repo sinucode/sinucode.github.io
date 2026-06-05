@@ -1,6 +1,7 @@
 import { Prisma, UserRole, CashMovementType } from '@prisma/client';
 import prisma from '../config/database';
 import { accountService } from './account.service';
+import { bogotaStartOfDay, bogotaEndOfDay } from '../utils/dates';
 
 interface CashMovementInput {
     businessId: string;
@@ -70,26 +71,17 @@ export class CashService {
         await this.validateAccess(data.businessId, userId, userRole);
         await accountService.assertDayOpen(data.businessId, new Date());
 
-        const business = await prisma.business.findUnique({
+        const businessCheck = await prisma.business.findUnique({
             where: { id: data.businessId },
             select: { currentBalance: true },
         });
-        if (!business) throw new Error('Negocio no encontrado');
-
-        const isIncome = this.isIncome(data.type, data.amount);
-        const affectAmount = new Prisma.Decimal(Math.abs(data.amount));
-        const newBalance = isIncome
-            ? new Prisma.Decimal(business.currentBalance).plus(affectAmount)
-            : new Prisma.Decimal(business.currentBalance).minus(affectAmount);
-
-        if (newBalance.lt(0)) {
-            throw new Error(`Fondos insuficientes. Saldo actual: ${business.currentBalance}, operación: ${data.amount}`);
-        }
+        if (!businessCheck) throw new Error('Negocio no encontrado');
 
         const effectiveAccountId = await this.resolveAccountId(data.businessId, data.accountId);
+        const isIncome = this.isIncome(data.type, data.amount);
 
-        // Validar saldo de la cuenta específica para TODOS los egresos
-        // (withdrawal, tithe, payment_reversion, egresos genéricos del endpoint /movements)
+        // Validación preliminar de saldo de cuenta (fuera de tx, para error rápido).
+        // El saldo definitivo se re-valida dentro de la transacción (ver más abajo).
         if (effectiveAccountId && !isIncome) {
             const { accounts: accList } = await accountService.getBalances(data.businessId, userId, userRole);
             const accEntry = accList.find(a => a.id === effectiveAccountId);
@@ -112,6 +104,22 @@ export class CashService {
         }
 
         return prisma.$transaction(async (tx) => {
+            // Re-leer el saldo dentro de la transacción para evitar TOCTOU: otra operación
+            // concurrente pudo haber cambiado currentBalance entre la validación previa y este
+            // write (mismo patrón que createCredit que ya hace findUniqueOrThrow dentro de tx).
+            const bizInTx = await tx.business.findUniqueOrThrow({
+                where: { id: data.businessId },
+                select: { currentBalance: true },
+            });
+            const affectAmount = new Prisma.Decimal(Math.abs(data.amount));
+            const newBalance = isIncome
+                ? new Prisma.Decimal(bizInTx.currentBalance).plus(affectAmount)
+                : new Prisma.Decimal(bizInTx.currentBalance).minus(affectAmount);
+
+            if (newBalance.lt(0)) {
+                throw new Error(`Fondos insuficientes. Saldo actual: ${bizInTx.currentBalance}, operación: ${data.amount}`);
+            }
+
             const mov = await tx.cashMovement.create({
                 data: {
                     businessId: data.businessId,
@@ -305,8 +313,8 @@ export class CashService {
 
         if (filters.startDate || filters.endDate) {
             where.createdAt = {
-                ...(filters.startDate && { gte: new Date(filters.startDate) }),
-                ...(filters.endDate && { lte: new Date(filters.endDate) }),
+                ...(filters.startDate && { gte: bogotaStartOfDay(filters.startDate) }),
+                ...(filters.endDate && { lte: bogotaEndOfDay(filters.endDate) }),
             };
         }
 

@@ -409,8 +409,12 @@ export class CreditService {
         ipAddress?: string;
     }) {
         const { creditId, amount, paymentDate, paymentMethod, notes, scheduleId, accountId, excessAction, userId, role, ipAddress } = params;
-        const payDate = paymentDate ? new Date(paymentDate) : new Date();
-        if (payDate > new Date()) throw new Error('La fecha de pago no puede ser futura');
+        // paymentDate llega como "YYYY-MM-DD" (datepicker / todayBogota). new Date(str) lo
+        // interpretaría como UTC medianoche = día anterior 19:00 en Bogotá. normalizeToNoon lo
+        // ancla al mediodía Bogotá, evitando el off-by-one en assertDayOpen y en las
+        // comparaciones de vencimiento (s.dueDate < payDate).
+        const payDate = normalizeToNoon(paymentDate);
+        if (payDate > normalizeToNoon()) throw new Error('La fecha de pago no puede ser futura');
 
         // Bloqueo de día cerrado (cierre de caja)
         const creditBiz = await prisma.credit.findUnique({ where: { id: creditId }, select: { businessId: true } });
@@ -819,7 +823,7 @@ export class CreditService {
         if (schedules.length !== credit.paymentSchedule.length && !hasPaid) {
             updates = schedules.map((incoming, idx) => {
                 const paidAmount = 0;
-                const due = new Date(incoming.dueDate);
+                const due = normalizeToNoon(incoming.dueDate);
                 const status = incoming.scheduledAmount <= paidAmount ? 'paid' : due < now ? 'overdue' : 'pending';
                 totalScheduled += incoming.scheduledAmount;
                 return { id: incoming.id, dueDate: due, scheduledAmount: incoming.scheduledAmount, status, paidAmount, installmentNumber: incoming.installmentNumber ?? idx + 1 };
@@ -831,7 +835,7 @@ export class CreditService {
                 const pendingPaid = Number(current.paidAmount);
                 if (incoming.scheduledAmount < pendingPaid) throw new Error('El monto de una cuota no puede ser menor a lo ya pagado');
                 totalScheduled += incoming.scheduledAmount;
-                const due = new Date(incoming.dueDate);
+                const due = normalizeToNoon(incoming.dueDate);
                 const newStatus = incoming.scheduledAmount <= pendingPaid ? 'paid' : due < now ? 'overdue' : 'pending';
                 return { id: incoming.id, dueDate: due, scheduledAmount: incoming.scheduledAmount, status: newStatus, paidAmount: pendingPaid, installmentNumber: incoming.installmentNumber ?? current.installmentNumber ?? idx + 1 };
             });
@@ -1037,6 +1041,16 @@ export class CreditService {
             data:  { paidAmount: new Prisma.Decimal(0), status: 'pending' },
         });
 
+        // ── 2b. Eliminar la reclasificación de ganancia al saldar ────────────────────
+        // El interest_earned de cierre (SIN relatedPaymentId) tiene efecto-caja CERO en la
+        // reconstrucción de saldos, así que borrarlo no altera ningún balance; pero seguiría
+        // contando como ganancia realizada en el dashboard para un crédito ya cancelado.
+        // Las donaciones (interest_earned CON relatedPaymentId) NO se tocan: su efecto de caja
+        // queda neutralizado por las reversiones de pago de arriba.
+        await tx.cashMovement.deleteMany({
+            where: { relatedCreditId: creditId, type: 'interest_earned', relatedPaymentId: null },
+        });
+
         // ── 3. Devolver capital a cada cuenta de origen según su porción ─────────────
         const startDateStr = credit.startDate
             ? new Date(credit.startDate).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -1124,6 +1138,13 @@ export class CreditService {
             if (invalid.length > 0) throw new Error('No tiene permisos para cancelar uno o más créditos seleccionados');
         }
 
+        // La cancelación crea movimientos de caja HOY; bloquear si el día está cerrado en
+        // alguno de los negocios involucrados.
+        const businessIdsToCheck = [...new Set(creditsToCancel.map(c => c.businessId))];
+        for (const bId of businessIdsToCheck) {
+            await accountService.assertDayOpen(bId, new Date());
+        }
+
         // Cancelar cada crédito en una única transacción
         const results = await prisma.$transaction(
             async (tx) => {
@@ -1156,8 +1177,11 @@ export class CreditService {
             throw new Error('Solo el Super Admin puede cancelar créditos');
         }
 
-        const exists = await prisma.credit.findUnique({ where: { id: creditId }, select: { id: true, amount: true } });
+        const exists = await prisma.credit.findUnique({ where: { id: creditId }, select: { id: true, amount: true, businessId: true } });
         if (!exists) throw new Error('Crédito no encontrado');
+
+        // La cancelación crea movimientos de caja HOY; bloquear si el día está cerrado.
+        await accountService.assertDayOpen(exists.businessId, new Date());
 
         const result = await prisma.$transaction(
             async (tx) => this.cancelCreditTx(tx, creditId, userId, ipAddress),
@@ -1201,6 +1225,9 @@ export class CreditService {
             if (amountToRevert > paidAmountCeil + 0.01) {
                 throw new Error(`El monto a revertir ($${amountToRevert}) excede el monto pagado de la cuota ($${paidAmountCeil})`);
             }
+
+            // La reversión crea un movimiento de caja HOY; bloquear si el día está cerrado.
+            await accountService.assertDayOpen(schedule.credit.businessId, new Date());
 
             const business = schedule.credit.business;
             const credit = schedule.credit;

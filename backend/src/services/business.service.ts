@@ -159,49 +159,55 @@ export class BusinessService {
         requestingUserId: string,
         ipAddress: string = ''
     ) {
-        // Crear negocio
-        const business = await prisma.business.create({
-            data: {
-                name: data.name,
-                description: data.description,
-                initialCapital: data.initialCapital || 0,
-                currentBalance: data.initialCapital || 0,
-                createdById: requestingUserId,
-            },
-            select: {
-                id: true,
-                name: true,
-                description: true,
-                initialCapital: true,
-                currentBalance: true,
-                createdById: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
-
-        // Crear cuenta "Efectivo" por defecto del nuevo negocio
-        const defaultAccount = await prisma.paymentAccount.create({
-            data: { businessId: business.id, name: 'Efectivo', type: 'cash', isDefault: true, isDisbursementDefault: true, createdById: requestingUserId },
-        });
-
-        // Registrar el capital inicial como movimiento contable para que el desglose por
-        // cuenta sea consistente desde el primer día (sin necesidad de backfill futuro)
-        if (Number(business.initialCapital) > 0) {
-            await prisma.cashMovement.create({
+        // Negocio + cuenta por defecto + movimiento de capital inicial deben ser ATÓMICOS.
+        // Si el movimiento fallara fuera de transacción, quedaría un negocio con saldo pero sin
+        // su 'initial_capital', forzando el offset de reconciliación de forma permanente.
+        const business = await prisma.$transaction(async (tx) => {
+            const biz = await tx.business.create({
                 data: {
-                    businessId:   business.id,
-                    type:         'initial_capital',
-                    amount:       business.initialCapital,
-                    balanceAfter: business.initialCapital,
-                    description:  'Capital inicial',
-                    paymentMethod: defaultAccount.name,
-                    accountId:    defaultAccount.id,
-                    createdById:  requestingUserId,
-                    createdAt:    business.createdAt,
+                    name: data.name,
+                    description: data.description,
+                    initialCapital: data.initialCapital || 0,
+                    currentBalance: data.initialCapital || 0,
+                    createdById: requestingUserId,
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    initialCapital: true,
+                    currentBalance: true,
+                    createdById: true,
+                    createdAt: true,
+                    updatedAt: true,
                 },
             });
-        }
+
+            // Crear cuenta "Efectivo" por defecto del nuevo negocio
+            const defaultAccount = await tx.paymentAccount.create({
+                data: { businessId: biz.id, name: 'Efectivo', type: 'cash', isDefault: true, isDisbursementDefault: true, createdById: requestingUserId },
+            });
+
+            // Registrar el capital inicial como movimiento contable para que el desglose por
+            // cuenta sea consistente desde el primer día (sin necesidad de backfill futuro)
+            if (Number(biz.initialCapital) > 0) {
+                await tx.cashMovement.create({
+                    data: {
+                        businessId:   biz.id,
+                        type:         'initial_capital',
+                        amount:       biz.initialCapital,
+                        balanceAfter: biz.initialCapital,
+                        description:  'Capital inicial',
+                        paymentMethod: defaultAccount.name,
+                        accountId:    defaultAccount.id,
+                        createdById:  requestingUserId,
+                        createdAt:    biz.createdAt,
+                    },
+                });
+            }
+
+            return biz;
+        });
 
         // Auditar
         await prisma.auditLog.create({

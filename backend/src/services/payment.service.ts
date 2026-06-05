@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { Prisma, UserRole } from '@prisma/client';
+import { bogotaStartOfDay, bogotaEndOfDay } from '../utils/dates';
 
 interface PaymentFilters {
     businessId?: string;
@@ -34,8 +35,8 @@ export class PaymentService {
             ...(filters.startDate || filters.endDate
                 ? {
                     paymentDate: {
-                        ...(filters.startDate && { gte: new Date(filters.startDate) }),
-                        ...(filters.endDate && { lte: new Date(filters.endDate) }),
+                        ...(filters.startDate && { gte: bogotaStartOfDay(filters.startDate) }),
+                        ...(filters.endDate && { lte: bogotaEndOfDay(filters.endDate) }),
                     },
                 }
                 : {}),

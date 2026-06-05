@@ -1,5 +1,6 @@
 import { UserRole } from '@prisma/client';
 import prisma from '../config/database';
+import { bogotaStartOfDay, bogotaEndOfDay } from '../utils/dates';
 
 interface DashboardStatsParams {
     businessId: string;
@@ -65,10 +66,10 @@ export class DashboardService {
 
         await this.validateAccess(businessId, userId, role);
 
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        // Asegurar que endDate incluya todo el día
-        end.setHours(23, 59, 59, 999);
+        // Rango anclado a Bogotá (UTC-5): startDate "YYYY-MM-DD" se lee como 00:00-05:00 y
+        // endDate como 23:59:59.999-05:00, evitando incluir ~5h del día previo/siguiente.
+        const start = bogotaStartOfDay(startDate);
+        const end = bogotaEndOfDay(endDate);
 
         // Calcular hoy en Bogotá
         const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
