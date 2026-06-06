@@ -219,12 +219,12 @@ function SummaryCard({ title, value, icon, variant, isLoading }: { title: string
         warning: 'bg-amber-50 border-amber-100 text-amber-700'
     };
     return (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm transition-all hover:shadow-md">
+        <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-5 shadow-sm transition-all hover:shadow-md min-w-0">
             <div className={`p-2 rounded-lg w-fit ${variants[variant]}`}>
                 {icon}
             </div>
-            <p className="text-sm font-medium text-gray-500 mt-4">{title}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{isLoading ? '...' : value}</p>
+            <p className="text-sm font-medium text-gray-500 mt-4 truncate">{title}</p>
+            <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1 truncate" title={isLoading ? undefined : value}>{isLoading ? '...' : value}</p>
         </div>
     );
 }

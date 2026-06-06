@@ -108,9 +108,9 @@ export default function AccountsManagement() {
                     const meta = typeMeta[a.type] || typeMeta.bank;
                     const Icon = meta.icon;
                     return (
-                        <div key={a.id} className="flex items-center gap-3 p-3">
-                            <div className="p-2 rounded-lg bg-gray-100 text-gray-600"><Icon size={18} /></div>
-                            <div className="flex-1 min-w-0">
+                        <div key={a.id} className="flex flex-wrap items-start gap-x-3 gap-y-2 p-3">
+                            <div className="p-2 rounded-lg bg-gray-100 text-gray-600 shrink-0"><Icon size={18} /></div>
+                            <div className="flex-1 min-w-[110px]">
                                 {editing?.id === a.id ? (
                                     <div className="flex gap-2">
                                         <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm" />
@@ -134,35 +134,37 @@ export default function AccountsManagement() {
                                     </div>
                                 )}
                             </div>
-                            <div className="text-right">
-                                <div className={`font-bold ${a.balance < 0 ? 'text-rose-600' : 'text-gray-900'}`}>{formatMoney(a.balance)}</div>
-                            </div>
-                            {editing?.id !== a.id && (
-                                <div className="flex items-center gap-1">
-                                    {!a.isDefault && (
-                                        <button
-                                            onClick={() => setDefaultMut.mutate({ id: a.id, kind: 'payment' })}
-                                            className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded"
-                                            title="Marcar como predeterminada para pagos"
-                                        >
-                                            <Banknote size={15} />
-                                        </button>
-                                    )}
-                                    {!a.isDisbursementDefault && (
-                                        <button
-                                            onClick={() => setDefaultMut.mutate({ id: a.id, kind: 'disbursement' })}
-                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                                            title="Marcar como predeterminada para créditos"
-                                        >
-                                            <CreditCard size={15} />
-                                        </button>
-                                    )}
-                                    <button onClick={() => setEditing({ id: a.id, name: a.name })} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded" title="Editar"><Pencil size={15} /></button>
-                                    {!a.isDefault && !a.isDisbursementDefault && (
-                                        <button onClick={() => setDeleting(a)} className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded" title="Eliminar"><Trash2 size={15} /></button>
-                                    )}
+                            <div className="flex items-start gap-3 ml-auto shrink-0">
+                                <div className="text-right shrink-0 pt-1.5">
+                                    <div className={`font-bold whitespace-nowrap ${a.balance < 0 ? 'text-rose-600' : 'text-gray-900'}`}>{formatMoney(a.balance)}</div>
                                 </div>
-                            )}
+                                {editing?.id !== a.id && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        {!a.isDefault && (
+                                            <button
+                                                onClick={() => setDefaultMut.mutate({ id: a.id, kind: 'payment' })}
+                                                className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded"
+                                                title="Marcar como predeterminada para pagos"
+                                            >
+                                                <Banknote size={15} />
+                                            </button>
+                                        )}
+                                        {!a.isDisbursementDefault && (
+                                            <button
+                                                onClick={() => setDefaultMut.mutate({ id: a.id, kind: 'disbursement' })}
+                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                                title="Marcar como predeterminada para créditos"
+                                            >
+                                                <CreditCard size={15} />
+                                            </button>
+                                        )}
+                                        <button onClick={() => setEditing({ id: a.id, name: a.name })} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded" title="Editar"><Pencil size={15} /></button>
+                                        {!a.isDefault && !a.isDisbursementDefault && (
+                                            <button onClick={() => setDeleting(a)} className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded" title="Eliminar"><Trash2 size={15} /></button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     );
                 })}
