@@ -552,7 +552,7 @@ export class AccountService {
             const splitsCuentas = movs.map(m => ({
                 cuenta:      m.account?.name ?? '—',
                 monto:       Math.round(Number(m.amount) * 100) / 100,
-                descripcion: normalizeDisbDesc((m as any).description),
+                descripcion: normalizeDisbDesc(m.description),
             }));
             return {
                 id:         first.relatedCreditId ?? first.id,

@@ -3,6 +3,20 @@ import { validationResult } from 'express-validator';
 import { UserRole } from '@prisma/client';
 import { creditService } from '../services/credit.service';
 import { paymentService } from '../services/payment.service';
+import { AppError } from '../utils/AppError';
+
+function handlePaymentError(res: Response, error: any, fallback: string) {
+    if (error instanceof AppError) {
+        return res.status(error.statusCode).json({
+            error: error.message,
+            code: error.code,
+            ...(error.details && { details: error.details }),
+        });
+    }
+    const msg = error.message || fallback;
+    const status = msg.includes('permiso') ? 403 : msg.includes('excede') ? 409 : 400;
+    return res.status(status).json({ error: msg });
+}
 
 export const registerPayment = async (req: Request, res: Response) => {
     try {
@@ -32,9 +46,7 @@ export const registerPayment = async (req: Request, res: Response) => {
         return res.status(201).json(payment);
     } catch (error: any) {
         console.error('Error registrando pago:', error);
-        const message = error.message || 'Error al registrar pago';
-        const status = message.includes('permiso') ? 403 : message.includes('excede') ? 409 : 400;
-        return res.status(status).json({ error: message });
+        return handlePaymentError(res, error, 'Error al registrar pago');
     }
 };
 
@@ -56,8 +68,6 @@ export const listPayments = async (req: Request, res: Response) => {
         const payments = await paymentService.listPayments(userId, role, filters);
         return res.json(payments);
     } catch (error: any) {
-        const message = error.message || 'Error al obtener pagos';
-        const status = message.includes('permiso') ? 403 : 400;
-        return res.status(status).json({ error: message });
+        return handlePaymentError(res, error, 'Error al obtener pagos');
     }
 };
