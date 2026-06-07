@@ -17,6 +17,7 @@ export interface CreateCreditPayload extends SimulateCreditPayload {
     businessId?: string;
     accountId?: string;
     splits?: { accountId: string; amount: number }[];
+    financings?: { creditId: string; scheduleId?: string; amount: number }[];
 }
 
 export interface CreditSimulation {
@@ -56,7 +57,7 @@ export const createCredit = async (payload: CreateCreditPayload): Promise<Credit
     return res.data;
 };
 
-export const getCredits = async (params?: { businessId?: string; status?: string; dueToday?: boolean; overdue?: boolean }): Promise<Credit[]> => {
+export const getCredits = async (params?: { businessId?: string; status?: string; dueToday?: boolean; overdue?: boolean; clientId?: string }): Promise<Credit[]> => {
     const res = await api.get('/credits', { params });
     return res.data;
 };

@@ -66,6 +66,21 @@ export const createCreditValidators = [
     body('splits.*.amount')
         .isFloat({ gt: 0 })
         .withMessage('splits: monto debe ser mayor a 0'),
+    // Financiamientos cruzados (opcional)
+    body('financings')
+        .optional({ nullable: true })
+        .isArray()
+        .withMessage('financings debe ser un arreglo'),
+    body('financings.*.creditId')
+        .isUUID()
+        .withMessage('financings: creditId inválido (UUID requerido)'),
+    body('financings.*.scheduleId')
+        .optional({ nullable: true, checkFalsy: true })
+        .isUUID()
+        .withMessage('financings: scheduleId inválido (UUID requerido)'),
+    body('financings.*.amount')
+        .isFloat({ gt: 0 })
+        .withMessage('financings: monto debe ser mayor a 0'),
     ...simulateCreditValidators,
 ];
 
@@ -74,6 +89,10 @@ export const listCreditValidators = [
         .optional({ nullable: true, checkFalsy: true })
         .isUUID()
         .withMessage('businessId inválido'),
+    query('clientId')
+        .optional({ nullable: true, checkFalsy: true })
+        .isUUID()
+        .withMessage('clientId inválido'),
     query('status')
         .optional()
         .isIn(['active', 'paid', 'overdue', 'cancelled'])

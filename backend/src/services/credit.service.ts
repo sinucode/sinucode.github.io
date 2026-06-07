@@ -4,6 +4,7 @@ import { calculateCreditPlan, calculateEndDate } from '../utils/calculations';
 import { normalizeToNoon } from '../utils/dates';
 import { accountService } from './account.service';
 import { getHolidayDatesFromDB } from './holiday.service';
+import logger from '../utils/logger';
 
 export type PaymentFrequency = 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly';
 
@@ -20,10 +21,14 @@ interface CreateCreditInput {
     excludedWeekdays?: number[];
     excludeHolidays?: boolean;
     customRounding?: boolean;
+    /** Financiamientos cruzados: cada entrada redirige un pago real de otro crédito
+     *  para cubrir parte del desembolso de este crédito nuevo. */
+    financings?: { creditId: string; scheduleId?: string; amount: number }[];
 }
 
 interface ListFilters {
     businessId?: string;
+    clientId?: string;
     status?: string;
     dueToday?: boolean;
     overdue?: boolean;
@@ -121,6 +126,158 @@ export class CreditService {
         });
         if (!business) throw new Error('Negocio no encontrado');
 
+        // ── Guard de idempotencia ante reintentos por respuesta perdida ──────────────
+        // Un net::ERR_ABORTED / timeout puede hacer que la transacción del servidor COMMITEE
+        // pero la respuesta HTTP nunca llegue al navegador. El usuario, viendo "No se pudo
+        // conectar con el servidor", puede reenviar el mismo formulario. Sin este guard eso
+        // crearía un SEGUNDO crédito duplicado y, si trae financings, una SEGUNDA aplicación
+        // real de pago cruzado sobre el crédito fuente (descuadre de cuentas difícil de
+        // detectar y revertir). Detectamos el reintento por una huella heurística — mismo
+        // usuario + cliente + negocio + monto + tasa + plazo + frecuencia + fecha de inicio,
+        // creado hace ≤3 minutos — y devolvemos el crédito ya existente sin crear nada nuevo
+        // (operación idempotente: cero escrituras, cero pagos cruzados duplicados).
+        const dupWindowStart = new Date(Date.now() - 3 * 60 * 1000);
+        const possibleDuplicate = await prisma.credit.findFirst({
+            where: {
+                businessId: targetBusinessId,
+                clientId: data.clientId,
+                createdById: userId,
+                amount: new Prisma.Decimal(data.amount),
+                interestRate: new Prisma.Decimal(data.interestRate),
+                termDays: data.termDays,
+                paymentFrequency: data.frequency,
+                startDate: start,
+                // Si el "duplicado" fue cancelado en el ínterin (p. ej. el usuario lo creó y
+                // luego lo canceló por error de caja), no es el resultado de un reintento útil:
+                // no lo devolvemos como si fuera el crédito recién solicitado.
+                status: { not: 'cancelled' },
+                createdAt: { gte: dupWindowStart },
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+        });
+        if (possibleDuplicate) {
+            logger.warn(
+                `createCredit: posible reintento duplicado para cliente ${data.clientId} ` +
+                `(crédito existente ${possibleDuplicate.id}); se devuelve el existente sin crear uno nuevo`
+            );
+            return this.getCreditById(possibleDuplicate.id, userId, role);
+        }
+
+        // ── Paso 1: Validar y calcular financiamientos cruzados ──────────────────────
+        // Cada financing redirige un pago real de otro crédito activo/en mora para
+        // cubrir parte del desembolso de este crédito nuevo. El efecto neto en caja
+        // es CERO para la parte financiada: el payment_received (+) y el
+        // loan_disbursement (−) se generan en la misma cuenta.
+        interface ValidatedFinancing {
+            creditId: string;
+            scheduleId?: string;
+            amount: number;
+            clientName: string;  // nombre del cliente del crédito de origen (para auditoría)
+        }
+        const validatedFinancings: ValidatedFinancing[] = [];
+        let financedSum = 0;
+
+        if (data.financings && data.financings.length > 0) {
+            // No se permiten pagos cruzados con fecha futura (misma protección que registerPayment)
+            if (start > normalizeToNoon()) {
+                throw new Error('No se pueden registrar pagos cruzados con una fecha de inicio futura');
+            }
+
+            // Acumuladores para validar que no se supere el saldo del crédito fuente
+            // ni el pendiente de cada cuota fuente.
+            const amountByCreditId = new Map<string, number>();
+            const amountByScheduleId = new Map<string, number>();
+
+            for (const f of data.financings) {
+                if (!f.amount || f.amount <= 0) {
+                    throw new Error('El monto de cada financiamiento debe ser mayor a 0');
+                }
+
+                // Cargar el crédito fuente con su cliente y cuotas
+                const sourceCreditRaw = await prisma.credit.findUnique({
+                    where: { id: f.creditId },
+                    select: {
+                        id: true,
+                        businessId: true,
+                        status: true,
+                        remainingBalance: true,
+                        client: { select: { fullName: true } },
+                        paymentSchedule: f.scheduleId
+                            ? { where: { id: f.scheduleId }, select: { id: true, scheduledAmount: true, paidAmount: true } }
+                            : false,
+                    },
+                });
+
+                if (!sourceCreditRaw) {
+                    throw new Error(`Crédito fuente de financiamiento no encontrado: ${f.creditId}`);
+                }
+                if (sourceCreditRaw.businessId !== targetBusinessId) {
+                    throw new Error(`El crédito fuente ${f.creditId} no pertenece al negocio seleccionado`);
+                }
+                // Solo se rechazan paid y cancelled; active y overdue admiten pagos
+                if (sourceCreditRaw.status === 'paid') {
+                    throw new Error(`El crédito ${f.creditId} ya está pagado y no puede recibir pagos adicionales`);
+                }
+                if (sourceCreditRaw.status === 'cancelled') {
+                    throw new Error(`El crédito ${f.creditId} está cancelado y no puede recibir pagos`);
+                }
+
+                // Validar que la suma acumulada para este creditId no supere su remainingBalance
+                const prevForCredit = amountByCreditId.get(f.creditId) ?? 0;
+                const totalForCredit = prevForCredit + f.amount;
+                const remainingOfCredit = Number(sourceCreditRaw.remainingBalance);
+                if (totalForCredit > remainingOfCredit + 0.01) {
+                    throw new Error(
+                        `La suma de financiamientos para el crédito ${f.creditId.slice(0, 8)} ` +
+                        `($${Math.ceil(totalForCredit).toLocaleString('es-CO')}) supera el saldo pendiente ` +
+                        `($${Math.ceil(remainingOfCredit).toLocaleString('es-CO')})`
+                    );
+                }
+                amountByCreditId.set(f.creditId, totalForCredit);
+
+                // Si trae scheduleId: validar que pertenece al crédito y que el monto no excede el pendiente
+                if (f.scheduleId) {
+                    const scheduleRows = (sourceCreditRaw.paymentSchedule as { id: string; scheduledAmount: Prisma.Decimal; paidAmount: Prisma.Decimal }[] | false);
+                    const targetSchedule = scheduleRows && scheduleRows.length > 0 ? scheduleRows[0] : null;
+                    if (!targetSchedule) {
+                        throw new Error(`La cuota ${f.scheduleId} no pertenece al crédito ${f.creditId}`);
+                    }
+                    const schedulePending = Number(targetSchedule.scheduledAmount) - Number(targetSchedule.paidAmount);
+                    const prevForSchedule = amountByScheduleId.get(f.scheduleId) ?? 0;
+                    const totalForSchedule = prevForSchedule + f.amount;
+                    if (totalForSchedule > Math.ceil(schedulePending) + 0.01) {
+                        throw new Error(
+                            `La suma de financiamientos para la cuota ${f.scheduleId.slice(0, 8)} ` +
+                            `($${Math.ceil(totalForSchedule).toLocaleString('es-CO')}) supera el pendiente ` +
+                            `($${Math.ceil(schedulePending).toLocaleString('es-CO')})`
+                        );
+                    }
+                    amountByScheduleId.set(f.scheduleId, totalForSchedule);
+                }
+
+                validatedFinancings.push({
+                    creditId: f.creditId,
+                    scheduleId: f.scheduleId,
+                    amount: f.amount,
+                    clientName: sourceCreditRaw.client.fullName,
+                });
+                financedSum += f.amount;
+            }
+
+            // La suma de financiamientos no puede superar el monto del crédito nuevo
+            if (financedSum > data.amount + 0.01) {
+                throw new Error(
+                    `La suma de financiamientos ($${Math.ceil(financedSum).toLocaleString('es-CO')}) ` +
+                    `supera el monto del crédito ($${Math.ceil(data.amount).toLocaleString('es-CO')})`
+                );
+            }
+        }
+
+        // cashNeeded: parte del desembolso que realmente sale de caja
+        // Si financedSum === data.amount → cashNeeded === 0 (financiamiento 100%)
+        const cashNeeded = data.amount - financedSum;
+
         // Resolver cuenta de desembolso sin efectos secundarios (solo lectura).
         // ensureDefaultAccount (que escribe en DB) se difiere hasta después de todas
         // las validaciones para no crear una cuenta huérfana si el saldo es insuficiente.
@@ -155,66 +312,88 @@ export class CreditService {
             }
         }
 
-        // Validar que el saldo TOTAL del negocio alcanza (error estructurado → abre modal de recarga)
-        if (Number(business.currentBalance) < data.amount) {
-            const errBiz: any = new Error(
-                `Saldo insuficiente en caja. Disponible: $${Math.ceil(Number(business.currentBalance)).toLocaleString('es-CO')}, ` +
-                `se necesitan $${Math.ceil(data.amount).toLocaleString('es-CO')}`
-            );
-            errBiz.code    = 'INSUFFICIENT_BUSINESS_BALANCE';
-            errBiz.details = {
-                accountId:   disbursementAccountId ?? '',
-                accountName: disbursementAccountName,
-                available:   Number(business.currentBalance),
-                required:    data.amount,
-                scope:       'business',
-            };
-            throw errBiz;
+        // Validar saldo de caja solo si cashNeeded > 0
+        if (cashNeeded > 0) {
+            // Validar que el saldo TOTAL del negocio alcanza (error estructurado → abre modal de recarga)
+            if (Number(business.currentBalance) < cashNeeded) {
+                const errBiz: any = new Error(
+                    `Saldo insuficiente en caja. Disponible: $${Math.ceil(Number(business.currentBalance)).toLocaleString('es-CO')}, ` +
+                    `se necesitan $${Math.ceil(cashNeeded).toLocaleString('es-CO')}`
+                );
+                errBiz.code    = 'INSUFFICIENT_BUSINESS_BALANCE';
+                errBiz.details = {
+                    accountId:   disbursementAccountId ?? '',
+                    accountName: disbursementAccountName,
+                    available:   Number(business.currentBalance),
+                    required:    cashNeeded,
+                    scope:       'business',
+                };
+                throw errBiz;
+            }
+
+            // Crear la cuenta por defecto solo si NO vienen splits explícitos
+            if (needsDefaultAccount && !(data.splits && data.splits.length > 0)) {
+                disbursementAccountId = await accountService.ensureDefaultAccount(targetBusinessId, userId);
+            }
+
+            // Validar saldo de la cuenta de desembolso
+            const { accounts: accBalances } = await accountService.getBalances(targetBusinessId, userId, role);
+            const accBalance = accBalances.find(a => a.id === disbursementAccountId);
+            const available = accBalance?.balance ?? 0;
+            if (!data.splits?.length && available < cashNeeded) {
+                const err: any = new Error(`Saldo insuficiente en la cuenta "${disbursementAccountName}" ($${available.toLocaleString('es-CO')} disponible, se necesitan $${cashNeeded.toLocaleString('es-CO')})`);
+                err.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
+                err.details = { accountId: disbursementAccountId, accountName: disbursementAccountName, available, required: cashNeeded, scope: 'account' };
+                throw err;
+            }
+
+            // Validar splits si vienen
+            if (data.splits && data.splits.length > 0) {
+                // 1. Validar IDs duplicados
+                const uniqueIds = new Set(data.splits.map(s => s.accountId));
+                if (uniqueIds.size !== data.splits.length) {
+                    throw new Error('El reparto no puede incluir la misma cuenta dos veces');
+                }
+                // 2. Validar que la suma cuadra con cashNeeded (la parte que sale de caja)
+                const splitSum = data.splits.reduce((s, e) => s + e.amount, 0);
+                if (Math.abs(splitSum - cashNeeded) > 1) {
+                    throw new Error(`El reparto de cuentas suma $${Math.ceil(splitSum).toLocaleString('es-CO')} pero el monto neto de caja es $${Math.ceil(cashNeeded).toLocaleString('es-CO')}`);
+                }
+                // 3. Validar cada cuenta y su saldo
+                const { accounts: accBalances2 } = await accountService.getBalances(targetBusinessId, userId, role);
+                for (const split of data.splits) {
+                    const acc = await prisma.paymentAccount.findFirst({
+                        where: { id: split.accountId, businessId: targetBusinessId, active: true },
+                        select: { id: true, name: true },
+                    });
+                    if (!acc) throw new Error(`Cuenta de desembolso no válida: ${split.accountId}`);
+                    const accBal = accBalances2.find(a => a.id === split.accountId)?.balance ?? 0;
+                    if (accBal < split.amount) {
+                        const errSplit: any = new Error(`Saldo insuficiente en la cuenta "${acc.name}" ($${Math.ceil(accBal).toLocaleString('es-CO')} disponible, se necesitan $${Math.ceil(split.amount).toLocaleString('es-CO')})`);
+                        errSplit.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
+                        errSplit.details = { accountId: acc.id, accountName: acc.name, available: accBal, required: split.amount, scope: 'account' };
+                        throw errSplit;
+                    }
+                }
+            }
+        } else {
+            // cashNeeded === 0: financiamiento 100% — no se exige saldo de cuenta ni de negocio.
+            // Aún así se necesita una cuenta válida para anclar los loan_disbursement financiados.
+            if (needsDefaultAccount && !(data.splits && data.splits.length > 0)) {
+                disbursementAccountId = await accountService.ensureDefaultAccount(targetBusinessId, userId);
+            }
         }
 
-        // Crear la cuenta por defecto solo si NO vienen splits explícitos
-        if (needsDefaultAccount && !(data.splits && data.splits.length > 0)) {
-            disbursementAccountId = await accountService.ensureDefaultAccount(targetBusinessId, userId);
-        }
-
-        // Validar saldo de la cuenta de desembolso
-        const { accounts: accBalances } = await accountService.getBalances(targetBusinessId, userId, role);
-        const accBalance = accBalances.find(a => a.id === disbursementAccountId);
-        const available = accBalance?.balance ?? 0;
-        if (!data.splits?.length && available < data.amount) {
-            const err: any = new Error(`Saldo insuficiente en la cuenta "${disbursementAccountName}" ($${available.toLocaleString('es-CO')} disponible, se necesitan $${data.amount.toLocaleString('es-CO')})`);
-            err.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
-            err.details = { accountId: disbursementAccountId, accountName: disbursementAccountName, available, required: data.amount, scope: 'account' };
-            throw err;
-        }
-
-        // Validar splits si vienen
+        // Resolver resolvedSplits solo si cashNeeded > 0 y vienen splits
         const resolvedSplits: { accountId: string; accountName: string; amount: number }[] = [];
-        if (data.splits && data.splits.length > 0) {
-            // 1. Validar IDs duplicados
-            const uniqueIds = new Set(data.splits.map(s => s.accountId));
-            if (uniqueIds.size !== data.splits.length) {
-                throw new Error('El reparto no puede incluir la misma cuenta dos veces');
-            }
-            // 2. Validar que la suma cuadra (tolerancia 0: COP son enteros)
-            const splitSum = data.splits.reduce((s, e) => s + e.amount, 0);
-            if (Math.abs(splitSum - data.amount) > 1) {
-                throw new Error(`El reparto de cuentas suma $${Math.ceil(splitSum).toLocaleString('es-CO')} pero el monto del crédito es $${Math.ceil(data.amount).toLocaleString('es-CO')}`);
-            }
-            // 3. Validar cada cuenta y su saldo
+        if (cashNeeded > 0 && data.splits && data.splits.length > 0) {
             for (const split of data.splits) {
                 const acc = await prisma.paymentAccount.findFirst({
                     where: { id: split.accountId, businessId: targetBusinessId, active: true },
                     select: { id: true, name: true },
                 });
                 if (!acc) throw new Error(`Cuenta de desembolso no válida: ${split.accountId}`);
-                const accBal = accBalances.find(a => a.id === split.accountId)?.balance ?? 0;
-                if (accBal < split.amount) {
-                    const errSplit: any = new Error(`Saldo insuficiente en la cuenta "${acc.name}" ($${Math.ceil(accBal).toLocaleString('es-CO')} disponible, se necesitan $${Math.ceil(split.amount).toLocaleString('es-CO')})`);
-                    errSplit.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
-                    errSplit.details = { accountId: acc.id, accountName: acc.name, available: accBal, required: split.amount, scope: 'account' };
-                    throw errSplit;
-                }
+                // Saldo ya fue validado arriba; solo necesitamos el nombre
                 resolvedSplits.push({ accountId: acc.id, accountName: acc.name, amount: split.amount });
             }
         }
@@ -222,6 +401,78 @@ export class CreditService {
         const simulation = await this.simulateCredit(data);
 
         const result = await prisma.$transaction(async (tx) => {
+            // Bloquear el día antes de cualquier escritura (aplica también a pagos cruzados)
+            if (validatedFinancings.length > 0) {
+                await accountService.assertDayOpen(targetBusinessId, start);
+            }
+
+            // ── Revalidar financiamientos dentro de la tx (mitigación TOCTOU) ─────
+            // La validación previa se hizo con el cliente prisma global. Si entre esa
+            // lectura y ahora alguien registró un pago sobre el crédito fuente, los
+            // valores habrán cambiado. Revalidamos con `tx` para que, si algo cambió,
+            // la transacción haga rollback con un mensaje claro en vez de fallar
+            // dentro de applyPaymentTx con un mensaje de "excessAction" que no aplica.
+            {
+                const txAmountByCreditId = new Map<string, number>();
+                const txAmountByScheduleId = new Map<string, number>();
+                for (const f of validatedFinancings) {
+                    const src = await tx.credit.findUnique({
+                        where: { id: f.creditId },
+                        select: {
+                            status: true,
+                            remainingBalance: true,
+                            paymentSchedule: f.scheduleId
+                                ? { where: { id: f.scheduleId }, select: { id: true, scheduledAmount: true, paidAmount: true } }
+                                : false,
+                        },
+                    });
+                    if (!src) throw new Error(`El crédito fuente ${f.creditId.slice(0, 8)} ya no existe. Intenta de nuevo.`);
+                    if (src.status === 'paid' || src.status === 'cancelled') {
+                        throw new Error(`El crédito fuente ${f.creditId.slice(0, 8)} cambió de estado mientras se procesaba la operación. Intenta de nuevo.`);
+                    }
+                    const prevCredit = txAmountByCreditId.get(f.creditId) ?? 0;
+                    const totalCredit = prevCredit + f.amount;
+                    if (totalCredit > Number(src.remainingBalance) + 0.01) {
+                        throw new Error(`El crédito fuente ${f.creditId.slice(0, 8)} cambió de estado mientras se procesaba la operación. Intenta de nuevo.`);
+                    }
+                    txAmountByCreditId.set(f.creditId, totalCredit);
+                    if (f.scheduleId) {
+                        const scheduleRows = src.paymentSchedule as { id: string; scheduledAmount: Prisma.Decimal; paidAmount: Prisma.Decimal }[] | false;
+                        const sched = scheduleRows && scheduleRows[0];
+                        if (!sched) throw new Error(`La cuota ${f.scheduleId.slice(0, 8)} ya no existe en el crédito fuente. Intenta de nuevo.`);
+                        const pending = Number(sched.scheduledAmount) - Number(sched.paidAmount);
+                        const prevSched = txAmountByScheduleId.get(f.scheduleId) ?? 0;
+                        const totalSched = prevSched + f.amount;
+                        if (totalSched > Math.ceil(pending) + 0.01) {
+                            throw new Error(`El crédito fuente ${f.creditId.slice(0, 8)} cambió de estado mientras se procesaba la operación. Intenta de nuevo.`);
+                        }
+                        txAmountByScheduleId.set(f.scheduleId, totalSched);
+                    }
+                }
+            }
+
+            // ── Aplicar pagos cruzados ANTES de crear el crédito ──────────────────
+            // Cada financing genera un Payment real + CashMovement payment_received en la
+            // cuenta de desembolso. El loan_disbursement correspondiente se crea después,
+            // en la misma cuenta, para que el efecto neto sea CERO en esa cuenta.
+            // NOTA MVP: si vienen financings Y splits a la vez, los pagos cruzados se
+            // aplican siempre contra la cuenta de desembolso principal (disbursementAccountId)
+            // para garantizar la cancelación exacta; los splits solo aplican a cashNeeded.
+            for (const f of validatedFinancings) {
+                await this.applyPaymentTx(tx, {
+                    creditId:      f.creditId,
+                    amount:        f.amount,
+                    payDate:       start,
+                    scheduleId:    f.scheduleId,
+                    accountId:     disbursementAccountId ?? undefined,
+                    paymentMethod: disbursementAccountName,
+                    notes:         `Pago cruzado: financia desembolso de crédito a ${client.fullName}`,
+                    userId,
+                    role,
+                    ipAddress,
+                });
+            }
+
             const credit = await tx.credit.create({
                 data: {
                     businessId: targetBusinessId,
@@ -258,46 +509,75 @@ export class CreditService {
 
             // Re-leer el balance dentro de la tx para evitar TOCTOU: otra operación
             // concurrente pudo modificar currentBalance entre la validación previa y este write.
+            // IMPORTANTE: si hubo financings, applyPaymentTx ya habrá incrementado
+            // currentBalance en +financedSum (por los payment_received). Por tanto,
+            // balanceAtTx = balanceOriginal + financedSum. El desembolso es por data.amount
+            // completo → newBalance = balanceAtTx − data.amount = balanceOriginal − cashNeeded.
+            // Esto es correcto: solo sale de caja el neto real.
             const { currentBalance: balanceAtTx } = await tx.business.findUniqueOrThrow({
                 where: { id: targetBusinessId },
                 select: { currentBalance: true },
             });
             const newBalance = new Prisma.Decimal(balanceAtTx).minus(data.amount);
 
-            if (resolvedSplits.length > 0) {
-                // Multi-cuenta: un loan_disbursement por split con balanceAfter acumulado
-                let runningBalance = new Prisma.Decimal(balanceAtTx);
-                for (const split of resolvedSplits) {
-                    runningBalance = runningBalance.minus(split.amount);
-                    await tx.cashMovement.create({
-                        data: {
-                            businessId: targetBusinessId,
-                            type: 'loan_disbursement',
-                            amount: new Prisma.Decimal(split.amount),
-                            balanceAfter: runningBalance,
-                            description: `Desembolso crédito a ${client.fullName}`,
-                            relatedCreditId: credit.id,
-                            paymentMethod: split.accountName,
-                            accountId: split.accountId,
-                            createdById: userId,
-                        },
-                    });
-                }
-            } else {
-                // Una cuenta (ruta original)
+            // Running balance para los loan_disbursement que vamos a crear
+            let runningBalance = new Prisma.Decimal(balanceAtTx);
+
+            // ── Loan disbursements por financiamientos cruzados ───────────────────
+            for (const f of validatedFinancings) {
+                runningBalance = runningBalance.minus(f.amount);
                 await tx.cashMovement.create({
                     data: {
                         businessId: targetBusinessId,
                         type: 'loan_disbursement',
-                        amount: new Prisma.Decimal(data.amount),
-                        balanceAfter: newBalance,
-                        description: `Desembolso crédito a ${client.fullName}`,
+                        amount: new Prisma.Decimal(f.amount),
+                        balanceAfter: runningBalance,
+                        description: `Desembolso crédito a ${client.fullName} (financiado con pago de ${f.clientName})`,
                         relatedCreditId: credit.id,
                         paymentMethod: disbursementAccountName,
                         accountId: disbursementAccountId,
                         createdById: userId,
                     },
                 });
+            }
+
+            // ── Loan disbursements por la parte que sale de caja (cashNeeded) ─────
+            if (cashNeeded > 0) {
+                if (resolvedSplits.length > 0) {
+                    // Multi-cuenta: un loan_disbursement por split con balanceAfter acumulado
+                    for (const split of resolvedSplits) {
+                        runningBalance = runningBalance.minus(split.amount);
+                        await tx.cashMovement.create({
+                            data: {
+                                businessId: targetBusinessId,
+                                type: 'loan_disbursement',
+                                amount: new Prisma.Decimal(split.amount),
+                                balanceAfter: runningBalance,
+                                description: `Desembolso crédito a ${client.fullName}`,
+                                relatedCreditId: credit.id,
+                                paymentMethod: split.accountName,
+                                accountId: split.accountId,
+                                createdById: userId,
+                            },
+                        });
+                    }
+                } else {
+                    // Una cuenta (ruta original para la parte neta de caja)
+                    runningBalance = runningBalance.minus(cashNeeded);
+                    await tx.cashMovement.create({
+                        data: {
+                            businessId: targetBusinessId,
+                            type: 'loan_disbursement',
+                            amount: new Prisma.Decimal(cashNeeded),
+                            balanceAfter: runningBalance,
+                            description: `Desembolso crédito a ${client.fullName}`,
+                            relatedCreditId: credit.id,
+                            paymentMethod: disbursementAccountName,
+                            accountId: disbursementAccountId,
+                            createdById: userId,
+                        },
+                    });
+                }
             }
 
             await tx.business.update({
@@ -311,12 +591,28 @@ export class CreditService {
                     action: 'CREATE_CREDIT',
                     description: `Creó crédito para ${client.fullName} por ${data.amount}`,
                     entityType: 'Credit', entityId: credit.id,
-                    newValues: { credit, scheduleCount: simulation.paymentPlan.length },
+                    newValues: {
+                        credit,
+                        scheduleCount: simulation.paymentPlan.length,
+                        ...(validatedFinancings.length > 0 && {
+                            financings: validatedFinancings.map(f => ({
+                                creditId:   f.creditId,
+                                clientName: f.clientName,
+                                scheduleId: f.scheduleId ?? null,
+                                amount:     f.amount,
+                            })),
+                        }),
+                    },
                     ipAddress,
                 },
             });
 
             return credit;
+        }, {
+            // Margen para conexiones cross-region / cold starts de serverless.
+            // Se sube a 10 s / 20 s para acomodar los N pagos cruzados dentro de la tx.
+            maxWait: 10000,
+            timeout: 20000,
         });
 
         return this.getCreditById(result.id, userId, role);
@@ -334,6 +630,7 @@ export class CreditService {
 
         const where: Prisma.CreditWhereInput = {
             ...(businessId && { businessId }),
+            ...(filters.clientId && { clientId: filters.clientId }),
             // Excluir cancelados por defecto; si se pasa status explícito se respeta
             ...(filters.status
                 ? { status: filters.status as any }
@@ -395,6 +692,345 @@ export class CreditService {
         return credit;
     }
 
+    /**
+     * Lógica reutilizable de aplicación de pago (cuerpo extraído de registerPayment).
+     * Debe llamarse DENTRO de una $transaction existente (`tx`).
+     * Aplica el pago sobre el crédito indicado, actualiza cuotas, saldo del crédito,
+     * saldo del negocio y genera los CashMovement correspondientes.
+     *
+     * El llamador es responsable de garantizar, ANTES de invocar este método, que:
+     *   1. La fecha de pago no es futura (validación anti-fecha-futura).
+     *   2. El día está abierto (`assertDayOpen`).
+     * Ambas condiciones deben cumplirse antes de las escrituras, ya sea fuera de la
+     * transacción (como hace `registerPayment`) o al inicio de la propia transacción
+     * (como hace `createCredit`, que ejecuta `assertDayOpen` al inicio de su `$transaction`
+     * y valida la fecha futura antes de abrirla).
+     */
+    private async applyPaymentTx(
+        tx: Prisma.TransactionClient,
+        params: {
+            creditId: string;
+            amount: number;
+            payDate: Date;
+            paymentMethod?: string;
+            notes?: string;
+            scheduleId?: string;
+            accountId?: string;
+            excessAction?: 'next_cuota' | 'donate';
+            userId: string;
+            role: UserRole;
+            ipAddress?: string;
+        }
+    ) {
+        const { creditId, amount, payDate, paymentMethod, notes, scheduleId, accountId, excessAction, userId, role, ipAddress: _ipAddress } = params;
+
+        const credit = await tx.credit.findUnique({
+            where: { id: creditId },
+            include: {
+                client: true,
+                paymentSchedule: { orderBy: { dueDate: 'asc' } },
+                business: true,
+            },
+        });
+        if (!credit) throw new Error('Crédito no encontrado');
+
+        if (role !== 'super_admin') {
+            const userBusinessId = await this.getUserBusiness(userId);
+            if (!userBusinessId || userBusinessId !== credit.businessId) {
+                throw new Error('No tiene permisos para operar este crédito');
+            }
+        }
+
+        if (credit.status === 'paid') throw new Error('El crédito ya está pagado');
+        if (amount <= 0) throw new Error('El monto debe ser mayor a 0');
+
+        // Resolver la cuenta del pago: la enviada (si es válida y del negocio) o la cuenta por defecto
+        let effectiveAccountId: string | null = null;
+        if (accountId) {
+            const acc = await tx.paymentAccount.findFirst({ where: { id: accountId, businessId: credit.businessId, active: true }, select: { id: true } });
+            effectiveAccountId = acc?.id || null;
+        }
+        if (!effectiveAccountId) {
+            const def = await tx.paymentAccount.findFirst({ where: { businessId: credit.businessId, isDefault: true, active: true }, select: { id: true } })
+                || await tx.paymentAccount.findFirst({ where: { businessId: credit.businessId, active: true }, select: { id: true } });
+            effectiveAccountId = def?.id || null;
+        }
+
+        const currentRemaining = Number(credit.remainingBalance);
+
+        // appliedToCredit: monto que efectivamente reduce remainingBalance
+        // donationAmount: excedente que el usuario decidió donar (no reduce saldo)
+        let appliedToCredit = Math.min(amount, currentRemaining);
+        let donationAmount = 0;
+
+        if (scheduleId) {
+            // ── Pago con cuota específica ──
+            const target = credit.paymentSchedule.find((s) => s.id === scheduleId);
+            if (!target) throw new Error('La cuota seleccionada no pertenece a este crédito');
+            const scheduledPending = Number(target.scheduledAmount) - Number(target.paidAmount);
+            if (scheduledPending <= 0) throw new Error('La cuota ya está pagada');
+
+            // Usar Math.ceil como umbral de exceso para alinear con el redondeo del frontend.
+            // El frontend muestra y envía Math.ceil(scheduledPending); sin ceil aquí se detecta
+            // un falso excedente de $1 cuando el usuario paga exactamente la cuota mostrada.
+            const scheduledPendingCeil = Math.ceil(scheduledPending);
+            if (amount > scheduledPendingCeil + 0.01) {
+                // ── Hay sobrepago: requiere acción explícita ──
+                if (!excessAction) {
+                    throw new Error(
+                        `El pago de $${amount} supera el monto pendiente de la cuota ($${scheduledPendingCeil}). ` +
+                        `Debe especificar excessAction: "next_cuota" (abonar a la siguiente cuota) o "donate" (donar al negocio).`
+                    );
+                }
+
+                const excess = amount - scheduledPendingCeil;
+
+                // Marcar la cuota actual como pagada completa
+                await tx.paymentSchedule.update({
+                    where: { id: scheduleId },
+                    data: {
+                        paidAmount: target.scheduledAmount,
+                        status: 'paid',
+                    },
+                });
+
+                if (excessAction === 'donate') {
+                    // El excedente NO reduce saldo; queda como donación/ganancia para el negocio
+                    appliedToCredit = scheduledPending;
+                    donationAmount = excess;
+                } else if (excessAction === 'next_cuota') {
+                    // Aplicar el excedente en cascada a las cuotas siguientes (en orden de fecha)
+                    // hasta agotarlo. Esto evita descuadre entre el saldo y el schedule cuando el
+                    // excedente supera la capacidad de una sola cuota.
+                    const sortedByDate = [...credit.paymentSchedule].sort(
+                        (a, b) => a.dueDate.getTime() - b.dueDate.getTime()
+                    );
+                    const targetIdx = sortedByDate.findIndex(s => s.id === scheduleId);
+                    let restante = excess;
+                    for (const s of sortedByDate.slice(targetIdx + 1)) {
+                        if (restante <= 0.01) break;
+                        const pendiente = Number(s.scheduledAmount) - Number(s.paidAmount);
+                        if (pendiente <= 0) continue;
+                        const aplicar = Math.min(restante, pendiente);
+                        const nuevoPaid = Number(s.paidAmount) + aplicar;
+                        const fullPaid = nuevoPaid >= Number(s.scheduledAmount) - 0.01;
+                        await tx.paymentSchedule.update({
+                            where: { id: s.id },
+                            data: {
+                                paidAmount: new Prisma.Decimal(nuevoPaid),
+                                status: fullPaid ? 'paid' : (s.dueDate < payDate ? 'overdue' : 'partial'),
+                            },
+                        });
+                        restante -= aplicar;
+                    }
+                    // Si sobró excedente que ninguna cuota pudo absorber (pagó más que toda la
+                    // deuda restante), ese remanente se trata como donación para no descuadrar.
+                    if (restante > 0.01) {
+                        appliedToCredit = scheduledPending + (excess - restante);
+                        donationAmount = restante;
+                    }
+                    // Si no sobró, appliedToCredit = min(amount, currentRemaining) reduce el saldo completo.
+                }
+            } else {
+                // ── No hay sobrepago: aplicación normal a la cuota ──
+                const newPaid = Number(target.paidAmount) + appliedToCredit;
+                const isPaidFull = newPaid >= Number(target.scheduledAmount);
+                await tx.paymentSchedule.update({
+                    where: { id: scheduleId },
+                    data: {
+                        paidAmount: new Prisma.Decimal(Math.min(newPaid, Number(target.scheduledAmount))),
+                        status: isPaidFull ? 'paid' : (target.dueDate < payDate ? 'overdue' : 'partial'),
+                    },
+                });
+            }
+        } else {
+            // ── Sin cuota específica: distribución automática ──
+            const distribution = this.calculatePaymentDistribution(appliedToCredit, credit.paymentSchedule, payDate);
+            for (const item of distribution.affectedSchedules) {
+                await tx.paymentSchedule.update({
+                    where: { id: item.id },
+                    data: {
+                        paidAmount: new Prisma.Decimal(item.newPaidAmount),
+                        status: item.newStatus,
+                    },
+                });
+            }
+        }
+
+        const newRemaining = new Prisma.Decimal(currentRemaining).minus(appliedToCredit);
+        const isCreditFullyPaid = Number(newRemaining) <= 0;
+
+        // Si el crédito se completó, marcar TODAS las cuotas restantes como pagadas.
+        // Optimización: usar las cuotas ya cargadas en memoria (credit.paymentSchedule) y
+        // ejecutar todas las actualizaciones en paralelo con Promise.all.
+        let creditStatus: 'paid' | 'overdue' | 'active';
+        if (isCreditFullyPaid) {
+            const pendingFromMemory = credit.paymentSchedule.filter(
+                s => s.status !== 'paid' && s.id !== scheduleId
+            );
+            if (pendingFromMemory.length > 0) {
+                await Promise.all(pendingFromMemory.map(s =>
+                    tx.paymentSchedule.update({
+                        where: { id: s.id },
+                        data: { status: 'paid', paidAmount: s.scheduledAmount }
+                    })
+                ));
+            }
+            creditStatus = 'paid';
+        } else {
+            // Calcular si hay alguna cuota overdue desde memoria (evita query extra).
+            // Una cuota está overdue si: dueDate < hoy AND status != paid AND tiene saldo pendiente.
+            const hasOverdue = credit.paymentSchedule.some(s =>
+                s.dueDate < payDate &&
+                s.status !== 'paid' &&
+                s.id !== scheduleId && // la actual ya se manejó
+                Number(s.scheduledAmount) > Number(s.paidAmount)
+            );
+            creditStatus = hasOverdue ? 'overdue' : 'active';
+        }
+
+        // ── Registrar pago ──
+        // amountToPrincipal = lo que reduce el saldo del crédito
+        // amountToInterest = lo donado al negocio (ganancia explícita por sobrepago)
+        const noteWithDonation = donationAmount > 0
+            ? `[DONACIÓN: $${donationAmount.toLocaleString('es-CO')}]${notes ? ' ' + notes : ''}`
+            : notes;
+        const payment = await tx.payment.create({
+            data: {
+                creditId,
+                amount: new Prisma.Decimal(amount),
+                paymentDate: payDate,
+                amountToPrincipal: new Prisma.Decimal(appliedToCredit),
+                amountToInterest: new Prisma.Decimal(donationAmount),
+                remainingBalanceAfter: newRemaining,
+                paymentMethod,
+                notes: noteWithDonation,
+                // Vincular el pago a la cuota seleccionada (si la hay). En el caso
+                // excessAction='next_cuota' el pago se liga a la cuota target original;
+                // la siguiente cuota solo recibe el abono parcial en su paidAmount.
+                scheduleId: scheduleId || null,
+                accountId: effectiveAccountId,
+                createdById: userId,
+            },
+        });
+
+        // ── Caja: entrada del pago recibido ──
+        // Si hay donación, se divide en 2 movimientos para mantener cuadre contable:
+        //   payment_received: el monto que efectivamente reduce el saldo del crédito
+        //   interest_earned:  la donación al negocio (ganancia inmediata)
+        // Total = amount (lo que pagó el cliente). business.currentBalance se actualiza una vez.
+        const principalForCash = amount - donationAmount;
+        const balanceAfterPrincipal = new Prisma.Decimal(credit.business.currentBalance).plus(principalForCash);
+        const newBusinessBalance = balanceAfterPrincipal.plus(donationAmount);
+
+        // ── Si el crédito se paga completamente: calcular ganancia restante ──
+        // profit total = sum(payments.amount) - capital. Parte ya se registró como donaciones
+        // (interest_earned) durante el crédito; solo registramos la parte adicional.
+        // NOTA: allPayments YA incluye el pago recién creado (lectura ve escrituras de la misma
+        // transacción), por lo que su amountToInterest ya cuenta la donación actual — NO se suma aparte.
+        let profit = 0;
+        let interestMovementData: Prisma.CashMovementCreateInput | null = null;
+        if (isCreditFullyPaid) {
+            const allPayments = await tx.payment.findMany({
+                where: { creditId },
+                select: { amount: true, amountToInterest: true },
+            });
+            const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+            const totalDonatedAlready = allPayments.reduce((sum, p) => sum + Number(p.amountToInterest), 0);
+            const originalAmount = Number(credit.amount);
+            profit = totalPaid - originalAmount;
+            const remainingProfitToRecord = profit - totalDonatedAlready;
+
+            if (remainingProfitToRecord > 0.01) {
+                interestMovementData = {
+                    business: { connect: { id: credit.businessId } },
+                    type: 'interest_earned',
+                    amount: new Prisma.Decimal(remainingProfitToRecord),
+                    balanceAfter: newBusinessBalance,
+                    description: `Interés crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total: $${totalPaid.toLocaleString('es-CO')} | Donaciones previas: $${totalDonatedAlready.toLocaleString('es-CO')}`,
+                    relatedCredit: { connect: { id: credit.id } },
+                    paymentMethod: 'efectivo',
+                    ...(effectiveAccountId ? { account: { connect: { id: effectiveAccountId } } } : {}),
+                    createdBy: { connect: { id: userId } },
+                };
+            }
+        }
+
+        // ── Escrituras independientes en paralelo (reducen round-trips a la DB) ──
+        // Todas referencian payment.id / valores ya calculados, no dependen entre sí.
+        await Promise.all([
+            // Movimiento de caja: pago recibido
+            tx.cashMovement.create({
+                data: {
+                    businessId: credit.businessId,
+                    type: 'payment_received',
+                    amount: new Prisma.Decimal(principalForCash),
+                    balanceAfter: balanceAfterPrincipal,
+                    description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}${donationAmount > 0 ? ` (pago $${amount.toLocaleString('es-CO')}, donación $${donationAmount.toLocaleString('es-CO')} aparte)` : ''}`,
+                    relatedCreditId: credit.id,
+                    relatedPaymentId: payment.id,
+                    paymentMethod: paymentMethod || 'efectivo',
+                    accountId: effectiveAccountId,
+                    createdById: userId,
+                },
+            }),
+            // Movimiento de ganancia inmediata por donación (si aplica)
+            donationAmount > 0
+                ? tx.cashMovement.create({
+                    data: {
+                        businessId: credit.businessId,
+                        type: 'interest_earned',
+                        amount: new Prisma.Decimal(donationAmount),
+                        balanceAfter: newBusinessBalance,
+                        description: `Donación al negocio - ${credit.client.fullName} (excedente sobre cuota)`,
+                        relatedCreditId: credit.id,
+                        relatedPaymentId: payment.id,
+                        paymentMethod: paymentMethod || 'efectivo',
+                        accountId: effectiveAccountId,
+                        createdById: userId,
+                    },
+                })
+                : Promise.resolve(),
+            // Movimiento de interés al cerrar el crédito (si aplica)
+            interestMovementData
+                ? tx.cashMovement.create({ data: interestMovementData })
+                : Promise.resolve(),
+            // Actualizar saldo del negocio
+            tx.business.update({
+                where: { id: credit.businessId },
+                data: { currentBalance: newBusinessBalance },
+            }),
+            // Actualizar el crédito
+            tx.credit.update({
+                where: { id: creditId },
+                data: {
+                    remainingBalance: newRemaining,
+                    status: creditStatus,
+                    ...(isCreditFullyPaid ? {
+                        completionDate: payDate,
+                        earnedInterest: new Prisma.Decimal(profit > 0 ? profit : 0)
+                    } : {})
+                },
+            }),
+            // Auditoría
+            tx.auditLog.create({
+                data: {
+                    userId,
+                    businessId: credit.businessId,
+                    action: 'REGISTER_PAYMENT',
+                    description: `Pago de $${amount.toLocaleString('es-CO')} para crédito de ${credit.client.fullName}`,
+                    entityType: 'Payment',
+                    entityId: payment.id,
+                    oldValues: { remainingBalance: credit.remainingBalance },
+                    newValues: { remainingBalance: newRemaining, paymentAmount: amount, creditPaid: isCreditFullyPaid },
+                    ipAddress: _ipAddress,
+                },
+            }),
+        ]);
+
+        return payment;
+    }
+
     async registerPayment(params: {
         creditId: string;
         amount: number;
@@ -421,311 +1057,19 @@ export class CreditService {
         if (creditBiz) await accountService.assertDayOpen(creditBiz.businessId, payDate);
 
         return prisma.$transaction(async (tx) => {
-            const credit = await tx.credit.findUnique({
-                where: { id: creditId },
-                include: {
-                    client: true,
-                    paymentSchedule: { orderBy: { dueDate: 'asc' } },
-                    business: true,
-                },
+            return this.applyPaymentTx(tx, {
+                creditId,
+                amount,
+                payDate,
+                paymentMethod,
+                notes,
+                scheduleId,
+                accountId,
+                excessAction,
+                userId,
+                role,
+                ipAddress,
             });
-            if (!credit) throw new Error('Crédito no encontrado');
-
-            if (role !== 'super_admin') {
-                const userBusinessId = await this.getUserBusiness(userId);
-                if (!userBusinessId || userBusinessId !== credit.businessId) {
-                    throw new Error('No tiene permisos para operar este crédito');
-                }
-            }
-
-            if (credit.status === 'paid') throw new Error('El crédito ya está pagado');
-            if (amount <= 0) throw new Error('El monto debe ser mayor a 0');
-
-            // Resolver la cuenta del pago: la enviada (si es válida y del negocio) o la cuenta por defecto
-            let effectiveAccountId: string | null = null;
-            if (accountId) {
-                const acc = await tx.paymentAccount.findFirst({ where: { id: accountId, businessId: credit.businessId, active: true }, select: { id: true } });
-                effectiveAccountId = acc?.id || null;
-            }
-            if (!effectiveAccountId) {
-                const def = await tx.paymentAccount.findFirst({ where: { businessId: credit.businessId, isDefault: true, active: true }, select: { id: true } })
-                    || await tx.paymentAccount.findFirst({ where: { businessId: credit.businessId, active: true }, select: { id: true } });
-                effectiveAccountId = def?.id || null;
-            }
-
-            const currentRemaining = Number(credit.remainingBalance);
-
-            // appliedToCredit: monto que efectivamente reduce remainingBalance
-            // donationAmount: excedente que el usuario decidió donar (no reduce saldo)
-            let appliedToCredit = Math.min(amount, currentRemaining);
-            let donationAmount = 0;
-
-            if (scheduleId) {
-                // ── Pago con cuota específica ──
-                const target = credit.paymentSchedule.find((s) => s.id === scheduleId);
-                if (!target) throw new Error('La cuota seleccionada no pertenece a este crédito');
-                const scheduledPending = Number(target.scheduledAmount) - Number(target.paidAmount);
-                if (scheduledPending <= 0) throw new Error('La cuota ya está pagada');
-
-                // Usar Math.ceil como umbral de exceso para alinear con el redondeo del frontend.
-                // El frontend muestra y envía Math.ceil(scheduledPending); sin ceil aquí se detecta
-                // un falso excedente de $1 cuando el usuario paga exactamente la cuota mostrada.
-                const scheduledPendingCeil = Math.ceil(scheduledPending);
-                if (amount > scheduledPendingCeil + 0.01) {
-                    // ── Hay sobrepago: requiere acción explícita ──
-                    if (!excessAction) {
-                        throw new Error(
-                            `El pago de $${amount} supera el monto pendiente de la cuota ($${scheduledPendingCeil}). ` +
-                            `Debe especificar excessAction: "next_cuota" (abonar a la siguiente cuota) o "donate" (donar al negocio).`
-                        );
-                    }
-
-                    const excess = amount - scheduledPendingCeil;
-
-                    // Marcar la cuota actual como pagada completa
-                    await tx.paymentSchedule.update({
-                        where: { id: scheduleId },
-                        data: {
-                            paidAmount: target.scheduledAmount,
-                            status: 'paid',
-                        },
-                    });
-
-                    if (excessAction === 'donate') {
-                        // El excedente NO reduce saldo; queda como donación/ganancia para el negocio
-                        appliedToCredit = scheduledPending;
-                        donationAmount = excess;
-                    } else if (excessAction === 'next_cuota') {
-                        // Aplicar el excedente en cascada a las cuotas siguientes (en orden de fecha)
-                        // hasta agotarlo. Esto evita descuadre entre el saldo y el schedule cuando el
-                        // excedente supera la capacidad de una sola cuota.
-                        const sortedByDate = [...credit.paymentSchedule].sort(
-                            (a, b) => a.dueDate.getTime() - b.dueDate.getTime()
-                        );
-                        const targetIdx = sortedByDate.findIndex(s => s.id === scheduleId);
-                        let restante = excess;
-                        for (const s of sortedByDate.slice(targetIdx + 1)) {
-                            if (restante <= 0.01) break;
-                            const pendiente = Number(s.scheduledAmount) - Number(s.paidAmount);
-                            if (pendiente <= 0) continue;
-                            const aplicar = Math.min(restante, pendiente);
-                            const nuevoPaid = Number(s.paidAmount) + aplicar;
-                            const fullPaid = nuevoPaid >= Number(s.scheduledAmount) - 0.01;
-                            await tx.paymentSchedule.update({
-                                where: { id: s.id },
-                                data: {
-                                    paidAmount: new Prisma.Decimal(nuevoPaid),
-                                    status: fullPaid ? 'paid' : (s.dueDate < payDate ? 'overdue' : 'partial'),
-                                },
-                            });
-                            restante -= aplicar;
-                        }
-                        // Si sobró excedente que ninguna cuota pudo absorber (pagó más que toda la
-                        // deuda restante), ese remanente se trata como donación para no descuadrar.
-                        if (restante > 0.01) {
-                            appliedToCredit = scheduledPending + (excess - restante);
-                            donationAmount = restante;
-                        }
-                        // Si no sobró, appliedToCredit = min(amount, currentRemaining) reduce el saldo completo.
-                    }
-                } else {
-                    // ── No hay sobrepago: aplicación normal a la cuota ──
-                    const newPaid = Number(target.paidAmount) + appliedToCredit;
-                    const isPaidFull = newPaid >= Number(target.scheduledAmount);
-                    await tx.paymentSchedule.update({
-                        where: { id: scheduleId },
-                        data: {
-                            paidAmount: new Prisma.Decimal(Math.min(newPaid, Number(target.scheduledAmount))),
-                            status: isPaidFull ? 'paid' : (target.dueDate < payDate ? 'overdue' : 'partial'),
-                        },
-                    });
-                }
-            } else {
-                // ── Sin cuota específica: distribución automática ──
-                const distribution = this.calculatePaymentDistribution(appliedToCredit, credit.paymentSchedule, payDate);
-                for (const item of distribution.affectedSchedules) {
-                    await tx.paymentSchedule.update({
-                        where: { id: item.id },
-                        data: {
-                            paidAmount: new Prisma.Decimal(item.newPaidAmount),
-                            status: item.newStatus,
-                        },
-                    });
-                }
-            }
-
-            const newRemaining = new Prisma.Decimal(currentRemaining).minus(appliedToCredit);
-            const isCreditFullyPaid = Number(newRemaining) <= 0;
-
-            // Si el crédito se completó, marcar TODAS las cuotas restantes como pagadas.
-            // Optimización: usar las cuotas ya cargadas en memoria (credit.paymentSchedule) y
-            // ejecutar todas las actualizaciones en paralelo con Promise.all.
-            let creditStatus: 'paid' | 'overdue' | 'active';
-            if (isCreditFullyPaid) {
-                const pendingFromMemory = credit.paymentSchedule.filter(
-                    s => s.status !== 'paid' && s.id !== scheduleId
-                );
-                if (pendingFromMemory.length > 0) {
-                    await Promise.all(pendingFromMemory.map(s =>
-                        tx.paymentSchedule.update({
-                            where: { id: s.id },
-                            data: { status: 'paid', paidAmount: s.scheduledAmount }
-                        })
-                    ));
-                }
-                creditStatus = 'paid';
-            } else {
-                // Calcular si hay alguna cuota overdue desde memoria (evita query extra).
-                // Una cuota está overdue si: dueDate < hoy AND status != paid AND tiene saldo pendiente.
-                const hasOverdue = credit.paymentSchedule.some(s =>
-                    s.dueDate < payDate &&
-                    s.status !== 'paid' &&
-                    s.id !== scheduleId && // la actual ya se manejó
-                    Number(s.scheduledAmount) > Number(s.paidAmount)
-                );
-                creditStatus = hasOverdue ? 'overdue' : 'active';
-            }
-
-            // ── Registrar pago ──
-            // amountToPrincipal = lo que reduce el saldo del crédito
-            // amountToInterest = lo donado al negocio (ganancia explícita por sobrepago)
-            const noteWithDonation = donationAmount > 0
-                ? `[DONACIÓN: $${donationAmount.toLocaleString('es-CO')}]${notes ? ' ' + notes : ''}`
-                : notes;
-            const payment = await tx.payment.create({
-                data: {
-                    creditId,
-                    amount: new Prisma.Decimal(amount),
-                    paymentDate: payDate,
-                    amountToPrincipal: new Prisma.Decimal(appliedToCredit),
-                    amountToInterest: new Prisma.Decimal(donationAmount),
-                    remainingBalanceAfter: newRemaining,
-                    paymentMethod,
-                    notes: noteWithDonation,
-                    // Vincular el pago a la cuota seleccionada (si la hay). En el caso
-                    // excessAction='next_cuota' el pago se liga a la cuota target original;
-                    // la siguiente cuota solo recibe el abono parcial en su paidAmount.
-                    scheduleId: scheduleId || null,
-                    accountId: effectiveAccountId,
-                    createdById: userId,
-                },
-            });
-
-            // ── Caja: entrada del pago recibido ──
-            // Si hay donación, se divide en 2 movimientos para mantener cuadre contable:
-            //   payment_received: el monto que efectivamente reduce el saldo del crédito
-            //   interest_earned:  la donación al negocio (ganancia inmediata)
-            // Total = amount (lo que pagó el cliente). business.currentBalance se actualiza una vez.
-            const principalForCash = amount - donationAmount;
-            const balanceAfterPrincipal = new Prisma.Decimal(credit.business.currentBalance).plus(principalForCash);
-            const newBusinessBalance = balanceAfterPrincipal.plus(donationAmount);
-
-            // ── Si el crédito se paga completamente: calcular ganancia restante ──
-            // profit total = sum(payments.amount) - capital. Parte ya se registró como donaciones
-            // (interest_earned) durante el crédito; solo registramos la parte adicional.
-            // NOTA: allPayments YA incluye el pago recién creado (lectura ve escrituras de la misma
-            // transacción), por lo que su amountToInterest ya cuenta la donación actual — NO se suma aparte.
-            let profit = 0;
-            let interestMovementData: Prisma.CashMovementCreateInput | null = null;
-            if (isCreditFullyPaid) {
-                const allPayments = await tx.payment.findMany({
-                    where: { creditId },
-                    select: { amount: true, amountToInterest: true },
-                });
-                const totalPaid = allPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-                const totalDonatedAlready = allPayments.reduce((sum, p) => sum + Number(p.amountToInterest), 0);
-                const originalAmount = Number(credit.amount);
-                profit = totalPaid - originalAmount;
-                const remainingProfitToRecord = profit - totalDonatedAlready;
-
-                if (remainingProfitToRecord > 0.01) {
-                    interestMovementData = {
-                        business: { connect: { id: credit.businessId } },
-                        type: 'interest_earned',
-                        amount: new Prisma.Decimal(remainingProfitToRecord),
-                        balanceAfter: newBusinessBalance,
-                        description: `Interés crédito pagado - ${credit.client.fullName} | Capital: $${originalAmount.toLocaleString('es-CO')} | Total: $${totalPaid.toLocaleString('es-CO')} | Donaciones previas: $${totalDonatedAlready.toLocaleString('es-CO')}`,
-                        relatedCredit: { connect: { id: credit.id } },
-                        paymentMethod: 'efectivo',
-                        ...(effectiveAccountId ? { account: { connect: { id: effectiveAccountId } } } : {}),
-                        createdBy: { connect: { id: userId } },
-                    };
-                }
-            }
-
-            // ── Escrituras independientes en paralelo (reducen round-trips a la DB) ──
-            // Todas referencian payment.id / valores ya calculados, no dependen entre sí.
-            await Promise.all([
-                // Movimiento de caja: pago recibido
-                tx.cashMovement.create({
-                    data: {
-                        businessId: credit.businessId,
-                        type: 'payment_received',
-                        amount: new Prisma.Decimal(principalForCash),
-                        balanceAfter: balanceAfterPrincipal,
-                        description: `Pago crédito ${credit.id.slice(0, 8)} - ${credit.client.fullName}${donationAmount > 0 ? ` (pago $${amount.toLocaleString('es-CO')}, donación $${donationAmount.toLocaleString('es-CO')} aparte)` : ''}`,
-                        relatedCreditId: credit.id,
-                        relatedPaymentId: payment.id,
-                        paymentMethod: paymentMethod || 'efectivo',
-                        accountId: effectiveAccountId,
-                        createdById: userId,
-                    },
-                }),
-                // Movimiento de ganancia inmediata por donación (si aplica)
-                donationAmount > 0
-                    ? tx.cashMovement.create({
-                        data: {
-                            businessId: credit.businessId,
-                            type: 'interest_earned',
-                            amount: new Prisma.Decimal(donationAmount),
-                            balanceAfter: newBusinessBalance,
-                            description: `Donación al negocio - ${credit.client.fullName} (excedente sobre cuota)`,
-                            relatedCreditId: credit.id,
-                            relatedPaymentId: payment.id,
-                            paymentMethod: paymentMethod || 'efectivo',
-                            accountId: effectiveAccountId,
-                            createdById: userId,
-                        },
-                    })
-                    : Promise.resolve(),
-                // Movimiento de interés al cerrar el crédito (si aplica)
-                interestMovementData
-                    ? tx.cashMovement.create({ data: interestMovementData })
-                    : Promise.resolve(),
-                // Actualizar saldo del negocio
-                tx.business.update({
-                    where: { id: credit.businessId },
-                    data: { currentBalance: newBusinessBalance },
-                }),
-                // Actualizar el crédito
-                tx.credit.update({
-                    where: { id: creditId },
-                    data: {
-                        remainingBalance: newRemaining,
-                        status: creditStatus,
-                        ...(isCreditFullyPaid ? {
-                            completionDate: payDate,
-                            earnedInterest: new Prisma.Decimal(profit > 0 ? profit : 0)
-                        } : {})
-                    },
-                }),
-                // Auditoría
-                tx.auditLog.create({
-                    data: {
-                        userId,
-                        businessId: credit.businessId,
-                        action: 'REGISTER_PAYMENT',
-                        description: `Pago de $${amount.toLocaleString('es-CO')} para crédito de ${credit.client.fullName}`,
-                        entityType: 'Payment',
-                        entityId: payment.id,
-                        oldValues: { remainingBalance: credit.remainingBalance },
-                        newValues: { remainingBalance: newRemaining, paymentAmount: amount, creditPaid: isCreditFullyPaid },
-                        ipAddress,
-                    },
-                }),
-            ]);
-
-            return payment;
         }, {
             // Margen para conexiones cross-region / cold starts de serverless.
             maxWait: 10000,   // espera máx. por una conexión del pool

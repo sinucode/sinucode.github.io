@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AxiosError } from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { useBusinessStore } from '../store/businessStore';
 import { getCurrentUser } from '../api/auth';
@@ -31,8 +32,17 @@ export const useAuthInit = () => {
 
                 setLoading(false);
             } catch (error) {
-                // Token inválido o expirado, limpiar la sesión
-                logout();
+                // Distinguir "el servidor rechazó al usuario" (401 token inválido, 403
+                // cuenta inactiva/permisos revocados) de un fallo transitorio (500, timeout,
+                // red caída por backend reiniciándose / cold start). Solo en el primer caso
+                // cerramos sesión; ante un error transitorio conservamos la sesión persistida
+                // para no expulsar al usuario por un hipo del servidor.
+                const status = (error as AxiosError)?.response?.status;
+                if (status === 401 || status === 403) {
+                    logout();
+                } else {
+                    setLoading(false);
+                }
             }
         };
 

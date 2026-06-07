@@ -5,11 +5,11 @@ import { useAuthStore } from '../../store/authStore';
 import { invalidateMoney } from '../../utils/invalidate';
 import { getBusinesses } from '../../api/business.api';
 import { searchClients, getClients } from '../../api/clients.api';
-import { createCredit, simulateCredit, CreditSimulation, CreateCreditPayload } from '../../api/credits.api';
+import { createCredit, simulateCredit, getCreditDetail, getCredits, CreditSimulation, CreateCreditPayload } from '../../api/credits.api';
 import { listAccounts, getAccountBalances, PaymentAccount } from '../../api/accounts.api';
 import { injectCapital, transferFunds } from '../../api/cash.api';
 import { Client, PaymentFrequency } from '../../types';
-import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, ArrowRightLeft, PlusCircle } from 'lucide-react';
+import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, ArrowRightLeft, PlusCircle, Users } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { todayBogota, toLocalDateString } from '../../utils/dates';
 import { getHolidaySet } from '../../utils/holidays';
@@ -20,6 +20,8 @@ interface CreditFormProps {
     onCreated: (id: string) => void;
     selectedBusinessId?: string;
 }
+
+interface FinancingRow { id: string; clientId: string; clientName: string; creditId: string; scheduleId: string; amount: string; }
 
 const frequencies: { value: PaymentFrequency; label: string }[] = [
     { value: 'daily', label: 'Diario' },
@@ -81,6 +83,9 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     // Multi-cuenta
     const [splitEnabled, setSplitEnabled] = useState(false);
     const [splits, setSplits] = useState<Record<string, string>>({});
+    // Financiamiento cruzado
+    const [financingEnabled, setFinancingEnabled] = useState(false);
+    const [financingRows, setFinancingRows] = useState<FinancingRow[]>([]);
     const [noDaysModal, setNoDaysModal] = useState(false);
     // Modal de recarga cuando la cuenta o el negocio no tiene fondos
     const [rechargeInfo, setRechargeInfo] = useState<{
@@ -143,6 +148,8 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         setDisbursementAccountId('');
         setSplitEnabled(false);
         setSplits({});
+        setFinancingEnabled(false);
+        setFinancingRows([]);
     }, [effectiveBusinessId]);
 
     const { data: clientResults } = useQuery({
@@ -157,6 +164,14 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         enabled: isSuperAdmin ? !!formData.businessId : true,
     });
 
+    // Distingue "el servidor respondió con un error" de "no hubo respuesta del servidor"
+    // (red caída, backend reiniciándose, timeout de conexión). Sin esto, un corte de
+    // conexión se confunde con un fallo de la lógica de negocio (mensaje engañoso).
+    const describeApiError = (err: { response?: { data?: { error?: string } } } | null | undefined, fallback: string): string => {
+        if (err?.response) return err.response.data?.error || fallback;
+        return 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.';
+    };
+
     const simulateMutation = useMutation({
         mutationFn: simulateCredit,
         onSuccess: (data) => setSimulation(data),
@@ -165,7 +180,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 setNoDaysModal(true);
                 return;
             }
-            setFormError(err.response?.data?.error || 'Error al simular crédito');
+            setFormError(describeApiError(err, 'Error al simular crédito'));
         },
     });
 
@@ -216,7 +231,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 setFormError(errors[0].msg);
                 return;
             }
-            setFormError(data?.error || 'Error al crear el crédito');
+            setFormError(describeApiError(err, 'Error al crear el crédito'));
         },
     });
 
@@ -279,14 +294,34 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             return setFormError('Selecciona un negocio');
         }
 
+        // Construir entradas de financiamiento (solo filas completas)
+        const financingEntries = financingEnabled
+            ? financingRows
+                .filter(r => r.clientId && r.creditId && r.scheduleId && Number(r.amount.replace(/[^0-9]/g, '') || '0') > 0)
+                .map(r => ({ creditId: r.creditId, scheduleId: r.scheduleId, amount: Number(r.amount.replace(/[^0-9]/g, '')) }))
+            : [];
+        if (financingEntries.length > 0) {
+            const financedSum = financingEntries.reduce((s, e) => s + e.amount, 0);
+            if (financedSum > amount) {
+                return setFormError(`El financiamiento ($${Math.ceil(financedSum).toLocaleString('es-CO')}) no puede superar el monto del crédito ($${amount.toLocaleString('es-CO')})`);
+            }
+        }
+
         // Validar reparto multi-cuenta
         if (splitEnabled && accounts && accounts.length > 0) {
             const splitEntries = accounts
                 .map(a => ({ accountId: a.id, amount: Number((splits[a.id] || '').replace(/[^0-9]/g, '') || '0') }))
                 .filter(s => s.amount > 0);
             const splitTotal = splitEntries.reduce((s, e) => s + e.amount, 0);
-            if (Math.abs(splitTotal - amount) > 1) {
-                return setFormError(`El reparto debe sumar exactamente $${amount.toLocaleString('es-CO')} (suma actual: $${Math.ceil(splitTotal).toLocaleString('es-CO')})`);
+            // El backend exige que los splits cubran solo la parte neta de caja
+            // (monto del crédito menos lo financiado con pagos cruzados).
+            const financedSum = financingEntries.reduce((s, e) => s + e.amount, 0);
+            const cashNeeded = amount - financedSum;
+            if (Math.abs(splitTotal - cashNeeded) > 1) {
+                const splitTarget = financedSum > 0
+                    ? `el monto que sale de caja, neto de financiamiento ($${Math.ceil(cashNeeded).toLocaleString('es-CO')})`
+                    : `el monto del crédito ($${amount.toLocaleString('es-CO')})`;
+                return setFormError(`El reparto debe sumar exactamente ${splitTarget} (suma actual: $${Math.ceil(splitTotal).toLocaleString('es-CO')})`);
             }
             // Adjuntar al payload
             const payload: CreateCreditPayload = {
@@ -294,6 +329,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 frequency: formData.frequency, startDate: formData.startDate,
                 businessId: formData.businessId || undefined,
                 splits: splitEntries,
+                financings: financingEntries.length > 0 ? financingEntries : undefined,
                 excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
                 excludeHolidays: excludeHolidays || undefined,
                 customRounding: customRounding || undefined,
@@ -312,6 +348,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             startDate: formData.startDate,
             businessId: formData.businessId || undefined,
             accountId: disbursementAccountId || undefined,
+            financings: financingEntries.length > 0 ? financingEntries : undefined,
             excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
             excludeHolidays: excludeHolidays || undefined,
             customRounding: customRounding || undefined,
@@ -731,6 +768,67 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                 </div>
                             )}
 
+                            {/* Financiamiento cruzado */}
+                            <div className="md:col-span-2 space-y-3">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={financingEnabled}
+                                        onChange={(e) => {
+                                            setFinancingEnabled(e.target.checked);
+                                            if (e.target.checked) {
+                                                if (financingRows.length === 0) {
+                                                    setFinancingRows([{ id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', scheduleId: '', amount: '' }]);
+                                                }
+                                            } else {
+                                                setFinancingRows([]);
+                                            }
+                                        }}
+                                        className="w-4 h-4 rounded border-gray-300 text-primary-600 cursor-pointer"
+                                    />
+                                    <Users size={15} className="text-primary-600" />
+                                    <span className="text-xs text-gray-600 font-medium">Financiar el desembolso con pagos de otros clientes</span>
+                                </label>
+
+                                {financingEnabled && (
+                                    <div className="space-y-3">
+                                        {financingRows.map((row) => (
+                                            <FinancingRowWidget
+                                                key={row.id}
+                                                row={row}
+                                                clientList={clientList || []}
+                                                excludeClientId={selectedClientId}
+                                                businessId={effectiveBusinessId}
+                                                onChange={(updated) => setFinancingRows(prev => prev.map(r => r.id === row.id ? { ...r, ...updated } : r))}
+                                                onRemove={() => setFinancingRows(prev => prev.filter(r => r.id !== row.id))}
+                                            />
+                                        ))}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setFinancingRows(prev => [...prev, { id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', scheduleId: '', amount: '' }])}
+                                            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 transition"
+                                        >
+                                            <PlusCircle size={14} /> Agregar otro cliente
+                                        </button>
+
+                                        {/* Indicador de cuadre */}
+                                        {(() => {
+                                            const total = Number(formData.amount.replace(/[^0-9]/g, '') || '0');
+                                            const financedSum = financingRows.reduce((s, r) => s + Number(r.amount.replace(/[^0-9]/g, '') || '0'), 0);
+                                            const desdeCaja = total - financedSum;
+                                            const overFinanced = financedSum > total && total > 0;
+                                            return total > 0 ? (
+                                                <div className={`flex flex-wrap items-center justify-between gap-2 text-xs px-3 py-2 rounded-lg ${overFinanced ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                                                    <span>Financiado: <strong>${Math.ceil(financedSum).toLocaleString('es-CO')}</strong> de <strong>${Math.ceil(total).toLocaleString('es-CO')}</strong></span>
+                                                    <span>{overFinanced ? '⚠️ Excede el monto del crédito' : `Desde caja: $${Math.max(0, Math.ceil(desdeCaja)).toLocaleString('es-CO')}`}</span>
+                                                </div>
+                                            ) : null;
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Interés */}
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Interés (%) *</label>
@@ -1056,6 +1154,170 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         </div>
         , document.body)}
     </>;
+};
+
+// ─── Fila de financiamiento cruzado ──────────────────────────────────────────
+
+interface FinancingRowWidgetProps {
+    row: FinancingRow;
+    clientList: Client[];
+    excludeClientId: string;
+    businessId: string;
+    onChange: (updated: Partial<{ clientId: string; clientName: string; creditId: string; scheduleId: string; amount: string }>) => void;
+    onRemove: () => void;
+}
+
+const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList, excludeClientId, businessId, onChange, onRemove }) => {
+    const availableClients = clientList.filter(c => c.id !== excludeClientId);
+
+    // Sin filtro de status: el backend acepta créditos activos Y en mora para pagos cruzados;
+    // solo excluye paid/cancelled. Filtrar solo por businessId+clientId aquí.
+    const { data: activeCredits, isFetching: fetchingCredits } = useQuery({
+        queryKey: ['credits', 'active-for-financing', row.clientId, businessId],
+        queryFn: () => getCredits({ businessId, clientId: row.clientId }),
+        enabled: !!row.clientId && !!businessId,
+    });
+
+    const { data: creditDetail, isFetching: fetchingDetail } = useQuery({
+        queryKey: ['credit-detail-for-financing', row.creditId],
+        queryFn: () => getCreditDetail(row.creditId),
+        enabled: !!row.creditId,
+    });
+
+    const pendingSchedules = useMemo(() => {
+        if (!creditDetail?.paymentSchedule) return [];
+        return creditDetail.paymentSchedule
+            .filter(s => Number(s.scheduledAmount) > Number(s.paidAmount))
+            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    }, [creditDetail]);
+
+    const selectedSchedule = pendingSchedules.find(s => s.id === row.scheduleId);
+    const pendingAmount = selectedSchedule
+        ? Math.ceil(Number(selectedSchedule.scheduledAmount) - Number(selectedSchedule.paidAmount))
+        : null;
+
+    return (
+        <div className="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200 space-y-2">
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente a financiar</span>
+                <button type="button" onClick={onRemove} className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition">
+                    <X size={14} />
+                </button>
+            </div>
+
+            {/* Selector de cliente */}
+            <select
+                value={row.clientId}
+                onChange={(e) => {
+                    const found = availableClients.find(c => c.id === e.target.value);
+                    onChange({ clientId: e.target.value, clientName: found?.fullName || '', creditId: '', scheduleId: '', amount: '' });
+                }}
+                className="w-full px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+            >
+                <option value="">Seleccione un cliente</option>
+                {availableClients.map(c => (
+                    <option key={c.id} value={c.id}>{c.fullName} ({c.phone})</option>
+                ))}
+            </select>
+
+            {/* Selector de crédito activo */}
+            {row.clientId && (
+                fetchingCredits ? (
+                    <p className="text-xs text-gray-400 px-1">Cargando créditos...</p>
+                ) : !activeCredits || activeCredits.length === 0 ? (
+                    <p className="text-xs text-amber-600 px-1">Este cliente no tiene créditos con saldo pendiente.</p>
+                ) : (
+                    <select
+                        value={row.creditId}
+                        onChange={(e) => onChange({ creditId: e.target.value, scheduleId: '', amount: '' })}
+                        className="w-full px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                    >
+                        <option value="">Seleccione un crédito</option>
+                        {activeCredits
+                            .filter(c => c.status !== 'paid' && c.status !== 'cancelled')
+                            .map(c => (
+                                <option key={c.id} value={c.id}>
+                                    Crédito ${Math.ceil(Number(c.amount)).toLocaleString('es-CO')} · saldo ${Math.ceil(Number(c.remainingBalance)).toLocaleString('es-CO')}{c.status === 'overdue' ? ' (en mora)' : ''}
+                                </option>
+                            ))}
+                    </select>
+                )
+            )}
+
+            {/* Selector de cuota pendiente */}
+            {row.creditId && (
+                fetchingDetail ? (
+                    <p className="text-xs text-gray-400 px-1">Cargando cuotas...</p>
+                ) : pendingSchedules.length === 0 ? (
+                    <p className="text-xs text-amber-600 px-1">Este crédito no tiene cuotas pendientes.</p>
+                ) : (
+                    <select
+                        value={row.scheduleId}
+                        onChange={(e) => onChange({ scheduleId: e.target.value, amount: '' })}
+                        className="w-full px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                    >
+                        <option value="">Seleccione una cuota</option>
+                        {pendingSchedules.map(s => {
+                            const pending = Math.ceil(Number(s.scheduledAmount) - Number(s.paidAmount));
+                            const dueDate = new Date(s.dueDate);
+                            return (
+                                <option key={s.id} value={s.id}>
+                                    Cuota #{s.installmentNumber} · vence {toLocalDateString(dueDate)} · pendiente ${pending.toLocaleString('es-CO')}
+                                </option>
+                            );
+                        })}
+                    </select>
+                )
+            )}
+
+            {/* Campo de monto */}
+            {row.scheduleId && (
+                <div className="space-y-1.5">
+                    {pendingAmount !== null && (
+                        <p className="text-xs text-gray-500">Pendiente de la cuota: <strong>${pendingAmount.toLocaleString('es-CO')}</strong></p>
+                    )}
+                    <input
+                        type="text"
+                        value={row.amount}
+                        onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                            onChange({ amount: raw ? Number(raw).toLocaleString('es-CO') : '' });
+                        }}
+                        className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                        placeholder="0"
+                    />
+                    <div className="flex flex-wrap gap-1">
+                        {[
+                            { label: '+10k', delta: 10_000 },
+                            { label: '+50k', delta: 50_000 },
+                            { label: '+100k', delta: 100_000 },
+                        ].map(({ label, delta }) => (
+                            <button key={label} type="button"
+                                onClick={() => {
+                                    const current = Number(row.amount.replace(/[^0-9]/g, '') || '0');
+                                    onChange({ amount: (current + delta).toLocaleString('es-CO') });
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 active:bg-primary-200 transition">
+                                {label}
+                            </button>
+                        ))}
+                        {pendingAmount !== null && (
+                            <button type="button"
+                                onClick={() => onChange({ amount: pendingAmount.toLocaleString('es-CO') })}
+                                className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition">
+                                Todo pendiente
+                            </button>
+                        )}
+                        <button type="button"
+                            onClick={() => onChange({ amount: '' })}
+                            className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 active:bg-red-200 transition">
+                            Borrar
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 // ─── Modal de recarga de cuenta ───────────────────────────────────────────────

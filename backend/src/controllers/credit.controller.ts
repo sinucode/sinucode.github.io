@@ -54,6 +54,13 @@ export const createCredit = async (req: Request, res: Response) => {
                 splits: Array.isArray(req.body.splits)
                     ? req.body.splits.map((s: any) => ({ accountId: s.accountId, amount: Number(s.amount) }))
                     : undefined,
+                financings: Array.isArray(req.body.financings)
+                    ? req.body.financings.map((f: any) => ({
+                        creditId:   f.creditId,
+                        scheduleId: f.scheduleId || undefined,
+                        amount:     Number(f.amount),
+                    }))
+                    : undefined,
                 excludedWeekdays: Array.isArray(req.body.excludedWeekdays)
                     ? req.body.excludedWeekdays.map(Number)
                     : undefined,
@@ -90,6 +97,7 @@ export const listCredits = async (req: Request, res: Response) => {
         const role = req.user!.role as UserRole;
         const filters = {
             businessId: req.query.businessId as string,
+            clientId: req.query.clientId as string | undefined,
             status: req.query.status as string,
             dueToday: req.query.dueToday === 'true',
             overdue: req.query.overdue === 'true',

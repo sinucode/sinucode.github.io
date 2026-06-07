@@ -59,11 +59,21 @@ api.interceptors.response.use(
                 }
                 return api(originalRequest);
             } catch (refreshError) {
-                // Si falla el refresh, limpiar todo y redirigir a login
-                localStorage.removeItem('accessToken');
-                localStorage.removeItem('refreshToken');
-                localStorage.removeItem('user');
-                window.location.href = '/login';
+                // Solo cerrar sesión si el servidor rechazó el refresh por una razón de auth
+                // real: 401 (refresh token inválido/expirado, incluida cuenta inactiva — ver
+                // auth.controller.ts `refresh`, que envuelve todo en un único catch → 401) o
+                // 403 (por si algún día ese endpoint distingue permisos con ese código).
+                // Ante un fallo transitorio (500, timeout, red caída por backend reiniciándose
+                // / cold start) NO limpiamos tokens ni redirigimos: un hipo del servidor no
+                // debe terminar una sesión válida. La petición original simplemente falla y
+                // se reintentará en la próxima interacción, cuando el backend se recupere.
+                const refreshStatus = (refreshError as AxiosError)?.response?.status;
+                if (refreshStatus === 401 || refreshStatus === 403) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                    localStorage.removeItem('user');
+                    window.location.href = '/login';
+                }
                 return Promise.reject(refreshError);
             }
         }
