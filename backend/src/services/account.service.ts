@@ -358,7 +358,7 @@ export class AccountService {
                     createdAt: { gte: dayStart, lte: dayEnd },
                 },
                 include: {
-                    credit: { include: { client: { select: { fullName: true } } } },
+                    credit: { include: { client: { select: { fullName: true } }, _count: { select: { paymentSchedule: true } } } },
                     schedule:  { select: { installmentNumber: true } },
                     account:   { select: { name: true } },
                     createdBy: { select: { id: true, fullName: true } },
@@ -531,11 +531,59 @@ export class AccountService {
         // ─── Tabla de créditos colocados: una fila por crédito, agrupando splits multi-cuenta ───
         // Asunción: los loan_disbursement siempre llevan relatedCreditId (fijado en credit.service.ts).
         // El fallback m.id protege contra registros con relatedCreditId=null (borrado en cascada SetNull).
-        const normalizeDisbDesc = (desc: string | null | undefined): string | undefined => {
+        // Lookup: (clientName|amount) → { installmentNumber, totalInstallments }
+        // Enriquece descripciones viejas ("Pago de X") con el número de cuota real.
+        const crossPaymentLookup = new Map<string, { installmentNumber: number; totalInstallments: number }>();
+        for (const p of dayPayments) {
+            if (p.schedule?.installmentNumber != null) {
+                const key = `${p.credit.client.fullName.toLowerCase().trim()}|${Math.round(Number(p.amount) * 100) / 100}`;
+                if (!crossPaymentLookup.has(key)) {
+                    crossPaymentLookup.set(key, {
+                        installmentNumber: p.schedule.installmentNumber,
+                        totalInstallments: (p.credit as any)._count.paymentSchedule,
+                    });
+                }
+            }
+        }
+
+        const normalizeDisbDesc = (
+            desc: string | null | undefined,
+            amount?: number,
+            lookup?: Map<string, { installmentNumber: number; totalInstallments: number }>
+        ): string | undefined => {
             if (!desc) return undefined;
-            const match = desc.match(/financiado con pago de (.+?)\)/);
-            if (match) return `Pago de ${match[1]}`;
+
+            let clientName: string | null = null;
+
+            // Formato viejo: "Desembolso crédito a X (financiado con pago de Y)"
+            const oldMatch = desc.match(/financiado con pago de (.+?)\)/);
+            if (oldMatch) clientName = oldMatch[1];
+
+            // Formato intermedio: "Pago de Y" (cuando installmentNumber fue null al crear)
+            if (!clientName) {
+                const payMatch = desc.match(/^Pago de (.+)$/);
+                if (payMatch) clientName = payMatch[1];
+            }
+
+            // Intentar enriquecer con el número de cuota desde el lookup
+            if (clientName && lookup && amount != null) {
+                const key = `${clientName.toLowerCase().trim()}|${Math.round(amount * 100) / 100}`;
+                const found = lookup.get(key);
+                if (found) {
+                    const { installmentNumber, totalInstallments } = found;
+                    return installmentNumber === totalInstallments
+                        ? `Última cuota de ${clientName}`
+                        : `Cuota #${installmentNumber} de ${clientName}`;
+                }
+            }
+
+            // Fallback: formato viejo sin match en lookup → "Pago de Y"
+            if (oldMatch) return `Pago de ${oldMatch[1]}`;
+
+            // Desembolso puro (sin financiamiento) → sin etiqueta
             if (/^Desembolso/.test(desc)) return undefined;
+
+            // Formato nuevo con cuota ya almacenada → pasa tal cual
             return desc;
         };
 
@@ -552,7 +600,7 @@ export class AccountService {
             const splitsCuentas = movs.map(m => ({
                 cuenta:      m.account?.name ?? '—',
                 monto:       Math.round(Number(m.amount) * 100) / 100,
-                descripcion: normalizeDisbDesc(m.description),
+                descripcion: normalizeDisbDesc(m.description, Number(m.amount), crossPaymentLookup),
             }));
             return {
                 id:         first.relatedCreditId ?? first.id,
