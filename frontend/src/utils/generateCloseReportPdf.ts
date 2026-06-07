@@ -230,12 +230,15 @@ export function generateCloseReportPdf(report: CloseReport) {
         doc.text(`CRÉDITOS COLOCADOS (${disbursements?.length ?? 0})`, LM, y);
         y += 6;
 
-        const dC2 = [LM, LM + 14, LM + 56, LM + 98, LM + 128, LM + 158];
+        // Hora(12) Cliente(40) Monto(30) SalioDe(68: desc 48 + monto 20) ColocadoPor(resto)
+        const dC2 = [LM, LM + 12, LM + 52, LM + 82, LM + 150];
+        const SALIO_DESC_X = LM + 82;   // descripción dentro de "Salió de"
+        const SALIO_AMT_X  = LM + 132;  // monto individual del split
         doc.setFontSize(7.5);
         doc.text('Hora',         dC2[0], y);
         doc.text('Cliente',      dC2[1], y);
         doc.text('Monto',        dC2[2], y);
-        doc.text('Salió de',     dC2[3], y);
+        doc.text('Salió de',     SALIO_DESC_X, y);
         doc.text('Colocado por', dC2[4], y);
         y += 4;
         doc.setDrawColor(200, 200, 200);
@@ -251,15 +254,35 @@ export function generateCloseReportPdf(report: CloseReport) {
             y += 8;
         } else {
             for (const d of disbursements) {
-                checkPage(7);
+                const splits = d.splits ?? [];
+                const numLines = splits.length > 0 ? splits.length : 1;
+                const rowH = numLines === 1 ? 6 : numLines * 5.5 + 1;
+                checkPage(rowH + 2);
+                // Columnas comunes: hora, cliente, monto total, colocado por
                 tableRow(doc, [
                     { x: dC2[0], text: FH(d.hora) },
-                    { x: dC2[1], text: d.cliente,  maxW: 40 },
+                    { x: dC2[1], text: d.cliente, maxW: 38 },
                     { x: dC2[2], text: FM(d.monto), bold: true },
-                    { x: dC2[3], text: d.cuenta,   maxW: 28 },
-                    { x: dC2[4], text: d.usuario,  maxW: 36 },
+                    { x: dC2[4], text: d.usuario, maxW: 44 },
                 ], y);
-                y += 6;
+                // Columna "Salió de": splits con descripción+monto individual, o nombre de cuenta
+                if (splits.length > 0) {
+                    doc.setFontSize(7.5);
+                    splits.forEach((s, i) => {
+                        const sy = y + i * 5.5;
+                        const label = s.descripcion ?? s.cuenta;
+                        doc.setFont('helvetica', 'normal');
+                        doc.text(doc.splitTextToSize(label, 47)[0] ?? label, SALIO_DESC_X, sy);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(FM(s.monto), SALIO_AMT_X, sy);
+                    });
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'normal');
+                } else {
+                    doc.setFont('helvetica', 'normal');
+                    doc.text(doc.splitTextToSize(d.cuenta, 65)[0] ?? d.cuenta, SALIO_DESC_X, y);
+                }
+                y += rowH;
             }
             if (disbursements.length > 1) {
                 checkPage(7);
