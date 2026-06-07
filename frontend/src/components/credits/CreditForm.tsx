@@ -21,7 +21,7 @@ interface CreditFormProps {
     selectedBusinessId?: string;
 }
 
-interface FinancingRow { id: string; clientId: string; clientName: string; creditId: string; scheduleId: string; amount: string; }
+interface FinancingRow { id: string; clientId: string; clientName: string; creditId: string; selectedSchedules: { scheduleId: string; amount: string }[]; }
 
 const frequencies: { value: PaymentFrequency; label: string }[] = [
     { value: 'daily', label: 'Diario' },
@@ -294,11 +294,23 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             return setFormError('Selecciona un negocio');
         }
 
-        // Construir entradas de financiamiento (solo filas completas)
+        // Validar que cada bloque con crédito tenga al menos una cuota marcada
+        if (financingEnabled) {
+            const bloquesSinCuotas = financingRows.filter(r => r.creditId && r.selectedSchedules.length === 0);
+            if (bloquesSinCuotas.length > 0) {
+                return setFormError('Selecciona al menos una cuota en cada bloque de financiamiento.');
+            }
+        }
+
+        // Construir entradas de financiamiento (solo filas con cliente + crédito + cuotas marcadas)
         const financingEntries = financingEnabled
-            ? financingRows
-                .filter(r => r.clientId && r.creditId && r.scheduleId && Number(r.amount.replace(/[^0-9]/g, '') || '0') > 0)
-                .map(r => ({ creditId: r.creditId, scheduleId: r.scheduleId, amount: Number(r.amount.replace(/[^0-9]/g, '')) }))
+            ? financingRows.flatMap(r =>
+                r.clientId && r.creditId
+                    ? r.selectedSchedules
+                        .filter(ss => Number(ss.amount) > 0)
+                        .map(ss => ({ creditId: r.creditId, scheduleId: ss.scheduleId, amount: Number(ss.amount) }))
+                    : []
+            )
             : [];
         if (financingEntries.length > 0) {
             const financedSum = financingEntries.reduce((s, e) => s + e.amount, 0);
@@ -778,7 +790,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                             setFinancingEnabled(e.target.checked);
                                             if (e.target.checked) {
                                                 if (financingRows.length === 0) {
-                                                    setFinancingRows([{ id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', scheduleId: '', amount: '' }]);
+                                                    setFinancingRows([{ id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', selectedSchedules: [] }]);
                                                 }
                                             } else {
                                                 setFinancingRows([]);
@@ -787,7 +799,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                         className="w-4 h-4 rounded border-gray-300 text-primary-600 cursor-pointer"
                                     />
                                     <Users size={15} className="text-primary-600" />
-                                    <span className="text-xs text-gray-600 font-medium">Financiar el desembolso con pagos de otros clientes</span>
+                                    <span className="text-xs text-gray-600 font-medium">Financiar el desembolso con cuotas de créditos activos</span>
                                 </label>
 
                                 {financingEnabled && (
@@ -797,7 +809,6 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                                 key={row.id}
                                                 row={row}
                                                 clientList={clientList || []}
-                                                excludeClientId={selectedClientId}
                                                 businessId={effectiveBusinessId}
                                                 onChange={(updated) => setFinancingRows(prev => prev.map(r => r.id === row.id ? { ...r, ...updated } : r))}
                                                 onRemove={() => setFinancingRows(prev => prev.filter(r => r.id !== row.id))}
@@ -806,16 +817,16 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 
                                         <button
                                             type="button"
-                                            onClick={() => setFinancingRows(prev => [...prev, { id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', scheduleId: '', amount: '' }])}
+                                            onClick={() => setFinancingRows(prev => [...prev, { id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', selectedSchedules: [] }])}
                                             className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 transition"
                                         >
-                                            <PlusCircle size={14} /> Agregar otro cliente
+                                            <PlusCircle size={14} /> Agregar otro crédito
                                         </button>
 
                                         {/* Indicador de cuadre */}
                                         {(() => {
                                             const total = Number(formData.amount.replace(/[^0-9]/g, '') || '0');
-                                            const financedSum = financingRows.reduce((s, r) => s + Number(r.amount.replace(/[^0-9]/g, '') || '0'), 0);
+                                            const financedSum = financingRows.reduce((s, row) => s + row.selectedSchedules.reduce((ss, sch) => ss + Number(sch.amount || 0), 0), 0);
                                             const desdeCaja = total - financedSum;
                                             const overFinanced = financedSum > total && total > 0;
                                             return total > 0 ? (
@@ -1161,17 +1172,14 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 interface FinancingRowWidgetProps {
     row: FinancingRow;
     clientList: Client[];
-    excludeClientId: string;
     businessId: string;
-    onChange: (updated: Partial<{ clientId: string; clientName: string; creditId: string; scheduleId: string; amount: string }>) => void;
+    onChange: (updated: Partial<FinancingRow>) => void;
     onRemove: () => void;
 }
 
-const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList, excludeClientId, businessId, onChange, onRemove }) => {
-    const availableClients = clientList.filter(c => c.id !== excludeClientId);
-
+const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList, businessId, onChange, onRemove }) => {
     // Sin filtro de status: el backend acepta créditos activos Y en mora para pagos cruzados;
-    // solo excluye paid/cancelled. Filtrar solo por businessId+clientId aquí.
+    // solo excluye paid/cancelled. El cliente del nuevo crédito también puede ser fuente.
     const { data: activeCredits, isFetching: fetchingCredits } = useQuery({
         queryKey: ['credits', 'active-for-financing', row.clientId, businessId],
         queryFn: () => getCredits({ businessId, clientId: row.clientId }),
@@ -1191,15 +1199,12 @@ const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList
             .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     }, [creditDetail]);
 
-    const selectedSchedule = pendingSchedules.find(s => s.id === row.scheduleId);
-    const pendingAmount = selectedSchedule
-        ? Math.ceil(Number(selectedSchedule.scheduledAmount) - Number(selectedSchedule.paidAmount))
-        : null;
+    const subtotal = row.selectedSchedules.reduce((s, ss) => s + Number(ss.amount || 0), 0);
 
     return (
         <div className="bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200 space-y-2">
             <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente a financiar</span>
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Fuente de financiamiento</span>
                 <button type="button" onClick={onRemove} className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition">
                     <X size={14} />
                 </button>
@@ -1209,13 +1214,13 @@ const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList
             <select
                 value={row.clientId}
                 onChange={(e) => {
-                    const found = availableClients.find(c => c.id === e.target.value);
-                    onChange({ clientId: e.target.value, clientName: found?.fullName || '', creditId: '', scheduleId: '', amount: '' });
+                    const found = clientList.find(c => c.id === e.target.value);
+                    onChange({ clientId: e.target.value, clientName: found?.fullName || '', creditId: '', selectedSchedules: [] });
                 }}
                 className="w-full px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
             >
                 <option value="">Seleccione un cliente</option>
-                {availableClients.map(c => (
+                {clientList.map(c => (
                     <option key={c.id} value={c.id}>{c.fullName} ({c.phone})</option>
                 ))}
             </select>
@@ -1224,12 +1229,12 @@ const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList
             {row.clientId && (
                 fetchingCredits ? (
                     <p className="text-xs text-gray-400 px-1">Cargando créditos...</p>
-                ) : !activeCredits || activeCredits.length === 0 ? (
+                ) : !activeCredits || activeCredits.filter(c => c.status !== 'paid' && c.status !== 'cancelled').length === 0 ? (
                     <p className="text-xs text-amber-600 px-1">Este cliente no tiene créditos con saldo pendiente.</p>
                 ) : (
                     <select
                         value={row.creditId}
-                        onChange={(e) => onChange({ creditId: e.target.value, scheduleId: '', amount: '' })}
+                        onChange={(e) => onChange({ creditId: e.target.value, selectedSchedules: [] })}
                         className="w-full px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
                     >
                         <option value="">Seleccione un crédito</option>
@@ -1244,77 +1249,66 @@ const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList
                 )
             )}
 
-            {/* Selector de cuota pendiente */}
+            {/* Checklist de cuotas pendientes */}
             {row.creditId && (
                 fetchingDetail ? (
                     <p className="text-xs text-gray-400 px-1">Cargando cuotas...</p>
                 ) : pendingSchedules.length === 0 ? (
                     <p className="text-xs text-amber-600 px-1">Este crédito no tiene cuotas pendientes.</p>
                 ) : (
-                    <select
-                        value={row.scheduleId}
-                        onChange={(e) => onChange({ scheduleId: e.target.value, amount: '' })}
-                        className="w-full px-2.5 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                    >
-                        <option value="">Seleccione una cuota</option>
+                    <div className="space-y-1 mt-1">
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">Cuotas pendientes</span>
                         {pendingSchedules.map(s => {
                             const pending = Math.ceil(Number(s.scheduledAmount) - Number(s.paidAmount));
+                            const checked = row.selectedSchedules.find(ss => ss.scheduleId === s.id);
                             const dueDate = new Date(s.dueDate);
                             return (
-                                <option key={s.id} value={s.id}>
-                                    Cuota #{s.installmentNumber} · vence {toLocalDateString(dueDate)} · pendiente ${pending.toLocaleString('es-CO')}
-                                </option>
+                                <div key={s.id} className="flex items-start gap-2 px-1 py-1 rounded-lg hover:bg-gray-100">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!checked}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                onChange({ selectedSchedules: [
+                                                    ...row.selectedSchedules,
+                                                    { scheduleId: s.id, amount: String(pending) },
+                                                ] });
+                                            } else {
+                                                onChange({ selectedSchedules: row.selectedSchedules.filter(ss => ss.scheduleId !== s.id) });
+                                            }
+                                        }}
+                                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 cursor-pointer flex-shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium text-gray-700">
+                                            Cuota #{s.installmentNumber} · vence {toLocalDateString(dueDate)}
+                                            {' · '}pendiente <strong>${pending.toLocaleString('es-CO')}</strong>
+                                        </p>
+                                        {checked && (
+                                            <input
+                                                type="text"
+                                                value={checked.amount === '' ? '' : Number(checked.amount || 0).toLocaleString('es-CO')}
+                                                onChange={(e) => {
+                                                    const raw = e.target.value.replace(/[^0-9]/g, '');
+                                                    onChange({ selectedSchedules: row.selectedSchedules.map(ss =>
+                                                        ss.scheduleId === s.id ? { ...ss, amount: raw } : ss
+                                                    ) });
+                                                }}
+                                                className="mt-1 w-full px-2 py-1 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                                                placeholder="Monto a aplicar"
+                                            />
+                                        )}
+                                    </div>
+                                </div>
                             );
                         })}
-                    </select>
-                )
-            )}
-
-            {/* Campo de monto */}
-            {row.scheduleId && (
-                <div className="space-y-1.5">
-                    {pendingAmount !== null && (
-                        <p className="text-xs text-gray-500">Pendiente de la cuota: <strong>${pendingAmount.toLocaleString('es-CO')}</strong></p>
-                    )}
-                    <input
-                        type="text"
-                        value={row.amount}
-                        onChange={(e) => {
-                            const raw = e.target.value.replace(/[^0-9]/g, '');
-                            onChange({ amount: raw ? Number(raw).toLocaleString('es-CO') : '' });
-                        }}
-                        className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                        placeholder="0"
-                    />
-                    <div className="flex flex-wrap gap-1">
-                        {[
-                            { label: '+10k', delta: 10_000 },
-                            { label: '+50k', delta: 50_000 },
-                            { label: '+100k', delta: 100_000 },
-                        ].map(({ label, delta }) => (
-                            <button key={label} type="button"
-                                onClick={() => {
-                                    const current = Number(row.amount.replace(/[^0-9]/g, '') || '0');
-                                    onChange({ amount: (current + delta).toLocaleString('es-CO') });
-                                }}
-                                className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 active:bg-primary-200 transition">
-                                {label}
-                            </button>
-                        ))}
-                        {pendingAmount !== null && (
-                            <button type="button"
-                                onClick={() => onChange({ amount: pendingAmount.toLocaleString('es-CO') })}
-                                className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition">
-                                Todo pendiente
-                            </button>
+                        {subtotal > 0 && (
+                            <p className="text-xs text-primary-700 font-semibold text-right pr-1">
+                                Subtotal: ${subtotal.toLocaleString('es-CO')}
+                            </p>
                         )}
-                        <button type="button"
-                            onClick={() => onChange({ amount: '' })}
-                            className="px-2 py-0.5 text-[10px] font-semibold rounded-md border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 active:bg-red-200 transition">
-                            Borrar
-                        </button>
                     </div>
-                </div>
+                )
             )}
         </div>
     );
