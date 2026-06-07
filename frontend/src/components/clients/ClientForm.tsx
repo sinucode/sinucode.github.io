@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useErrorModal } from '../../context/ErrorModalContext';
 import { X, Save, Search } from 'lucide-react';
 import { createClient, updateClient, Client, CreateClientData, searchClients } from '../../api/clients.api';
 import { getBusinesses } from '../../api/business.api';
@@ -16,6 +17,7 @@ interface ClientFormProps {
 const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, selectedBusinessId }) => {
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
     const [formData, setFormData] = useState<CreateClientData>({
         fullName: '',
         phone: '',
@@ -75,7 +77,11 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['clients'] }); onSuccess(); },
         onError: (err: any) => {
             const errors = err.response?.data?.errors;
-            setError(Array.isArray(errors) && errors.length > 0 ? errors[0].msg : err.response?.data?.error || 'Error al crear el cliente');
+            if (Array.isArray(errors) && errors.length > 0) {
+                setError(errors[0].msg);
+            } else {
+                showError(err);
+            }
         },
     });
 
@@ -84,7 +90,11 @@ const ClientForm: React.FC<ClientFormProps> = ({ client, onClose, onSuccess, sel
         onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['clients'] }); onSuccess(); },
         onError: (err: any) => {
             const errors = err.response?.data?.errors;
-            setError(Array.isArray(errors) && errors.length > 0 ? errors[0].msg : err.response?.data?.error || 'Error al actualizar el cliente');
+            if (Array.isArray(errors) && errors.length > 0) {
+                setError(errors[0].msg);
+            } else {
+                showError(err);
+            }
         },
     });
 

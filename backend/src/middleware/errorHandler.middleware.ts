@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 import { config } from '../config/env';
+import { AppError } from '../utils/AppError';
 
 /**
  * Middleware para manejo centralizado de errores
@@ -20,6 +21,16 @@ export const errorHandler = (
         method: req.method,
         user: req.user?.userId,
     });
+
+    // Manejo de AppError (errores de negocio estructurados)
+    if (err instanceof AppError) {
+        res.status(err.statusCode).json({
+            error: err.message,
+            code: err.code,
+            ...(err.details && { details: err.details }),
+        });
+        return;
+    }
 
     // Manejo de errores de Prisma
     if (err.name === 'PrismaClientKnownRequestError') {

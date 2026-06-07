@@ -2,9 +2,20 @@ import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import { UserRole } from '@prisma/client';
 import { accountService } from '../services/account.service';
+import { AppError } from '../utils/AppError';
 
-const statusFor = (msg: string) =>
-    msg.includes('permiso') ? 403 : msg.includes('no encontrad') ? 404 : 400;
+const statusFor = (e: any): number =>
+    e instanceof AppError ? e.statusCode :
+    (e.message?.includes('permiso') ? 403 : e.message?.includes('no encontrad') ? 404 : 400);
+
+const bodyFor = (e: any): Record<string, unknown> => {
+    const body: Record<string, unknown> = { error: e.message };
+    if (e instanceof AppError) {
+        body.code = e.code;
+        if (e.details) body.details = e.details;
+    }
+    return body;
+};
 
 export const listAccounts = async (req: Request, res: Response) => {
     try {
@@ -13,7 +24,7 @@ export const listAccounts = async (req: Request, res: Response) => {
         const accounts = await accountService.listAccounts(req.query.businessId as string, req.user!.userId, req.user!.role as UserRole);
         return res.json(accounts);
     } catch (e: any) {
-        return res.status(statusFor(e.message)).json({ error: e.message });
+        return res.status(statusFor(e)).json(bodyFor(e));
     }
 };
 
@@ -24,7 +35,7 @@ export const getAccountBalances = async (req: Request, res: Response) => {
         const data = await accountService.getBalances(req.query.businessId as string, req.user!.userId, req.user!.role as UserRole);
         return res.json(data);
     } catch (e: any) {
-        return res.status(statusFor(e.message)).json({ error: e.message });
+        return res.status(statusFor(e)).json(bodyFor(e));
     }
 };
 
@@ -35,7 +46,7 @@ export const createAccount = async (req: Request, res: Response) => {
         const acc = await accountService.createAccount(req.body.businessId, req.body.name, req.body.type, req.user!.userId, req.user!.role as UserRole);
         return res.status(201).json(acc);
     } catch (e: any) {
-        return res.status(statusFor(e.message)).json({ error: e.message });
+        return res.status(statusFor(e)).json(bodyFor(e));
     }
 };
 
@@ -46,7 +57,7 @@ export const updateAccount = async (req: Request, res: Response) => {
         const acc = await accountService.updateAccount(req.params.id, { name: req.body.name, type: req.body.type }, req.user!.userId, req.user!.role as UserRole);
         return res.json(acc);
     } catch (e: any) {
-        return res.status(statusFor(e.message)).json({ error: e.message });
+        return res.status(statusFor(e)).json(bodyFor(e));
     }
 };
 
@@ -55,7 +66,7 @@ export const deleteAccount = async (req: Request, res: Response) => {
         const result = await accountService.deleteAccount(req.params.id, { mode: req.body.mode, targetAccountId: req.body.targetAccountId }, req.user!.userId, req.user!.role as UserRole);
         return res.json(result);
     } catch (e: any) {
-        return res.status(statusFor(e.message)).json({ error: e.message });
+        return res.status(statusFor(e)).json(bodyFor(e));
     }
 };
 
@@ -66,7 +77,7 @@ export const setDefaultAccount = async (req: Request, res: Response) => {
         await accountService.setDefault(req.params.id, req.body.kind, req.user!.userId, req.user!.role as UserRole);
         return res.json({ success: true });
     } catch (e: any) {
-        return res.status(statusFor(e.message)).json({ error: e.message });
+        return res.status(statusFor(e)).json(bodyFor(e));
     }
 };
 
@@ -75,14 +86,14 @@ export const getTodayClose = async (req: Request, res: Response) => {
     try {
         const close = await accountService.getTodayClose(req.query.businessId as string, req.user!.userId, req.user!.role as UserRole);
         return res.json(close);
-    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+    } catch (e: any) { return res.status(statusFor(e)).json(bodyFor(e)); }
 };
 
 export const listCloses = async (req: Request, res: Response) => {
     try {
         const closes = await accountService.listCloses(req.query.businessId as string, req.user!.userId, req.user!.role as UserRole);
         return res.json(closes);
-    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+    } catch (e: any) { return res.status(statusFor(e)).json(bodyFor(e)); }
 };
 
 export const createClose = async (req: Request, res: Response) => {
@@ -91,7 +102,7 @@ export const createClose = async (req: Request, res: Response) => {
         if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
         const close = await accountService.createClose(req.body.businessId, { countedBalances: req.body.countedBalances, notes: req.body.notes }, req.user!.userId, req.user!.role as UserRole, 'manual');
         return res.status(201).json(close);
-    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+    } catch (e: any) { return res.status(statusFor(e)).json(bodyFor(e)); }
 };
 
 export const reopenClose = async (req: Request, res: Response) => {
@@ -100,7 +111,7 @@ export const reopenClose = async (req: Request, res: Response) => {
         if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
         const close = await accountService.reopenClose(req.params.id, req.body.reason, req.user!.userId, req.user!.role as UserRole);
         return res.json(close);
-    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+    } catch (e: any) { return res.status(statusFor(e)).json(bodyFor(e)); }
 };
 
 export const getCloseReport = async (req: Request, res: Response) => {
@@ -114,7 +125,7 @@ export const getCloseReport = async (req: Request, res: Response) => {
             req.user!.role as UserRole,
         );
         return res.json(report);
-    } catch (e: any) { return res.status(statusFor(e.message)).json({ error: e.message }); }
+    } catch (e: any) { return res.status(statusFor(e)).json(bodyFor(e)); }
 };
 
 export const autoCloseRun = async (req: Request, res: Response) => {

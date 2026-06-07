@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useErrorModal } from '../context/ErrorModalContext';
 import {
     CreditCard, Filter, Search, Download, FileText,
     ExternalLink, MessageCircle, Printer, X
@@ -75,6 +76,7 @@ export default function PaymentsPage() {
     const { user } = useAuthStore();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
     const isSuperAdmin = user?.role === 'super_admin';
     const { selectedBusinessId: businessId, setSelectedBusiness } = useBusinessStore();
 
@@ -209,7 +211,7 @@ export default function PaymentsPage() {
             alert('Pago revertido. Para reversiones más precisas, ve al detalle del crédito.');
         },
         onError: (err: any) => {
-            alert(err?.response?.data?.error || err.message || 'Error al revertir el pago');
+            showError(err);
         },
         onSettled: () => setReverting(false),
     });

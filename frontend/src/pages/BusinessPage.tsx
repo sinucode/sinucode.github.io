@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useErrorModal } from '../context/ErrorModalContext';
 import { Pencil, Trash2, Plus, BarChart2 } from 'lucide-react';
 import {
     getBusinesses,
@@ -16,6 +17,7 @@ export default function BusinessPage() {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
     const currentUser = useAuthStore((state) => state.user);
+    const { showError } = useErrorModal();
     const { setSelectedBusiness } = useBusinessStore();
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
@@ -34,7 +36,7 @@ export default function BusinessPage() {
         },
         onError: (error: any) => {
             console.error('Error deleting business:', error);
-            alert(error.response?.data?.error || 'Error al eliminar el negocio');
+            showError(error);
             setBusinessToDelete(null);
         },
     });

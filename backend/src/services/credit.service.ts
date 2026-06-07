@@ -172,6 +172,7 @@ export class CreditService {
         interface ValidatedFinancing {
             creditId: string;
             scheduleId?: string;
+            installmentNumber?: number;
             amount: number;
             clientName: string;  // nombre del cliente del crédito de origen (para auditoría)
         }
@@ -204,7 +205,7 @@ export class CreditService {
                         remainingBalance: true,
                         client: { select: { fullName: true } },
                         paymentSchedule: f.scheduleId
-                            ? { where: { id: f.scheduleId }, select: { id: true, scheduledAmount: true, paidAmount: true } }
+                            ? { where: { id: f.scheduleId }, select: { id: true, installmentNumber: true, scheduledAmount: true, paidAmount: true } }
                             : false,
                     },
                 });
@@ -238,7 +239,7 @@ export class CreditService {
 
                 // Si trae scheduleId: validar que pertenece al crédito y que el monto no excede el pendiente
                 if (f.scheduleId) {
-                    const scheduleRows = (sourceCreditRaw.paymentSchedule as { id: string; scheduledAmount: Prisma.Decimal; paidAmount: Prisma.Decimal }[] | false);
+                    const scheduleRows = (sourceCreditRaw.paymentSchedule as { id: string; installmentNumber: number; scheduledAmount: Prisma.Decimal; paidAmount: Prisma.Decimal }[] | false);
                     const targetSchedule = scheduleRows && scheduleRows.length > 0 ? scheduleRows[0] : null;
                     if (!targetSchedule) {
                         throw new Error(`La cuota ${f.scheduleId} no pertenece al crédito ${f.creditId}`);
@@ -256,9 +257,15 @@ export class CreditService {
                     amountByScheduleId.set(f.scheduleId, totalForSchedule);
                 }
 
+                const scheduleRowsForNum = (sourceCreditRaw.paymentSchedule as { id: string; installmentNumber: number }[] | false);
+                const installmentNumber = f.scheduleId && scheduleRowsForNum && scheduleRowsForNum.length > 0
+                    ? scheduleRowsForNum[0].installmentNumber
+                    : undefined;
+
                 validatedFinancings.push({
                     creditId: f.creditId,
                     scheduleId: f.scheduleId,
+                    installmentNumber,
                     amount: f.amount,
                     clientName: sourceCreditRaw.client.fullName,
                 });
@@ -532,7 +539,9 @@ export class CreditService {
                         type: 'loan_disbursement',
                         amount: new Prisma.Decimal(f.amount),
                         balanceAfter: runningBalance,
-                        description: `Desembolso crédito a ${client.fullName} (financiado con pago de ${f.clientName})`,
+                        description: f.installmentNumber != null
+                            ? `Cuota #${f.installmentNumber} de ${f.clientName}`
+                            : `Pago de ${f.clientName}`,
                         relatedCreditId: credit.id,
                         paymentMethod: disbursementAccountName,
                         accountId: disbursementAccountId,
@@ -553,7 +562,7 @@ export class CreditService {
                                 type: 'loan_disbursement',
                                 amount: new Prisma.Decimal(split.amount),
                                 balanceAfter: runningBalance,
-                                description: `Desembolso crédito a ${client.fullName}`,
+                                description: `Desembolso a ${client.fullName}`,
                                 relatedCreditId: credit.id,
                                 paymentMethod: split.accountName,
                                 accountId: split.accountId,

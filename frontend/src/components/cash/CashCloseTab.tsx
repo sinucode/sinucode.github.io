@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useErrorModal } from '../../context/ErrorModalContext';
 import {
     Lock, Unlock, Clock, AlertCircle, RotateCcw,
     FileDown, FileSpreadsheet, ChevronDown, ChevronRight,
@@ -42,6 +43,7 @@ const todayBogota = () =>
 export default function CashCloseTab({ businessId }: { businessId: string }) {
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
     const isAdmin = ['admin', 'super_admin'].includes(user?.role || '');
     const isSuper = user?.role === 'super_admin';
     const canCloseCash = isAdmin;
@@ -101,7 +103,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             });
         },
         onSuccess: () => { setError(''); setCountedBalances({}); setCloseNotes(''); refresh(); },
-        onError: (e: any) => setError(e?.response?.data?.error || 'No se pudo cerrar la caja'),
+        onError: (e: any) => showError(e),
     });
 
     const reopenMut = useMutation({
@@ -111,7 +113,7 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
             return reopenClose(id, reason);
         },
         onSuccess: () => { setError(''); refresh(); },
-        onError: (e: any) => { if (e?.message !== 'cancelado') setError(e?.response?.data?.error || 'No se pudo reabrir'); },
+        onError: (e: any) => { if (e?.message !== 'cancelado') showError(e); },
     });
 
     // ── Exportar Excel (CSV multi-sección) ──
@@ -602,12 +604,17 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                 <td className="px-4 py-2.5 text-right font-bold text-blue-700">{FM(d.monto)}</td>
                                                 <td className="px-4 py-2.5 text-gray-600">
                                                     {d.splits ? (
-                                                        <div className="flex flex-col gap-0.5">
+                                                        <div className="flex flex-col gap-1">
                                                             {d.splits.map((s, i) => (
-                                                                <span key={i} className="text-xs leading-tight">
-                                                                    {s.cuenta}{' '}
-                                                                    <span className="text-blue-600 font-medium">{FM(s.monto)}</span>
-                                                                </span>
+                                                                <div key={i} className="flex flex-col leading-tight">
+                                                                    {s.descripcion && (
+                                                                        <span className="text-xs text-gray-700 font-medium">{s.descripcion}</span>
+                                                                    )}
+                                                                    <span className="text-xs text-gray-500">
+                                                                        {s.cuenta}{' '}
+                                                                        <span className="text-blue-600 font-medium">{FM(s.monto)}</span>
+                                                                    </span>
+                                                                </div>
                                                             ))}
                                                         </div>
                                                     ) : d.cuenta}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useErrorModal } from '../../context/ErrorModalContext';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { invalidateMoney } from '../../utils/invalidate';
@@ -45,6 +46,7 @@ const DAYS_PER_MONTH = 30; // 1 mes = 30 días (alineado con backend y detalles)
 const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBusinessId }) => {
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
 
     const [clientSearch, setClientSearch] = useState('');
     const [selectedClientId, setSelectedClientId] = useState<string>('');
@@ -231,7 +233,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 setFormError(errors[0].msg);
                 return;
             }
-            setFormError(describeApiError(err, 'Error al crear el crédito'));
+            showError(err);
         },
     });
 

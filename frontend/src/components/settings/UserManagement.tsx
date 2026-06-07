@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAllUsers, toggleUserStatus, bulkToggleUserStatus, type User } from '../../api/users.api';
 import { useAuthStore } from '../../store/authStore';
 import UserForm from './UserForm';
+import { useErrorModal } from '../../context/ErrorModalContext';
 
 export default function UserManagement() {
     const queryClient = useQueryClient();
     const currentUser = useAuthStore((state) => state.user);
+    const { showError } = useErrorModal();
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
@@ -23,7 +25,7 @@ export default function UserManagement() {
         },
         onError: (error: any) => {
             console.error('Error toggling user status:', error);
-            alert(error.response?.data?.error || 'Error al cambiar el estado del usuario');
+            showError(error);
         },
     });
 

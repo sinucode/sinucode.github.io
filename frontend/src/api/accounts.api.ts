@@ -138,7 +138,7 @@ export interface CloseReportDisbursement {
     cliente: string;
     monto: number;
     cuenta: string;                               // "Efectivo + Nequi" cuando hay splits
-    splits?: { cuenta: string; monto: number }[]; // detalle por cuenta (solo multi-split)
+    splits?: { cuenta: string; monto: number; descripcion?: string }[]; // detalle por cuenta (solo multi-split)
     usuario: string;
 }
 

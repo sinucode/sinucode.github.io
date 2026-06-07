@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useErrorModal } from '../../context/ErrorModalContext';
 import { registerPayment } from '../../api/payments.api';
 import { listAccounts } from '../../api/accounts.api';
 import { invalidateMoney } from '../../utils/invalidate';
@@ -29,6 +30,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     paymentSchedule = [],
 }) => {
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
     const [formData, setFormData] = useState({
         paymentDate: todayBogota(),
         paymentMethod: 'efectivo',
@@ -188,16 +190,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
             if (successful.length > 0) {
                 queryClient.invalidateQueries({ queryKey: ['credit', creditId] });
                 queryClient.invalidateQueries({ queryKey: ['credits'] });
+                const msg =
+                    err.response?.data?.errors?.[0]?.msg ||
+                    err.response?.data?.error ||
+                    'Error al registrar pago';
+                setError(`${msg}. Se registraron ${successful.length} cuota(s) antes del error. Revisa el estado del crédito.`);
+            } else {
+                showError(err);
             }
-            const msg =
-                err.response?.data?.errors?.[0]?.msg ||
-                err.response?.data?.error ||
-                'Error al registrar pago';
-            setError(
-                successful.length > 0
-                    ? `${msg}. Se registraron ${successful.length} cuota(s) antes del error. Revisa el estado del crédito.`
-                    : msg
-            );
         } finally {
             setIsSubmitting(false);
         }

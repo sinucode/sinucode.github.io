@@ -12,6 +12,7 @@ import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, X, Undo2 } from 'lucide
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
 import { formatDate, formatDateTime, toLocalDateString } from '../utils/dates';
+import { useErrorModal } from '../context/ErrorModalContext';
 
 const statusColors: Record<PaymentSchedule['status'], string> = {
     paid: 'text-green-600 bg-green-50',
@@ -62,6 +63,7 @@ export default function CreditDetailPage() {
     const [isRevertModalOpen, setIsRevertModalOpen] = useState(false);
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
     const canEditPlan = user?.role === 'super_admin' || user?.role === 'admin';
     const [editForm, setEditForm] = useState({
         amount: '',
@@ -126,7 +128,7 @@ export default function CreditDetailPage() {
             navigate('/credits');
         },
         onError: (err: any) => {
-            alert(err.response?.data?.error || 'Error al eliminar el crédito');
+            showError(err);
         },
     });
 
@@ -942,7 +944,9 @@ function RevertInstallmentModal({
     onSuccess: () => void;
 }) {
     const [amount, setAmount] = useState(String(Math.ceil(Number(schedule.paidAmount))));
+    const [inputError, setInputError] = useState('');
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
 
     const mutation = useMutation({
         mutationFn: (amountToRevert: number) =>
@@ -952,7 +956,7 @@ function RevertInstallmentModal({
             onSuccess();
         },
         onError: (err: any) => {
-            alert(err.response?.data?.error || 'Error al revertir la cuota');
+            showError(err);
         },
     });
 
@@ -962,9 +966,10 @@ function RevertInstallmentModal({
         // para evitar falso "Monto inválido" cuando paidAmount tiene decimales internos.
         const maxRevert = Math.ceil(Number(schedule.paidAmount));
         if (amt <= 0 || amt > maxRevert) {
-            alert('Monto inválido');
+            setInputError(`El monto debe ser entre $1 y $${maxRevert.toLocaleString('es-CO')}`);
             return;
         }
+        setInputError('');
         mutation.mutate(amt);
     };
 
@@ -997,6 +1002,9 @@ function RevertInstallmentModal({
                             />
                         </div>
                     </div>
+                    {inputError && (
+                        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{inputError}</p>
+                    )}
                     <div className="flex justify-end gap-3 pt-2">
                         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                             Cancelar
@@ -1027,6 +1035,7 @@ function QuickPayDialog({
     onSuccess: () => void;
 }) {
     const queryClient = useQueryClient();
+    const { showError } = useErrorModal();
     const { data: credit } = useQuery<CreditDetail>({
         queryKey: ['credit', creditId],
         enabled: false, // Usar data de caché
@@ -1041,7 +1050,7 @@ function QuickPayDialog({
             onSuccess();
         },
         onError: (err: any) => {
-            alert(err?.response?.data?.error || 'Error al registrar el pago');
+            showError(err);
         },
     });
 

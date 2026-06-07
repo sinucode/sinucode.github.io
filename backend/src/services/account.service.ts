@@ -1,5 +1,6 @@
 import { Prisma, UserRole, CashMovementType } from '@prisma/client';
 import prisma from '../config/database';
+import { AppError } from '../utils/AppError';
 
 export interface AccountBalance {
     id: string;
@@ -15,7 +16,7 @@ export class AccountService {
     private async validateAccess(businessId: string, userId: string, role: UserRole): Promise<void> {
         if (role === 'super_admin') return;
         const ub = await prisma.userBusiness.findFirst({ where: { userId, businessId }, select: { businessId: true } });
-        if (!ub) throw new Error('No tiene permisos para acceder a los datos de este negocio');
+        if (!ub) throw new AppError('ERR_PERMISSION_DENIED', 'No tiene permisos para acceder a los datos de este negocio', 403);
     }
 
     /** Efecto firmado de un movimiento sobre el saldo (+ ingreso, − egreso).
@@ -53,8 +54,8 @@ export class AccountService {
     /** Fija el predeterminado para pagos (isDefault) o desembolsos (isDisbursementDefault). */
     async setDefault(accountId: string, kind: 'payment' | 'disbursement', userId: string, role: UserRole): Promise<void> {
         const acc = await prisma.paymentAccount.findUnique({ where: { id: accountId } });
-        if (!acc) throw new Error('Cuenta no encontrada');
-        if (!acc.active) throw new Error('La cuenta no está activa');
+        if (!acc) throw new AppError('ERR_ACCOUNT_NOT_FOUND', 'Cuenta no encontrada', 404);
+        if (!acc.active) throw new AppError('ERR_ACCOUNT_INACTIVE', 'La cuenta no está activa', 400);
         await this.validateAccess(acc.businessId, userId, role);
 
         const field = kind === 'payment' ? 'isDefault' : 'isDisbursementDefault';
@@ -81,7 +82,7 @@ export class AccountService {
             prisma.business.findUnique({ where: { id: businessId }, select: { currentBalance: true } }),
             prisma.cashMovement.findMany({ where: { businessId }, select: { type: true, amount: true, accountId: true, relatedPaymentId: true } }),
         ]);
-        if (!business) throw new Error('Negocio no encontrado');
+        if (!business) throw new AppError('ERR_BUSINESS_NOT_FOUND', 'Negocio no encontrado', 404);
 
         // anchorAcc: cuenta más antigua del negocio — ancla ESTABLE para movimientos legacy y el
         // offset del capital inicial. No cambia aunque el usuario reasigne las preferencias
@@ -115,10 +116,10 @@ export class AccountService {
     async createAccount(businessId: string, name: string, type: string, userId: string, role: UserRole) {
         await this.validateAccess(businessId, userId, role);
         const clean = name.trim();
-        if (!clean) throw new Error('El nombre de la cuenta es requerido');
+        if (!clean) throw new AppError('ERR_ACCOUNT_NAME_REQUIRED', 'El nombre de la cuenta es requerido', 400);
         const dup = await prisma.paymentAccount.findFirst({ where: { businessId, name: clean } });
         if (dup) {
-            if (dup.active) throw new Error('Ya existe una cuenta con ese nombre');
+            if (dup.active) throw new AppError('ERR_ACCOUNT_DUPLICATE_NAME', 'Ya existe una cuenta con ese nombre', 409);
             // Reactivar una cuenta borrada con el mismo nombre
             return prisma.paymentAccount.update({ where: { id: dup.id }, data: { active: true, type } });
         }
@@ -133,12 +134,12 @@ export class AccountService {
 
     async updateAccount(accountId: string, data: { name?: string; type?: string }, userId: string, role: UserRole) {
         const acc = await prisma.paymentAccount.findUnique({ where: { id: accountId } });
-        if (!acc) throw new Error('Cuenta no encontrada');
+        if (!acc) throw new AppError('ERR_ACCOUNT_NOT_FOUND', 'Cuenta no encontrada', 404);
         await this.validateAccess(acc.businessId, userId, role);
         if (data.name) {
             const clean = data.name.trim();
             const dup = await prisma.paymentAccount.findFirst({ where: { businessId: acc.businessId, name: clean, id: { not: accountId } } });
-            if (dup) throw new Error('Ya existe una cuenta con ese nombre');
+            if (dup) throw new AppError('ERR_ACCOUNT_DUPLICATE_NAME', 'Ya existe una cuenta con ese nombre', 409);
         }
         return prisma.paymentAccount.update({
             where: { id: accountId },
@@ -149,23 +150,23 @@ export class AccountService {
     /** Elimina (soft) una cuenta. Si tiene saldo, exige transferir a otra o retirar del negocio. */
     async deleteAccount(accountId: string, opts: { mode?: 'transfer' | 'withdraw'; targetAccountId?: string }, userId: string, role: UserRole) {
         const acc = await prisma.paymentAccount.findUnique({ where: { id: accountId } });
-        if (!acc) throw new Error('Cuenta no encontrada');
+        if (!acc) throw new AppError('ERR_ACCOUNT_NOT_FOUND', 'Cuenta no encontrada', 404);
         await this.validateAccess(acc.businessId, userId, role);
 
         const activeCount = await prisma.paymentAccount.count({ where: { businessId: acc.businessId, active: true } });
-        if (activeCount <= 1) throw new Error('No puedes eliminar la única cuenta del negocio');
+        if (activeCount <= 1) throw new AppError('ERR_ACCOUNT_LAST_ACCOUNT', 'No puedes eliminar la única cuenta del negocio', 400);
 
         const { accounts } = await this.getBalances(acc.businessId, userId, role);
         const saldo = accounts.find(a => a.id === accountId)?.balance || 0;
 
         return prisma.$transaction(async (tx) => {
             if (Math.abs(saldo) > 0.01) {
-                if (!opts.mode) throw new Error(`La cuenta tiene saldo de $${saldo.toLocaleString('es-CO')}. Indica si transferir a otra cuenta o retirar del negocio.`);
+                if (!opts.mode) throw new AppError('ERR_ACCOUNT_HAS_BALANCE', `La cuenta tiene saldo de $${saldo.toLocaleString('es-CO')}. Indica si transferir a otra cuenta o retirar del negocio.`, 400, { saldo });
 
                 if (opts.mode === 'transfer') {
-                    if (!opts.targetAccountId || opts.targetAccountId === accountId) throw new Error('Selecciona una cuenta destino válida');
+                    if (!opts.targetAccountId || opts.targetAccountId === accountId) throw new AppError('ERR_ACCOUNT_INVALID_TARGET', 'Selecciona una cuenta destino válida', 400);
                     const target = await tx.paymentAccount.findFirst({ where: { id: opts.targetAccountId, businessId: acc.businessId, active: true } });
-                    if (!target) throw new Error('Cuenta destino no válida');
+                    if (!target) throw new AppError('ERR_ACCOUNT_INVALID_TARGET', 'Cuenta destino no válida', 400);
                     // Leer el balance real del negocio — la transferencia interna no lo cambia
                     const bizForTransfer = await tx.business.findUnique({ where: { id: acc.businessId }, select: { currentBalance: true } });
                     const realBalance = bizForTransfer!.currentBalance;
@@ -205,7 +206,7 @@ export class AccountService {
         });
         if (close) {
             const dayStr = new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
-            throw new Error(`El día ${dayStr} está cerrado. Un super admin debe reabrir el cierre para registrar este movimiento.`);
+            throw new AppError('ERR_DAY_CLOSED', `El día ${dayStr} está cerrado. Un super admin debe reabrir el cierre para registrar este movimiento.`, 400, { date: dayStr });
         }
     }
 
@@ -219,7 +220,7 @@ export class AccountService {
 
     /** Crea (o re-snapshot) el cierre del día. Admin/super. mode='manual'|'auto'. */
     async createClose(businessId: string, opts: { countedBalances?: Record<string, number>; notes?: string }, userId: string, role: UserRole, mode: 'manual' | 'auto' = 'manual') {
-        if (mode === 'manual' && !['admin', 'super_admin'].includes(role)) throw new Error('Solo administradores pueden cerrar la caja');
+        if (mode === 'manual' && !['admin', 'super_admin'].includes(role)) throw new AppError('ERR_PERMISSION_DENIED', 'Solo administradores pueden cerrar la caja', 403);
         await this.validateAccess(businessId, userId, role);
 
         const { accounts, total } = await this.getBalances(businessId, userId, role);
@@ -264,7 +265,7 @@ export class AccountService {
             select: { id: true, status: true },
         });
         if (existingForReopen?.status === 'reopened' && role !== 'super_admin') {
-            throw new Error('El día fue reabierto por un Super Admin. Solo un Super Admin puede volver a cerrarlo.');
+            throw new AppError('ERR_CLOSE_REOPENED', 'El día fue reabierto por un Super Admin. Solo un Super Admin puede volver a cerrarlo.', 403);
         }
 
         const result = await prisma.cashClose.upsert({
@@ -289,9 +290,9 @@ export class AccountService {
 
     /** Reabre un cierre. Solo super_admin. */
     async reopenClose(closeId: string, reason: string, userId: string, role: UserRole) {
-        if (role !== 'super_admin') throw new Error('Solo el Super Admin puede reabrir un cierre');
+        if (role !== 'super_admin') throw new AppError('ERR_PERMISSION_DENIED', 'Solo el Super Admin puede reabrir un cierre', 403);
         const close = await prisma.cashClose.findUnique({ where: { id: closeId } });
-        if (!close) throw new Error('Cierre no encontrado');
+        if (!close) throw new AppError('ERR_CLOSE_NOT_FOUND', 'Cierre no encontrado', 404);
         await this.validateAccess(close.businessId, userId, role);
         const updated = await prisma.cashClose.update({
             where: { id: closeId },
@@ -317,9 +318,9 @@ export class AccountService {
         await this.validateAccess(businessId, userId, role);
 
         // Validar formato
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) throw new Error('Fecha inválida. Use YYYY-MM-DD');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) throw new AppError('ERR_INVALID_DATE', 'Fecha inválida. Use YYYY-MM-DD', 400);
         const todayLabel = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
-        if (dateStr > todayLabel) throw new Error('No se puede consultar el reporte de una fecha futura');
+        if (dateStr > todayLabel) throw new AppError('ERR_FUTURE_DATE', 'No se puede consultar el reporte de una fecha futura', 400);
 
         const dayStart = new Date(`${dateStr}T00:00:00.000-05:00`);
         const dayEnd   = new Date(`${dateStr}T23:59:59.999-05:00`);
@@ -541,8 +542,9 @@ export class AccountService {
             const first = movs[0];
             const totalMonto = movs.reduce((s, m) => s + Number(m.amount), 0);
             const splitsCuentas = movs.map(m => ({
-                cuenta: m.account?.name ?? '—',
-                monto:  Math.round(Number(m.amount) * 100) / 100,
+                cuenta:      m.account?.name ?? '—',
+                monto:       Math.round(Number(m.amount) * 100) / 100,
+                descripcion: (m as any).description as string | undefined,
             }));
             return {
                 id:         first.relatedCreditId ?? first.id,

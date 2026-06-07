@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
+import { useErrorModal } from '../context/ErrorModalContext';
 import { getBusinesses } from '../api/business.api';
 import {
     getWhatsAppStatus,
@@ -13,6 +14,7 @@ import { Bot, CheckCircle, Copy, LogOut, MessageCircle, AlertTriangle, PlayCircl
 export default function WhatsAppPage() {
     const queryClient = useQueryClient();
     const currentUser = useAuthStore((state) => state.user);
+    const { showError } = useErrorModal();
     const [selectedBusiness, setSelectedBusiness] = useState<string>('');
     const [template, setTemplate] = useState<string>('');
     const [testPhone, setTestPhone] = useState<string>('');
@@ -60,7 +62,7 @@ export default function WhatsAppPage() {
             queryClient.invalidateQueries({ queryKey: ['businesses'] });
         },
         onError: (error: any) => {
-            alert(error.response?.data?.error || 'Error guardando plantilla');
+            showError(error);
         }
     });
 
@@ -70,7 +72,7 @@ export default function WhatsAppPage() {
             alert(data.message);
         },
         onError: (error: any) => {
-            alert(error.response?.data?.error || 'Error enviando mensaje');
+            showError(error);
         }
     });
 

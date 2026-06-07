@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { useAuthInit } from './hooks/useAuthInit';
+import { ErrorModalProvider } from './context/ErrorModalContext';
 import LoginPage from './pages/LoginPage';
 import DashboardLayout from './layouts/DashboardLayout';
 import DashboardHome from './pages/DashboardHome';
@@ -55,6 +56,7 @@ function App() {
     useAuthInit();
 
     return (
+        <ErrorModalProvider>
         <Router>
             <Routes>
                 {/* Ruta pública - Login */}
@@ -87,6 +89,7 @@ function App() {
                 <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
         </Router>
+        </ErrorModalProvider>
     );
 }
 

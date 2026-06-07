@@ -2,6 +2,29 @@ import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import { UserRole } from '@prisma/client';
 import { creditService } from '../services/credit.service';
+import { AppError } from '../utils/AppError';
+
+function handleError(res: Response, error: any, fallback: string, defaultStatus = 400) {
+    if (error instanceof AppError) {
+        return res.status(error.statusCode).json({
+            error: error.message,
+            code: error.code,
+            ...(error.details && { details: error.details }),
+        });
+    }
+    // Mantener compatibilidad con los codes existentes (INSUFFICIENT_*, NO_COLLECTION_DAYS)
+    if (error.code) {
+        return res.status(400).json({
+            error: error.message,
+            code: error.code,
+            ...(error.details && { details: error.details }),
+        });
+    }
+    const status = error.message?.includes('permiso') || error.message?.includes('Super Admin') ? 403
+        : error.message?.includes('encontrad') ? 404
+        : defaultStatus;
+    return res.status(status).json({ error: error.message || fallback });
+}
 
 export const simulateCredit = async (req: Request, res: Response) => {
     try {
@@ -23,14 +46,7 @@ export const simulateCredit = async (req: Request, res: Response) => {
         return res.json(simulation);
     } catch (error: any) {
         console.error('Error simulando crédito:', error);
-        if (error.message === 'NO_COLLECTION_DAYS') {
-            res.status(400).json({
-                code: 'NO_COLLECTION_DAYS',
-                error: 'No quedan días de cobro disponibles con las exclusiones seleccionadas. Deja al menos un día disponible.',
-            });
-            return;
-        }
-        return res.status(500).json({ error: error.message || 'Error al simular crédito' });
+        return handleError(res, error, 'Error al simular crédito', 500);
     }
 };
 
@@ -74,20 +90,7 @@ export const createCredit = async (req: Request, res: Response) => {
         return res.status(201).json(credit);
     } catch (error: any) {
         console.error('Error creando crédito:', error);
-        if (error.message === 'NO_COLLECTION_DAYS') {
-            res.status(400).json({
-                code: 'NO_COLLECTION_DAYS',
-                error: 'No quedan días de cobro disponibles con las exclusiones seleccionadas. Deja al menos un día disponible.',
-            });
-            return;
-        }
-        // Errores de saldo insuficiente (por cuenta o total del negocio): devolver code+details
-        // para que el frontend pueda abrir el modal de recarga.
-        if ((error as any).code === 'INSUFFICIENT_ACCOUNT_BALANCE' ||
-            (error as any).code === 'INSUFFICIENT_BUSINESS_BALANCE') {
-            return res.status(400).json({ error: error.message, code: error.code, details: error.details });
-        }
-        return res.status(400).json({ error: error.message || 'Error al crear crédito' });
+        return handleError(res, error, 'Error al crear crédito');
     }
 };
 
@@ -106,7 +109,7 @@ export const listCredits = async (req: Request, res: Response) => {
         return res.json(credits);
     } catch (error: any) {
         console.error('Error listando créditos:', error);
-        return res.status(400).json({ error: error.message || 'Error al obtener créditos' });
+        return handleError(res, error, 'Error al obtener créditos');
     }
 };
 
@@ -119,10 +122,7 @@ export const getCreditById = async (req: Request, res: Response) => {
         return res.json(credit);
     } catch (error: any) {
         console.error('Error obteniendo crédito:', error);
-        if (error.message?.includes('permisos')) {
-            return res.status(403).json({ error: error.message });
-        }
-        return res.status(404).json({ error: error.message || 'Crédito no encontrado' });
+        return handleError(res, error, 'Crédito no encontrado', 404);
     }
 };
 
@@ -150,9 +150,7 @@ export const updateCreditSchedule = async (req: Request, res: Response) => {
         return res.json(credit);
     } catch (error: any) {
         console.error('Error actualizando plan de pagos:', error);
-        const message = error.message || 'Error al actualizar crédito';
-        const status = message.includes('permiso') ? 403 : 400;
-        return res.status(status).json({ error: message });
+        return handleError(res, error, 'Error al actualizar crédito');
     }
 };
 
@@ -180,8 +178,7 @@ export const bulkDeleteCredits = async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error('Error en eliminación masiva de créditos:', error);
-        const status = error.message?.includes('permisos') ? 403 : 500;
-        return res.status(status).json({ success: false, error: error.message || 'Error al eliminar créditos' });
+        return handleError(res, error, 'Error al eliminar créditos', 500);
     }
 };
 export const deleteCredit = async (req: Request, res: Response) => {
@@ -195,8 +192,7 @@ export const deleteCredit = async (req: Request, res: Response) => {
         return res.json(result);
     } catch (error: any) {
         console.error('Error eliminando crédito:', error);
-        const status = error.message?.includes('Super Admin') ? 403 : (error.message?.includes('encontrado') ? 404 : 400);
-        return res.status(status).json({ error: error.message || 'Error al eliminar el crédito' });
+        return handleError(res, error, 'Error al eliminar el crédito');
     }
 };
 
@@ -225,7 +221,6 @@ export const revertInstallment = async (req: Request, res: Response) => {
         return res.json(result);
     } catch (error: any) {
         console.error('Error revertiendo cuota:', error);
-        const status = error.message?.includes('permisos') ? 403 : (error.message?.includes('encontrado') ? 404 : 400);
-        return res.status(status).json({ error: error.message || 'Error al revertir la cuota' });
+        return handleError(res, error, 'Error al revertir la cuota');
     }
 };
