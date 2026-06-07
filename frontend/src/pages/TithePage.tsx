@@ -20,6 +20,7 @@ export default function TithePage() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [tab, setTab] = useState<'pendiente' | 'pagado'>('pendiente');
     const [error, setError] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
 
     // Solo super_admin
     if (user?.role !== 'super_admin') {
@@ -54,7 +55,7 @@ export default function TithePage() {
             invalidateMoney(queryClient);
             setSelectedIds(new Set());
             setError('');
-            alert(`Diezmo pagado: ${formatMoney(res.titheAmount)} sobre rentabilidad de ${formatMoney(res.totalProfit)} (${res.creditsPaid} créditos). Nuevo saldo en caja: ${formatMoney(res.newBalance)}`);
+            setSuccessMsg(`Diezmo pagado: ${formatMoney(res.titheAmount)} sobre rentabilidad de ${formatMoney(res.totalProfit)} (${res.creditsPaid} créditos). Nuevo saldo en caja: ${formatMoney(res.newBalance)}`);
         },
         onError: (err: any) => setError(err?.response?.data?.error || 'Error al pagar el diezmo'),
     });
@@ -126,6 +127,11 @@ export default function TithePage() {
                     {error && (
                         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2">
                             <AlertCircle size={16} /> {error}
+                        </div>
+                    )}
+                    {successMsg && (
+                        <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2">
+                            <span>✓</span> {successMsg}
                         </div>
                     )}
 

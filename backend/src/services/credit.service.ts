@@ -5,6 +5,7 @@ import { normalizeToNoon } from '../utils/dates';
 import { accountService } from './account.service';
 import { getHolidayDatesFromDB } from './holiday.service';
 import logger from '../utils/logger';
+import { AppError } from '../utils/AppError';
 
 export type PaymentFrequency = 'daily' | 'weekly' | 'bisemanal' | 'quincenal' | 'monthly';
 
@@ -183,7 +184,7 @@ export class CreditService {
         if (data.financings && data.financings.length > 0) {
             // No se permiten pagos cruzados con fecha futura (misma protección que registerPayment)
             if (start > normalizeToNoon()) {
-                throw new Error('No se pueden registrar pagos cruzados con una fecha de inicio futura');
+                throw new AppError('ERR_FINANCING_FUTURE_DATE', 'No se pueden registrar pagos cruzados con una fecha de inicio futura', 400);
             }
 
             // Acumuladores para validar que no se supere el saldo del crédito fuente
@@ -213,17 +214,17 @@ export class CreditService {
                 });
 
                 if (!sourceCreditRaw) {
-                    throw new Error(`Crédito fuente de financiamiento no encontrado: ${f.creditId}`);
+                    throw new AppError('ERR_CREDIT_SOURCE_NOT_FOUND', `Crédito fuente de financiamiento no encontrado: ${f.creditId}`, 404, { creditId: f.creditId });
                 }
                 if (sourceCreditRaw.businessId !== targetBusinessId) {
-                    throw new Error(`El crédito fuente ${f.creditId} no pertenece al negocio seleccionado`);
+                    throw new AppError('ERR_CREDIT_WRONG_BUSINESS', `El crédito fuente ${f.creditId} no pertenece al negocio seleccionado`, 400, { creditId: f.creditId });
                 }
                 // Solo se rechazan paid y cancelled; active y overdue admiten pagos
                 if (sourceCreditRaw.status === 'paid') {
-                    throw new Error(`El crédito ${f.creditId} ya está pagado y no puede recibir pagos adicionales`);
+                    throw new AppError('ERR_CREDIT_ALREADY_PAID', `El crédito ${f.creditId} ya está pagado y no puede recibir pagos adicionales`, 400, { creditId: f.creditId });
                 }
                 if (sourceCreditRaw.status === 'cancelled') {
-                    throw new Error(`El crédito ${f.creditId} está cancelado y no puede recibir pagos`);
+                    throw new AppError('ERR_CREDIT_CANCELLED', `El crédito ${f.creditId} está cancelado y no puede recibir pagos`, 400, { creditId: f.creditId });
                 }
 
                 // Validar que la suma acumulada para este creditId no supere su remainingBalance
@@ -231,10 +232,13 @@ export class CreditService {
                 const totalForCredit = prevForCredit + f.amount;
                 const remainingOfCredit = Number(sourceCreditRaw.remainingBalance);
                 if (totalForCredit > remainingOfCredit + 0.01) {
-                    throw new Error(
+                    throw new AppError(
+                        'ERR_FINANCING_EXCEEDS_BALANCE',
                         `La suma de financiamientos para el crédito ${f.creditId.slice(0, 8)} ` +
                         `($${Math.ceil(totalForCredit).toLocaleString('es-CO')}) supera el saldo pendiente ` +
-                        `($${Math.ceil(remainingOfCredit).toLocaleString('es-CO')})`
+                        `($${Math.ceil(remainingOfCredit).toLocaleString('es-CO')})`,
+                        400,
+                        { creditId: f.creditId, totalForCredit, remainingOfCredit }
                     );
                 }
                 amountByCreditId.set(f.creditId, totalForCredit);
@@ -244,16 +248,19 @@ export class CreditService {
                     const scheduleRows = (sourceCreditRaw.paymentSchedule as { id: string; installmentNumber: number; scheduledAmount: Prisma.Decimal; paidAmount: Prisma.Decimal }[] | false);
                     const targetSchedule = scheduleRows && scheduleRows.length > 0 ? scheduleRows[0] : null;
                     if (!targetSchedule) {
-                        throw new Error(`La cuota ${f.scheduleId} no pertenece al crédito ${f.creditId}`);
+                        throw new AppError('ERR_SCHEDULE_NOT_FOUND', `La cuota ${f.scheduleId} no pertenece al crédito ${f.creditId}`, 400, { scheduleId: f.scheduleId, creditId: f.creditId });
                     }
                     const schedulePending = Number(targetSchedule.scheduledAmount) - Number(targetSchedule.paidAmount);
                     const prevForSchedule = amountByScheduleId.get(f.scheduleId) ?? 0;
                     const totalForSchedule = prevForSchedule + f.amount;
                     if (totalForSchedule > Math.ceil(schedulePending) + 0.01) {
-                        throw new Error(
+                        throw new AppError(
+                            'ERR_FINANCING_EXCEEDS_SCHEDULE',
                             `La suma de financiamientos para la cuota ${f.scheduleId.slice(0, 8)} ` +
                             `($${Math.ceil(totalForSchedule).toLocaleString('es-CO')}) supera el pendiente ` +
-                            `($${Math.ceil(schedulePending).toLocaleString('es-CO')})`
+                            `($${Math.ceil(schedulePending).toLocaleString('es-CO')})`,
+                            400,
+                            { scheduleId: f.scheduleId, totalForSchedule, schedulePending }
                         );
                     }
                     amountByScheduleId.set(f.scheduleId, totalForSchedule);
@@ -277,9 +284,12 @@ export class CreditService {
 
             // La suma de financiamientos no puede superar el monto del crédito nuevo
             if (financedSum > data.amount + 0.01) {
-                throw new Error(
+                throw new AppError(
+                    'ERR_FINANCING_EXCEEDS_CREDIT',
                     `La suma de financiamientos ($${Math.ceil(financedSum).toLocaleString('es-CO')}) ` +
-                    `supera el monto del crédito ($${Math.ceil(data.amount).toLocaleString('es-CO')})`
+                    `supera el monto del crédito ($${Math.ceil(data.amount).toLocaleString('es-CO')})`,
+                    400,
+                    { financedSum, creditAmount: data.amount }
                 );
             }
         }

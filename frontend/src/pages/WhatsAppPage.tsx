@@ -18,6 +18,7 @@ export default function WhatsAppPage() {
     const [selectedBusiness, setSelectedBusiness] = useState<string>('');
     const [template, setTemplate] = useState<string>('');
     const [testPhone, setTestPhone] = useState<string>('');
+    const [successMsg, setSuccessMsg] = useState('');
 
     // Fetch businesses depending on role
     const { data: businesses, isLoading: isLoadingBusinesses } = useQuery({
@@ -58,7 +59,7 @@ export default function WhatsAppPage() {
     const saveTemplateMutation = useMutation({
         mutationFn: () => saveWhatsAppTemplate(selectedBusiness, template),
         onSuccess: (data) => {
-            alert(data.message);
+            setSuccessMsg(data.message);
             queryClient.invalidateQueries({ queryKey: ['businesses'] });
         },
         onError: (error: any) => {
@@ -69,7 +70,7 @@ export default function WhatsAppPage() {
     const testMessageMutation = useMutation({
         mutationFn: () => sendTestMessage(testPhone, template, selectedBusiness),
         onSuccess: (data) => {
-            alert(data.message);
+            setSuccessMsg(data.message);
         },
         onError: (error: any) => {
             showError(error);
@@ -237,13 +238,18 @@ export default function WhatsAppPage() {
 
                         <div className="flex justify-end">
                             <button
-                                onClick={() => saveTemplateMutation.mutate()}
+                                onClick={() => { setSuccessMsg(''); saveTemplateMutation.mutate(); }}
                                 disabled={!selectedBusiness || saveTemplateMutation.isPending}
                                 className="bg-primary-600 text-white px-6 py-2 rounded shadow hover:bg-primary-700 transition disabled:opacity-50 flex items-center gap-2"
                             >
                                 Guardar Plantilla
                             </button>
                         </div>
+                        {successMsg && (
+                            <div className="mt-3 bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl text-sm flex items-center gap-2">
+                                <span>✓</span> {successMsg}
+                            </div>
+                        )}
                     </div>
 
                     {/* Test Block */}

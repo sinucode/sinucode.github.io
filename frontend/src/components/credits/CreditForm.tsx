@@ -166,14 +166,6 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         enabled: isSuperAdmin ? !!formData.businessId : true,
     });
 
-    // Distingue "el servidor respondió con un error" de "no hubo respuesta del servidor"
-    // (red caída, backend reiniciándose, timeout de conexión). Sin esto, un corte de
-    // conexión se confunde con un fallo de la lógica de negocio (mensaje engañoso).
-    const describeApiError = (err: { response?: { data?: { error?: string } } } | null | undefined, fallback: string): string => {
-        if (err?.response) return err.response.data?.error || fallback;
-        return 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.';
-    };
-
     const simulateMutation = useMutation({
         mutationFn: simulateCredit,
         onSuccess: (data) => setSimulation(data),
@@ -182,7 +174,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 setNoDaysModal(true);
                 return;
             }
-            setFormError(describeApiError(err, 'Error al simular crédito'));
+            showError(err);
         },
     });
 

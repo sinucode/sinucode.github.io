@@ -88,6 +88,7 @@ export default function PaymentsPage() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [revertModal, setRevertModal] = useState<Payment | null>(null);
     const [reverting, setReverting] = useState(false);
+    const [revertSuccess, setRevertSuccess] = useState('');
 
     const { data: businesses } = useQuery({
         queryKey: ['businesses'],
@@ -208,7 +209,7 @@ export default function PaymentsPage() {
             queryClient.invalidateQueries({ queryKey: ['payments'] });
             queryClient.invalidateQueries({ queryKey: ['credits'] });
             setRevertModal(null);
-            alert('Pago revertido. Para reversiones más precisas, ve al detalle del crédito.');
+            setRevertSuccess('Pago revertido. Para reversiones más precisas, ve al detalle del crédito.');
         },
         onError: (err: any) => {
             showError(err);
@@ -230,6 +231,12 @@ export default function PaymentsPage() {
                     </div>
                 </div>
             </header>
+
+            {revertSuccess && (
+                <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl text-sm flex items-center gap-2">
+                    <span>✓</span> {revertSuccess}
+                </div>
+            )}
 
             {/* Filtros */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
