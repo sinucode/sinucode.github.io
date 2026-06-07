@@ -607,14 +607,19 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                         <div className="flex flex-col gap-1">
                                                             {d.splits.map((s, i) => (
                                                                 <div key={i} className="flex flex-col leading-tight">
-                                                                    {s.descripcion && (
-                                                                        <span className="text-xs text-gray-700 font-medium">{s.descripcion}</span>
-                                                                    )}
+                                                                    <span className="text-xs text-gray-700 font-medium">
+                                                                        {s.descripcion ?? s.cuenta}
+                                                                    </span>
                                                                     <span className="text-blue-600 font-medium text-xs">{FM(s.monto)}</span>
                                                                 </div>
                                                             ))}
                                                         </div>
-                                                    ) : <span className="text-blue-600 font-medium text-xs">{FM(d.monto)}</span>}
+                                                    ) : (
+                                                        <div className="flex flex-col leading-tight">
+                                                            <span className="text-xs text-gray-700 font-medium">{d.cuenta}</span>
+                                                            <span className="text-blue-600 font-medium text-xs">{FM(d.monto)}</span>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-2.5 text-gray-600">{d.usuario}</td>
                                             </tr>
