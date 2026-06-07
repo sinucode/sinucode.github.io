@@ -610,14 +610,11 @@ export default function CashCloseTab({ businessId }: { businessId: string }) {
                                                                     {s.descripcion && (
                                                                         <span className="text-xs text-gray-700 font-medium">{s.descripcion}</span>
                                                                     )}
-                                                                    <span className="text-xs text-gray-500">
-                                                                        {s.cuenta}{' '}
-                                                                        <span className="text-blue-600 font-medium">{FM(s.monto)}</span>
-                                                                    </span>
+                                                                    <span className="text-blue-600 font-medium text-xs">{FM(s.monto)}</span>
                                                                 </div>
                                                             ))}
                                                         </div>
-                                                    ) : d.cuenta}
+                                                    ) : <span className="text-blue-600 font-medium text-xs">{FM(d.monto)}</span>}
                                                 </td>
                                                 <td className="px-4 py-2.5 text-gray-600">{d.usuario}</td>
                                             </tr>

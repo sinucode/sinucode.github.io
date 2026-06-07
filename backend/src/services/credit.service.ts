@@ -173,6 +173,7 @@ export class CreditService {
             creditId: string;
             scheduleId?: string;
             installmentNumber?: number;
+            totalInstallments?: number;
             amount: number;
             clientName: string;  // nombre del cliente del crédito de origen (para auditoría)
         }
@@ -204,6 +205,7 @@ export class CreditService {
                         status: true,
                         remainingBalance: true,
                         client: { select: { fullName: true } },
+                        _count: { select: { paymentSchedule: true } },
                         paymentSchedule: f.scheduleId
                             ? { where: { id: f.scheduleId }, select: { id: true, installmentNumber: true, scheduledAmount: true, paidAmount: true } }
                             : false,
@@ -266,6 +268,7 @@ export class CreditService {
                     creditId: f.creditId,
                     scheduleId: f.scheduleId,
                     installmentNumber,
+                    totalInstallments: sourceCreditRaw._count.paymentSchedule,
                     amount: f.amount,
                     clientName: sourceCreditRaw.client.fullName,
                 });
@@ -539,9 +542,13 @@ export class CreditService {
                         type: 'loan_disbursement',
                         amount: new Prisma.Decimal(f.amount),
                         balanceAfter: runningBalance,
-                        description: f.installmentNumber != null
-                            ? `Cuota #${f.installmentNumber} de ${f.clientName}`
-                            : `Pago de ${f.clientName}`,
+                        description: (() => {
+                            if (f.installmentNumber == null) return `Pago de ${f.clientName}`;
+                            const isLast = f.totalInstallments != null && f.installmentNumber === f.totalInstallments;
+                            return isLast
+                                ? `Última cuota de ${f.clientName}`
+                                : `Cuota #${f.installmentNumber} de ${f.clientName}`;
+                        })(),
                         relatedCreditId: credit.id,
                         paymentMethod: disbursementAccountName,
                         accountId: disbursementAccountId,

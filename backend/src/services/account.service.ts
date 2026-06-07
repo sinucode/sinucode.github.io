@@ -531,6 +531,14 @@ export class AccountService {
         // ─── Tabla de créditos colocados: una fila por crédito, agrupando splits multi-cuenta ───
         // Asunción: los loan_disbursement siempre llevan relatedCreditId (fijado en credit.service.ts).
         // El fallback m.id protege contra registros con relatedCreditId=null (borrado en cascada SetNull).
+        const normalizeDisbDesc = (desc: string | null | undefined): string | undefined => {
+            if (!desc) return undefined;
+            const match = desc.match(/financiado con pago de (.+?)\)/);
+            if (match) return `Pago de ${match[1]}`;
+            if (/^Desembolso/.test(desc)) return undefined;
+            return desc;
+        };
+
         const disbGrouped = new Map<string, typeof dayMovements>();
         for (const m of dayMovements.filter(m => m.type === 'loan_disbursement')) {
             const key = m.relatedCreditId ?? m.id;
@@ -544,7 +552,7 @@ export class AccountService {
             const splitsCuentas = movs.map(m => ({
                 cuenta:      m.account?.name ?? '—',
                 monto:       Math.round(Number(m.amount) * 100) / 100,
-                descripcion: (m as any).description as string | undefined,
+                descripcion: normalizeDisbDesc((m as any).description),
             }));
             return {
                 id:         first.relatedCreditId ?? first.id,
