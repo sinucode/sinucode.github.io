@@ -17,7 +17,7 @@ export interface CreateCreditPayload extends SimulateCreditPayload {
     businessId?: string;
     accountId?: string;
     splits?: { accountId: string; amount: number }[];
-    financings?: { creditId: string; scheduleId?: string; amount: number }[];
+    financings?: { creditId: string; scheduleId?: string; amount: number; excessAction?: 'next_cuota' | 'donate' }[];
 }
 
 export interface CreditSimulation {

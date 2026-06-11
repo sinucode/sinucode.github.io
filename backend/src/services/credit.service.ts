@@ -23,8 +23,10 @@ interface CreateCreditInput {
     excludeHolidays?: boolean;
     customRounding?: boolean;
     /** Financiamientos cruzados: cada entrada redirige un pago real de otro crédito
-     *  para cubrir parte del desembolso de este crédito nuevo. */
-    financings?: { creditId: string; scheduleId?: string; amount: number }[];
+     *  para cubrir parte del desembolso de este crédito nuevo.
+     *  Si el monto supera el pendiente de la cuota / saldo del crédito fuente,
+     *  se requiere excessAction para indicar qué hacer con el excedente. */
+    financings?: { creditId: string; scheduleId?: string; amount: number; excessAction?: 'next_cuota' | 'donate' }[];
 }
 
 interface ListFilters {
@@ -177,6 +179,7 @@ export class CreditService {
             totalInstallments?: number;
             amount: number;
             clientName: string;  // nombre del cliente del crédito de origen (para auditoría)
+            excessAction?: 'next_cuota' | 'donate';
         }
         const validatedFinancings: ValidatedFinancing[] = [];
         let financedSum = 0;
@@ -227,11 +230,13 @@ export class CreditService {
                     throw new AppError('ERR_CREDIT_CANCELLED', `El crédito ${f.creditId} está cancelado y no puede recibir pagos`, 400, { creditId: f.creditId });
                 }
 
-                // Validar que la suma acumulada para este creditId no supere su remainingBalance
+                // Validar que la suma acumulada para este creditId no supere su remainingBalance.
+                // Se omite si hay excessAction: el excedente se procesará como donate/next_cuota
+                // dentro de applyPaymentTx (que ya implementa esa lógica correctamente).
                 const prevForCredit = amountByCreditId.get(f.creditId) ?? 0;
                 const totalForCredit = prevForCredit + f.amount;
                 const remainingOfCredit = Number(sourceCreditRaw.remainingBalance);
-                if (totalForCredit > remainingOfCredit + 0.01) {
+                if (!f.excessAction && totalForCredit > remainingOfCredit + 0.01) {
                     throw new AppError(
                         'ERR_FINANCING_EXCEEDS_BALANCE',
                         `La suma de financiamientos para el crédito ${f.creditId.slice(0, 8)} ` +
@@ -253,7 +258,8 @@ export class CreditService {
                     const schedulePending = Number(targetSchedule.scheduledAmount) - Number(targetSchedule.paidAmount);
                     const prevForSchedule = amountByScheduleId.get(f.scheduleId) ?? 0;
                     const totalForSchedule = prevForSchedule + f.amount;
-                    if (totalForSchedule > Math.ceil(schedulePending) + 0.01) {
+                    // Se omite el cap si hay excessAction: el excedente se procesa en applyPaymentTx.
+                    if (!f.excessAction && totalForSchedule > Math.ceil(schedulePending) + 0.01) {
                         throw new AppError(
                             'ERR_FINANCING_EXCEEDS_SCHEDULE',
                             `La suma de financiamientos para la cuota ${f.scheduleId.slice(0, 8)} ` +
@@ -278,6 +284,7 @@ export class CreditService {
                     totalInstallments: sourceCreditRaw._count.paymentSchedule,
                     amount: f.amount,
                     clientName: sourceCreditRaw.client.fullName,
+                    excessAction: f.excessAction,
                 });
                 financedSum += f.amount;
             }
@@ -452,7 +459,9 @@ export class CreditService {
                     }
                     const prevCredit = txAmountByCreditId.get(f.creditId) ?? 0;
                     const totalCredit = prevCredit + f.amount;
-                    if (totalCredit > Number(src.remainingBalance) + 0.01) {
+                    // Respetar la misma lógica de excessAction: si hay excessAction el exceso
+                    // es intencional y applyPaymentTx lo manejará; solo validar si no hay excessAction.
+                    if (!f.excessAction && totalCredit > Number(src.remainingBalance) + 0.01) {
                         throw new Error(`El crédito fuente ${f.creditId.slice(0, 8)} cambió de estado mientras se procesaba la operación. Intenta de nuevo.`);
                     }
                     txAmountByCreditId.set(f.creditId, totalCredit);
@@ -463,7 +472,7 @@ export class CreditService {
                         const pending = Number(sched.scheduledAmount) - Number(sched.paidAmount);
                         const prevSched = txAmountByScheduleId.get(f.scheduleId) ?? 0;
                         const totalSched = prevSched + f.amount;
-                        if (totalSched > Math.ceil(pending) + 0.01) {
+                        if (!f.excessAction && totalSched > Math.ceil(pending) + 0.01) {
                             throw new Error(`El crédito fuente ${f.creditId.slice(0, 8)} cambió de estado mientras se procesaba la operación. Intenta de nuevo.`);
                         }
                         txAmountByScheduleId.set(f.scheduleId, totalSched);
@@ -490,6 +499,9 @@ export class CreditService {
                     userId,
                     role,
                     ipAddress,
+                    // Si el usuario indicó que el excedente debe donarse o abonarse a la
+                    // siguiente cuota, propagamos la acción a applyPaymentTx que ya la implementa.
+                    excessAction:  f.excessAction,
                 });
             }
 

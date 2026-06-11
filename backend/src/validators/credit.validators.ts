@@ -81,6 +81,22 @@ export const createCreditValidators = [
     body('financings.*.amount')
         .isFloat({ gt: 0 })
         .withMessage('financings: monto debe ser mayor a 0'),
+    body('financings.*.excessAction')
+        .optional({ nullable: true, checkFalsy: true })
+        .isIn(['next_cuota', 'donate'])
+        .withMessage('financings: excessAction debe ser "next_cuota" o "donate"')
+        .custom((value, { req, path }) => {
+            if (value) {
+                // Extraer el índice de la ruta "financings[N].excessAction"
+                const match = path.match(/financings\[(\d+)\]/);
+                const idx = match ? Number(match[1]) : -1;
+                const financing = req.body?.financings?.[idx];
+                if (!financing?.scheduleId) {
+                    throw new Error('financings: excessAction requiere scheduleId para indicar la cuota');
+                }
+            }
+            return true;
+        }),
     ...simulateCreditValidators,
 ];
 

@@ -72,9 +72,10 @@ export const createCredit = async (req: Request, res: Response) => {
                     : undefined,
                 financings: Array.isArray(req.body.financings)
                     ? req.body.financings.map((f: any) => ({
-                        creditId:   f.creditId,
-                        scheduleId: f.scheduleId || undefined,
-                        amount:     Number(f.amount),
+                        creditId:    f.creditId,
+                        scheduleId:  f.scheduleId || undefined,
+                        amount:      Number(f.amount),
+                        excessAction: f.excessAction || undefined,
                     }))
                     : undefined,
                 excludedWeekdays: Array.isArray(req.body.excludedWeekdays)

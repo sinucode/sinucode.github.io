@@ -11,6 +11,7 @@ import { listAccounts, getAccountBalances, PaymentAccount } from '../../api/acco
 import { injectCapital, transferFunds } from '../../api/cash.api';
 import { Client, PaymentFrequency } from '../../types';
 import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, ArrowRightLeft, PlusCircle, Users } from 'lucide-react';
+import ExcessChoiceModal, { CuotaConExceso } from './ExcessChoiceModal';
 import jsPDF from 'jspdf';
 import { todayBogota, toLocalDateString } from '../../utils/dates';
 import { getHolidaySet } from '../../utils/holidays';
@@ -22,7 +23,16 @@ interface CreditFormProps {
     selectedBusinessId?: string;
 }
 
-interface FinancingRow { id: string; clientId: string; clientName: string; creditId: string; selectedSchedules: { scheduleId: string; amount: string }[]; }
+interface FinancingRow {
+    id: string;
+    clientId: string;
+    clientName: string;
+    creditId: string;
+    /** Cuotas marcadas para financiamiento; `pending` es el monto original pendiente de la cuota (para detectar exceso) */
+    selectedSchedules: { scheduleId: string; amount: string; pending: number }[];
+    /** Todas las cuotas pendientes del crédito fuente (para detectar si hay cuota siguiente al exceso) */
+    allPendingSchedules: { id: string; installmentNumber: number }[];
+}
 
 const frequencies: { value: PaymentFrequency; label: string }[] = [
     { value: 'daily', label: 'Diario' },
@@ -89,6 +99,14 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
     const [financingEnabled, setFinancingEnabled] = useState(false);
     const [financingRows, setFinancingRows] = useState<FinancingRow[]>([]);
     const [noDaysModal, setNoDaysModal] = useState(false);
+    // Modal de excedente cuando un financing supera el pendiente de una cuota
+    const [excessChoiceState, setExcessChoiceState] = useState<{
+        open: boolean;
+        cuotasConExceso: CuotaConExceso[];
+        tieneCuotaSiguiente: boolean;
+    }>({ open: false, cuotasConExceso: [], tieneCuotaSiguiente: false });
+    // Función buildPayload guardada por ref para que el modal pueda aplicar el excessAction elegido
+    const buildPayloadRef = useRef<((excessAction: 'next_cuota' | 'donate') => CreateCreditPayload) | null>(null);
     // Modal de recarga cuando la cuenta o el negocio no tiene fondos
     const [rechargeInfo, setRechargeInfo] = useState<{
         accountId: string; accountName: string; available: number; required: number;
@@ -265,6 +283,12 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
         });
     };
 
+    /** Ejecuta la mutación de creación con el payload ya construido (incl. excessAction por cuota). */
+    const doSubmit = (payload: CreateCreditPayload) => {
+        pendingPayloadRef.current = payload;
+        createMutation.mutate(payload);
+    };
+
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
         if (createMutation.isPending) return;   // evitar doble envío por clic rápido
@@ -296,32 +320,38 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             }
         }
 
-        // Construir entradas de financiamiento (solo filas con cliente + crédito + cuotas marcadas)
-        const financingEntries = financingEnabled
+        // Construir entradas de financiamiento (solo filas con cliente + crédito + cuotas marcadas).
+        // Por cada cuota marcada guardamos el `pending` original para detectar exceso más abajo.
+        const rawFinancingEntries = financingEnabled
             ? financingRows.flatMap(r =>
                 r.clientId && r.creditId
                     ? r.selectedSchedules
                         .filter(ss => Number(ss.amount) > 0)
-                        .map(ss => ({ creditId: r.creditId, scheduleId: ss.scheduleId, amount: Number(ss.amount) }))
+                        .map(ss => ({
+                            creditId:  r.creditId,
+                            scheduleId: ss.scheduleId,
+                            amount:    Number(ss.amount),
+                            pending:   ss.pending,  // pendiente original de la cuota
+                            allPendingSchedules: r.allPendingSchedules,
+                        }))
                     : []
             )
             : [];
-        if (financingEntries.length > 0) {
-            const financedSum = financingEntries.reduce((s, e) => s + e.amount, 0);
+
+        if (rawFinancingEntries.length > 0) {
+            const financedSum = rawFinancingEntries.reduce((s, e) => s + e.amount, 0);
             if (financedSum > amount) {
                 return setFormError(`El financiamiento ($${Math.ceil(financedSum).toLocaleString('es-CO')}) no puede superar el monto del crédito ($${amount.toLocaleString('es-CO')})`);
             }
         }
 
-        // Validar reparto multi-cuenta
+        // Validar reparto multi-cuenta ANTES de detectar exceso (error inline antes de abrir el modal)
         if (splitEnabled && accounts && accounts.length > 0) {
             const splitEntries = accounts
                 .map(a => ({ accountId: a.id, amount: Number((splits[a.id] || '').replace(/[^0-9]/g, '') || '0') }))
                 .filter(s => s.amount > 0);
             const splitTotal = splitEntries.reduce((s, e) => s + e.amount, 0);
-            // El backend exige que los splits cubran solo la parte neta de caja
-            // (monto del crédito menos lo financiado con pagos cruzados).
-            const financedSum = financingEntries.reduce((s, e) => s + e.amount, 0);
+            const financedSum = rawFinancingEntries.reduce((s, e) => s + e.amount, 0);
             const cashNeeded = amount - financedSum;
             if (Math.abs(splitTotal - cashNeeded) > 1) {
                 const splitTarget = financedSum > 0
@@ -329,38 +359,84 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                     : `el monto del crédito ($${amount.toLocaleString('es-CO')})`;
                 return setFormError(`El reparto debe sumar exactamente ${splitTarget} (suma actual: $${Math.ceil(splitTotal).toLocaleString('es-CO')})`);
             }
-            // Adjuntar al payload
-            const payload: CreateCreditPayload = {
-                clientId: selectedClientId, amount, interestRate, termDays,
-                frequency: formData.frequency, startDate: formData.startDate,
+        }
+
+        // Detectar cuotas con exceso (monto > pendiente de la cuota fuente)
+        const cuotasConExceso: CuotaConExceso[] = rawFinancingEntries
+            .filter(e => e.scheduleId && e.amount > e.pending + 0.01)
+            .map(e => ({
+                id:                e.scheduleId!,
+                installmentNumber: e.allPendingSchedules.find(s => s.id === e.scheduleId)?.installmentNumber ?? 0,
+                pending:           e.pending,
+                pago:              e.amount,
+                exceso:            e.amount - e.pending,
+            }));
+
+        // Construir el payload final dado el excessAction elegido.
+        // Retorna null (sin excessAction) solo si se llama antes de la elección; nunca
+        // retorna null una vez que el usuario ha elegido en el modal.
+        const buildPayload = (excessAction?: 'next_cuota' | 'donate'): CreateCreditPayload | null => {
+            const financingEntries = rawFinancingEntries.map(e => {
+                const tieneExceso = e.scheduleId && e.amount > e.pending + 0.01;
+                return {
+                    creditId:     e.creditId,
+                    scheduleId:   e.scheduleId,
+                    amount:       e.amount,
+                    excessAction: tieneExceso ? excessAction : undefined,
+                };
+            });
+
+            if (splitEnabled && accounts && accounts.length > 0) {
+                const splitEntries = accounts
+                    .map(a => ({ accountId: a.id, amount: Number((splits[a.id] || '').replace(/[^0-9]/g, '') || '0') }))
+                    .filter(s => s.amount > 0);
+                return {
+                    clientId: selectedClientId, amount, interestRate, termDays,
+                    frequency: formData.frequency, startDate: formData.startDate,
+                    businessId: formData.businessId || undefined,
+                    splits: splitEntries,
+                    financings: financingEntries.length > 0 ? financingEntries : undefined,
+                    excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
+                    excludeHolidays: excludeHolidays || undefined,
+                    customRounding: customRounding || undefined,
+                };
+            }
+
+            return {
+                clientId: selectedClientId,
+                amount,
+                interestRate,
+                termDays,
+                frequency: formData.frequency,
+                startDate: formData.startDate,
                 businessId: formData.businessId || undefined,
-                splits: splitEntries,
+                accountId: disbursementAccountId || undefined,
                 financings: financingEntries.length > 0 ? financingEntries : undefined,
                 excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
                 excludeHolidays: excludeHolidays || undefined,
                 customRounding: customRounding || undefined,
             };
-            pendingPayloadRef.current = payload;
-            createMutation.mutate(payload);
+        };
+
+        if (cuotasConExceso.length > 0) {
+            // Determinar si hay cuota posterior POR CRÉDITO FUENTE (no máximo global).
+            // Para cada entrada con exceso, buscamos si su propio crédito fuente tiene
+            // alguna cuota con installmentNumber mayor al de la cuota con exceso.
+            const hayMasPorCredito = cuotasConExceso.some(c => {
+                // Encontrar la entry de rawFinancingEntries que corresponde a esta cuota con exceso
+                const entry = rawFinancingEntries.find(e => e.scheduleId === c.id);
+                if (!entry) return false;
+                return entry.allPendingSchedules.some(s => s.installmentNumber > c.installmentNumber);
+            });
+            // Guardar buildPayload en ref para que el modal pueda construir el payload con el excessAction elegido
+            buildPayloadRef.current = (excessAction: 'next_cuota' | 'donate') => buildPayload(excessAction) as CreateCreditPayload;
+            setExcessChoiceState({ open: true, cuotasConExceso, tieneCuotaSiguiente: hayMasPorCredito });
             return;
         }
 
-        const payload: CreateCreditPayload = {
-            clientId: selectedClientId,
-            amount,
-            interestRate,
-            termDays,
-            frequency: formData.frequency,
-            startDate: formData.startDate,
-            businessId: formData.businessId || undefined,
-            accountId: disbursementAccountId || undefined,
-            financings: financingEntries.length > 0 ? financingEntries : undefined,
-            excludedWeekdays: excludedWeekdays.length > 0 ? excludedWeekdays : undefined,
-            excludeHolidays: excludeHolidays || undefined,
-            customRounding: customRounding || undefined,
-        };
-        pendingPayloadRef.current = payload;
-        createMutation.mutate(payload);
+        // Sin excesos: construir y enviar directamente
+        const payload = buildPayload();
+        if (payload) doSubmit(payload);
     };
 
     const handleSelectClient = (client: Client) => {
@@ -510,6 +586,25 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             </div>,
             document.body
         )}
+        {/* Modal de excedente: qué hacer cuando un financing supera el pendiente de la cuota fuente */}
+        <ExcessChoiceModal
+            open={excessChoiceState.open}
+            cuotasConExceso={excessChoiceState.cuotasConExceso}
+            tieneCuotaSiguiente={excessChoiceState.tieneCuotaSiguiente}
+            isSubmitting={createMutation.isPending}
+            onChoose={(action) => {
+                setExcessChoiceState(prev => ({ ...prev, open: false }));
+                if (buildPayloadRef.current) {
+                    const payload = buildPayloadRef.current(action);
+                    buildPayloadRef.current = null;
+                    if (payload) doSubmit(payload);
+                }
+            }}
+            onCancel={() => {
+                setExcessChoiceState(prev => ({ ...prev, open: false }));
+                buildPayloadRef.current = null;
+            }}
+        />
         {rechargeInfo && accounts && (
             <RechargeAccountModal
                 businessId={effectiveBusinessId}
@@ -784,7 +879,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                                             setFinancingEnabled(e.target.checked);
                                             if (e.target.checked) {
                                                 if (financingRows.length === 0) {
-                                                    setFinancingRows([{ id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', selectedSchedules: [] }]);
+                                                    setFinancingRows([{ id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', selectedSchedules: [], allPendingSchedules: [] }]);
                                                 }
                                             } else {
                                                 setFinancingRows([]);
@@ -811,7 +906,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
 
                                         <button
                                             type="button"
-                                            onClick={() => setFinancingRows(prev => [...prev, { id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', selectedSchedules: [] }])}
+                                            onClick={() => setFinancingRows(prev => [...prev, { id: crypto.randomUUID(), clientId: '', clientName: '', creditId: '', selectedSchedules: [], allPendingSchedules: [] }])}
                                             className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 transition"
                                         >
                                             <PlusCircle size={14} /> Agregar otro crédito
@@ -1193,6 +1288,17 @@ const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList
             .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     }, [creditDetail]);
 
+    // Propagar allPendingSchedules al padre para que pueda detectar exceso y cuota-siguiente
+    useEffect(() => {
+        onChange({
+            allPendingSchedules: pendingSchedules.map(s => ({
+                id: s.id,
+                installmentNumber: s.installmentNumber ?? 0,
+            })),
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingSchedules]);
+
     const subtotal = row.selectedSchedules.reduce((s, ss) => s + Number(ss.amount || 0), 0);
 
     return (
@@ -1265,7 +1371,8 @@ const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList
                                             if (e.target.checked) {
                                                 onChange({ selectedSchedules: [
                                                     ...row.selectedSchedules,
-                                                    { scheduleId: s.id, amount: String(pending) },
+                                                    // Guardamos `pending` para que el padre pueda detectar exceso
+                                                    { scheduleId: s.id, amount: String(pending), pending },
                                                 ] });
                                             } else {
                                                 onChange({ selectedSchedules: row.selectedSchedules.filter(ss => ss.scheduleId !== s.id) });
