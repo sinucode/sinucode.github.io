@@ -53,7 +53,9 @@ export const simulateCredit = async (payload: SimulateCreditPayload): Promise<Cr
 };
 
 export const createCredit = async (payload: CreateCreditPayload): Promise<CreditDetail> => {
-    const res = await api.post('/credits', payload);
+    // Timeout extendido: con financiamiento cruzado la tx involucra varios pagos
+    // contra Supabase remoto y puede superar los 10 s del timeout global.
+    const res = await api.post('/credits', payload, { timeout: 30000 });
     return res.data;
 };
 

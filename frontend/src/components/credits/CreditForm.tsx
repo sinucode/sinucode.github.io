@@ -7,10 +7,10 @@ import { invalidateMoney } from '../../utils/invalidate';
 import { getBusinesses } from '../../api/business.api';
 import { searchClients, getClients } from '../../api/clients.api';
 import { createCredit, simulateCredit, getCreditDetail, getCredits, CreditSimulation, CreateCreditPayload } from '../../api/credits.api';
-import { listAccounts, getAccountBalances, PaymentAccount } from '../../api/accounts.api';
-import { injectCapital, transferFunds } from '../../api/cash.api';
+import { listAccounts, getAccountBalances } from '../../api/accounts.api';
+import { injectCapital } from '../../api/cash.api';
 import { Client, PaymentFrequency } from '../../types';
-import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, ArrowRightLeft, PlusCircle, Users } from 'lucide-react';
+import { Search, Calculator, Save, X, Download, Wallet, Building2, Smartphone, AlertTriangle, PlusCircle, Users } from 'lucide-react';
 import ExcessChoiceModal, { CuotaConExceso } from './ExcessChoiceModal';
 import jsPDF from 'jspdf';
 import { todayBogota, toLocalDateString } from '../../utils/dates';
@@ -234,7 +234,7 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 if (isAdmin) {
                     setRechargeInfo(data.details);
                 } else {
-                    setFormError(data.error || 'Saldo insuficiente. Pide a un administrador que recargue la caja.');
+                    showError(err);
                 }
                 return;
             }
@@ -605,16 +605,14 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
                 buildPayloadRef.current = null;
             }}
         />
-        {rechargeInfo && accounts && (
+        {rechargeInfo && (
             <RechargeAccountModal
                 businessId={effectiveBusinessId}
                 info={rechargeInfo}
-                allAccounts={accounts}
                 onClose={() => { setRechargeInfo(null); pendingPayloadRef.current = null; }}
                 onSuccess={() => {
                     invalidateMoney(queryClient);
                     setRechargeInfo(null);
-                    // Reintentar el crédito automáticamente
                     if (pendingPayloadRef.current) {
                         createMutation.mutate(pendingPayloadRef.current);
                     }
@@ -1420,38 +1418,28 @@ const FinancingRowWidget: React.FC<FinancingRowWidgetProps> = ({ row, clientList
 interface RechargeModalProps {
     businessId: string;
     info: { accountId: string; accountName: string; available: number; required: number; scope?: 'business' | 'account' };
-    allAccounts: PaymentAccount[];
     onClose: () => void;
     onSuccess: () => void;
 }
 
-const RechargeAccountModal: React.FC<RechargeModalProps> = ({ businessId, info, allAccounts, onClose, onSuccess }) => {
-    // scope='business' → el saldo TOTAL del negocio es insuficiente; solo inyectar tiene sentido
-    const injectOnly = info.scope === 'business';
-    const [mode, setMode] = useState<'inject' | 'transfer'>('inject');
-    const [fromAccountId, setFromAccountId] = useState(() => {
-        const other = allAccounts.find(a => a.id !== info.accountId);
-        return other?.id || '';
-    });
-    const [amount, setAmount] = useState(String(info.required - info.available > 0 ? info.required - info.available : info.required));
+const RechargeAccountModal: React.FC<RechargeModalProps> = ({ businessId, info, onClose, onSuccess }) => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const otherAccounts = allAccounts.filter(a => a.id !== info.accountId);
+    const fmtCOP = (v: number) => `$${Math.ceil(v).toLocaleString('es-CO')}`;
+    const falta = Math.max(0, info.required - info.available);
+    const montoARecargar = falta > 0 ? falta : info.required;
 
     const handleConfirm = async () => {
         setError('');
-        const amt = Number(amount.replace(/[^0-9]/g, ''));
-        if (amt <= 0) { setError('Ingresa un monto válido'); return; }
-
         setLoading(true);
         try {
-            if (mode === 'inject') {
-                await injectCapital({ businessId, amount: amt, accountId: info.accountId, description: `Recarga para desembolso de crédito` });
-            } else {
-                if (!fromAccountId) { setError('Selecciona una cuenta origen'); setLoading(false); return; }
-                await transferFunds({ businessId, amount: amt, fromAccountId, toAccountId: info.accountId, description: `Transferencia para desembolso de crédito` });
-            }
+            await injectCapital({
+                businessId,
+                amount: montoARecargar,
+                accountId: info.accountId,
+                description: 'Recarga para desembolso de crédito',
+            });
             onSuccess();
         } catch (e: any) {
             setError(e.response?.data?.error || 'Error al recargar');
@@ -1460,82 +1448,45 @@ const RechargeAccountModal: React.FC<RechargeModalProps> = ({ businessId, info, 
         }
     };
 
-    const fmtCOP = (v: number) => `$${Math.ceil(v).toLocaleString('es-CO')}`;
-    const falta = Math.max(0, info.required - info.available);
-
     return createPortal(
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 text-amber-700">
                         <AlertTriangle size={20} />
-                        <h3 className="text-base font-bold">Saldo insuficiente</h3>
+                        <h3 className="text-base font-bold">Fondos insuficientes</h3>
                     </div>
                     <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
-                    {injectOnly
-                        ? <>El saldo total de la caja es {fmtCOP(info.available)} y el crédito requiere {fmtCOP(info.required)}.
-                           {falta > 0 && <> Faltan <strong>{fmtCOP(falta)}</strong>.</>}{' '}
-                           El dinero se ingresará a la cuenta <strong>{info.accountName}</strong>.</>
-                        : <>La cuenta <strong>{info.accountName}</strong> tiene {fmtCOP(info.available)} y el crédito requiere {fmtCOP(info.required)}.
-                           {falta > 0 && <> Faltan <strong>{fmtCOP(falta)}</strong>.</> }</>
-                    }
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800 space-y-1">
+                    <p>Cuenta: <strong>{info.accountName}</strong></p>
+                    <p>Disponible: <strong>{fmtCOP(info.available)}</strong></p>
+                    <p>Necesario: <strong>{fmtCOP(info.required)}</strong></p>
+                    {falta > 0 && <p>Faltan: <strong>{fmtCOP(falta)}</strong></p>}
                 </div>
 
-                {/* Modo — solo mostrar el selector si hay más de una opción */}
-                {!injectOnly && (
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setMode('inject')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'inject' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
-                        >
-                            <PlusCircle size={15} /> Recargar cuenta
-                        </button>
-                        {otherAccounts.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => setMode('transfer')}
-                                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-sm font-medium transition ${mode === 'transfer' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-300'}`}
-                            >
-                                <ArrowRightLeft size={15} /> Transferir
-                            </button>
-                        )}
-                    </div>
-                )}
-
-                {mode === 'transfer' && (
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Cuenta origen</label>
-                        <select value={fromAccountId} onChange={e => setFromAccountId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm">
-                            {otherAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
-                    </div>
-                )}
-
-                <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Monto a {mode === 'inject' ? 'ingresar' : 'transferir'}</label>
-                    <input
-                        type="text"
-                        value={Number(amount.replace(/[^0-9]/g, '')).toLocaleString('es-CO')}
-                        onChange={e => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Mínimo sugerido: {fmtCOP(falta > 0 ? falta : info.required)}</p>
-                </div>
+                <p className="text-sm text-gray-700">
+                    ¿Deseas recargar <strong>{fmtCOP(montoARecargar)}</strong> en la cuenta{' '}
+                    <strong>{info.accountName}</strong> para continuar?
+                </p>
 
                 {error && <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">{error}</p>}
 
                 <div className="flex gap-2 pt-1">
-                    <button onClick={onClose} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium">Cancelar</button>
+                    <button
+                        onClick={onClose}
+                        disabled={loading}
+                        className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 disabled:opacity-50"
+                    >
+                        Cancelar
+                    </button>
                     <button
                         onClick={handleConfirm}
                         disabled={loading}
-                        className="flex-1 py-2 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                        className="flex-1 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
                     >
-                        {loading ? 'Procesando...' : 'Confirmar y crear crédito'}
+                        {loading ? 'Recargando...' : 'Recargar y crear crédito'}
                     </button>
                 </div>
             </div>

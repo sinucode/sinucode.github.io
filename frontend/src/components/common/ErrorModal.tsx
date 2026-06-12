@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ErrorModalProps {
     code: string;
@@ -29,8 +30,8 @@ export function ErrorModal({ code, message, details, onClose }: ErrorModalProps)
         return <div className="text-xs text-gray-600">{String(details)}</div>;
     };
 
-    return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+    return createPortal(
+        <div className="fixed inset-0 z-[10060] flex items-center justify-center p-4">
             {/* Overlay oscuro */}
             <div className="absolute inset-0 bg-black/60" />
 
@@ -72,6 +73,7 @@ export function ErrorModal({ code, message, details, onClose }: ErrorModalProps)
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
