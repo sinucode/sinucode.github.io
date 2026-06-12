@@ -7,6 +7,10 @@
             "schedule": "59 4 * * *"
         },
         {
+            "path": "/api/accounts/closes/auto-open",
+            "schedule": "1 5 * * *"
+        },
+        {
             "path": "/api/holidays/sync",
             "schedule": "0 8 1 * *"
         }

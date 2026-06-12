@@ -706,8 +706,12 @@ export class AccountService {
     }
 
     /** Cierre automático de todos los negocios con actividad del día y sin cierre. Para el cron. */
-    async autoCloseAll() {
-        const start = this.dayStart(new Date());
+    async autoCloseAll(targetDate?: Date) {
+        // Si no se pasa fecha, usar "ahora menos 2 horas" en Bogotá.
+        // Esto garantiza que si el cron de las 23:59 se ejecuta hasta
+        // 2 horas tarde (01:59 del día siguiente), siga cerrando el día correcto.
+        const ref = targetDate ?? new Date(Date.now() - 2 * 3600 * 1000);
+        const start = this.dayStart(ref);
         const end = new Date(start.getTime() + 24 * 3600 * 1000);
         const businesses = await prisma.business.findMany({ select: { id: true, name: true, createdById: true } });
         let closed = 0;
@@ -722,6 +726,39 @@ export class AccountService {
             } catch (e: any) { console.error(`[autoClose] Error cerrando negocio ${b.id} (${b.name}):`, e?.message ?? e); }
         }
         return { closed, total: businesses.length };
+    }
+
+    /** Apertura automática: si existe un cierre para HOY (día nuevo) creado por error
+     *  del cron de cierre (desfase), lo reabre automáticamente. */
+    async autoOpenAll() {
+        // "Ahora + 2 horas" para el caso inverso: si se ejecuta a las 23:58
+        // del día anterior por adelanto del cron, sumar 2h lo lleva al día nuevo.
+        const ref = new Date(Date.now() + 2 * 3600 * 1000);
+        const start = this.dayStart(ref);
+        const end = new Date(start.getTime() + 24 * 3600 * 1000);
+
+        const wrongCloses = await prisma.cashClose.findMany({
+            where: { closeDate: { gte: start, lt: end }, status: 'closed', closeMode: 'auto' },
+            select: { id: true, businessId: true },
+        });
+
+        let reopened = 0;
+        for (const c of wrongCloses) {
+            try {
+                await prisma.cashClose.update({
+                    where: { id: c.id },
+                    data: {
+                        status: 'reopened',
+                        reopenedAt: new Date(),
+                        reopenReason: 'Apertura automática — cierre creado por desfase del cron',
+                    },
+                });
+                reopened++;
+            } catch (e: any) {
+                console.error(`[autoOpen] Error reabriendo cierre ${c.id}:`, e?.message ?? e);
+            }
+        }
+        return { reopened, checked: wrongCloses.length };
     }
 }
 

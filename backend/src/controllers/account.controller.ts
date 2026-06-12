@@ -139,3 +139,15 @@ export const autoCloseRun = async (req: Request, res: Response) => {
         return res.json(result);
     } catch (e: any) { return res.status(500).json({ error: e.message }); }
 };
+
+export const autoOpenRun = async (req: Request, res: Response) => {
+    try {
+        const secret = process.env.CRON_SECRET;
+        const headerSecret = req.header('x-cron-secret');
+        const bearer = req.header('authorization');
+        const ok = !!secret && (headerSecret === secret || bearer === `Bearer ${secret}`);
+        if (!ok) return res.status(401).json({ error: 'No autorizado' });
+        const result = await accountService.autoOpenAll();
+        return res.json(result);
+    } catch (e: any) { return res.status(500).json({ error: e.message }); }
+};

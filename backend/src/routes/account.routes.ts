@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { body, param, query } from 'express-validator';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireMinRole } from '../middleware/roleHierarchy.middleware';
-import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount, setDefaultAccount, getTodayClose, listCloses, createClose, reopenClose, autoCloseRun, getCloseReport } from '../controllers/account.controller';
+import { listAccounts, getAccountBalances, createAccount, updateAccount, deleteAccount, setDefaultAccount, getTodayClose, listCloses, createClose, reopenClose, autoCloseRun, autoOpenRun, getCloseReport } from '../controllers/account.controller';
 
 const router = Router();
 
@@ -11,6 +11,10 @@ const accountTypes = ['cash', 'bank', 'wallet'];
 // Cron de cierre automático — SIN authenticate (se protege con secreto). Vercel Cron usa GET.
 router.get('/closes/auto-run', autoCloseRun);
 router.post('/closes/auto-run', autoCloseRun);
+
+// Cron de apertura automática — SIN authenticate
+router.get('/closes/auto-open', autoOpenRun);
+router.post('/closes/auto-open', autoOpenRun);
 
 router.use(authenticate);
 
