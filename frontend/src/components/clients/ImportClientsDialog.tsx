@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, CheckSquare, Square, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { getBusinesses } from '../../api/business.api';
@@ -87,7 +88,7 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
     // Show results after import
     const importResult = importMutation.data?.data;
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
                 {/* Header */}
@@ -274,6 +275,7 @@ export const ImportClientsDialog: React.FC<ImportClientsDialogProps> = ({
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

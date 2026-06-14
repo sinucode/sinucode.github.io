@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation } from '@tanstack/react-query';
 import { createUser, updateUser, type CreateUserData, type User } from '../../api/users.api';
 import { useQuery } from '@tanstack/react-query';
@@ -133,7 +134,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
 
     const isPending = createUserMutation.isPending || updateUserMutation.isPending;
 
-    return (
+    return createPortal(
         /* Overlay */
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
 
@@ -259,6 +260,7 @@ export default function UserForm({ onClose, onSuccess, currentUserRole, initialD
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

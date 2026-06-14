@@ -59,13 +59,13 @@ Rutas extra sin service propio: `setup.routes.ts` (bootstrap inicial).
 
 #### `credit.service.ts` — Métodos clave
 - **`createCredit(data, userId, role, ipAddress)`**: Crea crédito + plan de pagos. Acepta:
-  - `CreateCreditInput.financings?: { creditId, scheduleId?, amount }[]` — pago cruzado: redirige pagos reales de otros créditos del mismo negocio para financiar parte/todo del desembolso.
-  - Valida cada financing: fuente en mismo negocio, no pagada/cancelada, monto ≤ saldo pendiente.
+  - `CreateCreditInput.financings?: { creditId, scheduleId?, amount, excessAction? }[]` — pago cruzado: redirige pagos reales de otros créditos del mismo negocio para financiar parte/todo del desembolso. `excessAction` ('next_cuota' | 'donate') indica cómo manejar el excedente si el monto supera la cuota/saldo.
+  - Valida cada financing: fuente en mismo negocio, no pagada/cancelada. Sin `excessAction`, monto ≤ saldo pendiente; con `excessAction`, permite sobrepago que se procesa en `applyPaymentTx`.
   - Calcula `cashNeeded = amount - financedSum`; si > 0, valida saldo de caja y aplica desembolso; si = 0, financiamiento 100%.
   - Abre `$transaction` y ejecuta:
     1. `assertDayOpen(targetBusinessId, startDate)` (si hay financings).
     2. Revalidación TOCTOU de financings dentro de la tx (mitigación de race conditions).
-    3. `applyPaymentTx(tx, {...})` por cada financing: registra Payment real + CashMovement `payment_received` sobre el crédito fuente.
+    3. `applyPaymentTx(tx, {...})` por cada financing: registra Payment real + CashMovement `payment_received` sobre el crédito fuente, respetando `excessAction`.
     4. Crea `Credit` + `PaymentSchedule[]`.
     5. Crea `CashMovement` `loan_disbursement` para la parte financiada y para `cashNeeded`.
     6. Auditoría con array `financings` si aplica.
@@ -74,7 +74,7 @@ Rutas extra sin service propio: `setup.routes.ts` (bootstrap inicial).
 - **`applyPaymentTx(tx, params)`** (privado): Cuerpo transaccional reutilizable de aplicación de pago. Debe invocarse **dentro de una `$transaction`** existente.
   - Parámetros: `{ creditId, amount, payDate, paymentMethod?, notes?, scheduleId?, accountId?, excessAction?, userId, role, ipAddress? }`
   - Localiza cuota (si viene `scheduleId`) o distribuye automáticamente entre cuotas pendientes.
-  - Maneja sobrepago: `excessAction: 'next_cuota'` (cascada) o `'donate'` (ganancia inmediata).
+  - Maneja sobrepago: `excessAction: 'next_cuota'` (cascada el excedente a cuotas siguientes) o `'donate'` (ganancia inmediata sin reducir saldo del crédito).
   - Crea `Payment` + `CashMovement` (`payment_received` y/o `interest_earned`).
   - Actualiza `remainingBalance`, estado del crédito (`active`/`paid`/`overdue`), cuotas.
   - Registra `AuditLog`.
@@ -82,6 +82,7 @@ Rutas extra sin service propio: `setup.routes.ts` (bootstrap inicial).
 
 - **`registerPayment(params)` → `Promise<Payment>`**: Registra un pago (ruta pública).
   - Valida fecha no futura, abre día, invoca `applyPaymentTx` dentro de su propia `$transaction`.
+  - Soporta `excessAction` en el payload para pago directo (POST `/api/payments`).
 
 - **`listCredits(userId, role, filters: ListFilters)`**: Lista créditos filtrados.
   - `ListFilters` incluye `clientId?: string` (nuevo); filtra por cliente específico si se envía.
@@ -92,6 +93,7 @@ Rutas extra sin service propio: `setup.routes.ts` (bootstrap inicial).
 #### `credit.validators.ts`
 - **`createCreditValidators`**: Incluye cadenas para:
   - `financings` (array): `financings.*.creditId` (UUID), `financings.*.scheduleId` (UUID opcional), `financings.*.amount` (float > 0).
+  - **`financings.*.excessAction`** (nuevo): opcional, validado como 'next_cuota' | 'donate'. Si presente, requiere que `scheduleId` esté especificado (error si no).
 - **`listCreditValidators`**: Incluye `query('clientId')` (UUID opcional).
 
 ### Utilidades backend (`utils/`)
@@ -129,7 +131,8 @@ Un módulo por dominio backend: `accounts`, `audit`, `auth` (`auth.ts`), `billin
 #### `credits.api.ts`
 - **`SimulateCreditPayload`**: incluye `excludedWeekdays?`, `excludeHolidays?`, `customRounding?`
 - **`CreateCreditPayload`** (extiende `SimulateCreditPayload`):
-  - Nuevo campo: `financings?: { creditId: string; scheduleId?: string; amount: number }[]`
+  - Nuevo campo: `financings?: { creditId: string; scheduleId?: string; amount: number; excessAction?: 'next_cuota' | 'donate' }[]`
+  - `excessAction` es opcional en cada financing; indica cómo manejar el sobrepago (abonar a siguiente cuota vs. donar al negocio).
   - Incluye `splits?` para multi-cuenta.
 - **`getCredits(params?)`**: Acepta `{ businessId?, status?, dueToday?, overdue?, clientId? }` — nuevo parámetro `clientId` para filtrar por cliente.
 
@@ -159,16 +162,29 @@ Por dominio: `auth`, `business`, `cash`, `clients`, `common` (incl. `Sidebar`),
 - Checkbox "Financiar el desembolso con pagos de otros clientes" activa la sección de financiamiento cruzado.
 - Re-simula al cambiar opciones; incluye en payloads `simulateCredit` y `createCredit`.
 - Calcula `cashNeeded = monto_crédito - sum(financings.amount)` para validar reparto multi-cuenta.
+- Usa `ExcessChoiceModal` para solicitar acción cuando el monto en un financing supera la cuota/saldo.
+
+#### `ExcessChoiceModal.tsx` (`credits/`)
+- Componente reutilizable que muestra un modal cuando un pago/abono supera el monto pendiente de una cuota.
+- Props: `{ open: boolean, cuotasConExceso: CuotaConExceso[], tieneCuotaSiguiente: boolean, isSubmitting?: boolean, onChoose: (action: 'next_cuota' | 'donate') => void, onCancel: () => void }`.
+- Muestra detalle de cada cuota: número, monto pagado, monto pendiente, excedente.
+- Ofrece dos opciones: "Abonar a la siguiente cuota" (si hay cuota pendiente) o "Donar al negocio" (ganancia).
+- Usado por `PaymentModal.tsx` (pagos directos) y `CreditForm.tsx` (financiamiento cruzado).
 
 #### `FinancingRowWidget` (subcomponente, en `CreditForm.tsx`)
 - Props: `{ row: FinancingRow, clientList, excludeClientId, businessId, onChange, onRemove }`.
-- `FinancingRow`: `{ id, clientId, clientName, creditId, scheduleId, amount }`.
+- `FinancingRow`: `{ id, clientId, clientName, creditId, scheduleId, amount, excessAction? }`.
 - Encadena queries:
   1. `getCredits({ businessId, clientId: row.clientId })` → lista créditos activos/en mora del cliente.
   2. `getCreditDetail(row.creditId)` → carga plan de pagos.
   3. Filtra cuotas con saldo pendiente; calcula `pendingAmount` de la cuota seleccionada.
 - UI: selects en cascada (cliente → crédito → cuota) + campo de monto con botones de acceso rápido (+10k, +50k, +100k) y "Todo pendiente".
 - Botón X para remover la fila.
+
+#### `PaymentModal.tsx` (`payments/`)
+- Modal para registrar pagos directos sobre un crédito.
+- Usa `ExcessChoiceModal` cuando el monto pagado supera la cuota seleccionada.
+- Props incluyen `onSuccess`, que invalida money queries tras registrar el pago.
 
 ---
 
@@ -185,12 +201,15 @@ Cambios de schema vía `npx prisma db push` (NO migrate) — lo corre el usuario
 1. Usuario elige cliente A para nuevo crédito (monto $X).
 2. Activa checkbox "Financiar desembolso con pagos de otros clientes".
 3. Añade filas: cliente B → crédito B → cuota N → monto $Y (donde Y ≤ X).
-4. **Backend** (`createCredit`):
+4. Opcionalmente especifica `excessAction` si el monto Y supera el saldo de cuota N.
+5. **Backend** (`createCredit`):
    - Valida: cliente B activo, crédito B (active/overdue), cuota N existe y tiene saldo pendiente.
    - Calcula `cashNeeded = X - Y`.
    - Abre transacción y registra un `Payment` real sobre el crédito B (cuota N), aplicado a través de `applyPaymentTx`.
-     - Genera `CashMovement` `payment_received` (+$Y en caja de B).
+     - Si hay `excessAction`, procesa sobrepago: 'next_cuota' (cascada) o 'donate' (ganancia).
+     - Genera `CashMovement` `payment_received` (+$Y o +$saldo en caja de B).
    - Crea crédito A con saldo $X.
    - Crea `CashMovement` `loan_disbursement` para $Y (financiado) y $cashNeeded (desde caja real).
-   - Saldo neto: caja se reduce solo en `cashNeeded`.
-5. **Auditoría**: `AuditLog.newValues.financings` contiene array de `{ creditId, clientName, scheduleId?, amount }`.
+   - Saldo neto: caja se reduce solo en `cashNeeded` (el abono al crédito fuente ya compensó).
+6. **Auditoría**: `AuditLog.newValues.financings` contiene array de `{ creditId, clientName, scheduleId?, amount, excessAction? }`.
+

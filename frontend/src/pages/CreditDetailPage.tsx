@@ -622,7 +622,7 @@ export default function CreditDetailPage() {
                 />
             )}
 
-            {quickPaySchedule && (
+            {quickPaySchedule && createPortal(
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <QuickPayDialog
                         schedule={quickPaySchedule}
@@ -633,7 +633,8 @@ export default function CreditDetailPage() {
                             refetch();
                         }}
                     />
-                </div>
+                </div>,
+                document.body
             )}
 
             {isRevertModalOpen && selectedRevertInstallment && (
@@ -973,7 +974,7 @@ function RevertInstallmentModal({
         mutation.mutate(amt);
     };
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
             <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
                 <div className="flex justify-between items-center mb-4">
@@ -1019,7 +1020,8 @@ function RevertInstallmentModal({
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 

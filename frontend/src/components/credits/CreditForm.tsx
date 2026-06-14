@@ -586,25 +586,28 @@ const CreditForm: React.FC<CreditFormProps> = ({ onClose, onCreated, selectedBus
             </div>,
             document.body
         )}
-        {/* Modal de excedente: qué hacer cuando un financing supera el pendiente de la cuota fuente */}
-        <ExcessChoiceModal
-            open={excessChoiceState.open}
-            cuotasConExceso={excessChoiceState.cuotasConExceso}
-            tieneCuotaSiguiente={excessChoiceState.tieneCuotaSiguiente}
-            isSubmitting={createMutation.isPending}
-            onChoose={(action) => {
-                setExcessChoiceState(prev => ({ ...prev, open: false }));
-                if (buildPayloadRef.current) {
-                    const payload = buildPayloadRef.current(action);
+        {/* Modal de excedente: portado a body para evitar problemas de z-index en iOS Safari */}
+        {excessChoiceState.open && createPortal(
+            <ExcessChoiceModal
+                open={true}
+                cuotasConExceso={excessChoiceState.cuotasConExceso}
+                tieneCuotaSiguiente={excessChoiceState.tieneCuotaSiguiente}
+                isSubmitting={createMutation.isPending}
+                onChoose={(action) => {
+                    setExcessChoiceState(prev => ({ ...prev, open: false }));
+                    if (buildPayloadRef.current) {
+                        const payload = buildPayloadRef.current(action);
+                        buildPayloadRef.current = null;
+                        if (payload) doSubmit(payload);
+                    }
+                }}
+                onCancel={() => {
+                    setExcessChoiceState(prev => ({ ...prev, open: false }));
                     buildPayloadRef.current = null;
-                    if (payload) doSubmit(payload);
-                }
-            }}
-            onCancel={() => {
-                setExcessChoiceState(prev => ({ ...prev, open: false }));
-                buildPayloadRef.current = null;
-            }}
-        />
+                }}
+            />,
+            document.body
+        )}
         {rechargeInfo && (
             <RechargeAccountModal
                 businessId={effectiveBusinessId}

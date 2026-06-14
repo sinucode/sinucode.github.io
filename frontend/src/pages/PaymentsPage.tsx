@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useErrorModal } from '../context/ErrorModalContext';
 import {
@@ -448,7 +449,7 @@ export default function PaymentsPage() {
             </div>
 
             {/* Modal de reversión */}
-            {revertModal && (
+            {revertModal && createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
                     <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5">
                         <h3 className="text-lg font-bold text-red-700 mb-2">Revertir pago</h3>
@@ -491,7 +492,8 @@ export default function PaymentsPage() {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

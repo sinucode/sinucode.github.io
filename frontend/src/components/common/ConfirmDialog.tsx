@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
 
 interface ConfirmDialogProps {
@@ -23,8 +24,8 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] overflow-y-auto">
             {/* Backdrop */}
             <div
                 className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
@@ -68,6 +69,7 @@ export default function ConfirmDialog({
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

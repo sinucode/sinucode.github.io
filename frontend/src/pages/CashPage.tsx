@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCashFlow, injectCapital, withdrawFunds, forecastCash, transferFunds } from '../api/cash.api';
 import { listAccounts, getAccountBalances } from '../api/accounts.api';
@@ -478,7 +479,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
 
     const FM = (v: number) => `$${Math.ceil(Math.abs(v)).toLocaleString('es-CO')}`;
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50">
@@ -607,6 +608,7 @@ function TransferModal({ businessId, onClose, onSuccess }: { businessId: string;
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

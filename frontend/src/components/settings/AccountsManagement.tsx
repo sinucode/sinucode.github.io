@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Wallet, Building2, Smartphone, Plus, Pencil, Trash2, X, Banknote, CreditCard } from 'lucide-react';
 import { getBusinesses } from '../../api/business.api';
@@ -197,7 +198,7 @@ function DeleteAccountModal({ account, accounts, pending, error, onCancel, onCon
     const [mode, setMode] = useState<'transfer' | 'withdraw'>('transfer');
     const [target, setTarget] = useState(others[0]?.id || '');
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5">
                 <div className="flex justify-between items-center mb-3">
@@ -244,6 +245,7 @@ function DeleteAccountModal({ account, accounts, pending, error, onCancel, onCon
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
