@@ -11,7 +11,8 @@ import { PaymentSchedule, PaymentFrequency } from '../types';
 import { ArrowLeft, CheckCircle2, AlertTriangle, Circle, X, Undo2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
-import { formatDate, formatDateTime, toLocalDateString } from '../utils/dates';
+import { formatDate, formatDateTime, toLocalDateString, isOverdueBogota } from '../utils/dates';
+import { getOverdueInfo } from '../utils/overdue';
 import { useErrorModal } from '../context/ErrorModalContext';
 
 const statusColors: Record<PaymentSchedule['status'], string> = {
@@ -140,6 +141,7 @@ export default function CreditDetailPage() {
     const expectedInterest = Number(credit.totalWithInterest || 0) - Number(credit.amount || 0);
     const actualProfit = totalPaid - Number(credit.amount || 0);
     const nextDue = credit.paymentSchedule.find((p: any) => p.status !== 'paid');
+    const overdue = getOverdueInfo(credit.paymentSchedule);
 
     const renderStatusIcon = (status: PaymentSchedule['status']) => {
         if (status === 'paid') return <CheckCircle2 size={16} />;
@@ -356,11 +358,24 @@ export default function CreditDetailPage() {
                 </div>
             </div>
 
-            <div className={`grid gap-4 ${credit.status === 'paid' ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-5' : 'grid-cols-2 md:grid-cols-4'}`}>
+            <div className={`grid gap-4 ${(() => {
+                const extraCards = (credit.status === 'paid' ? 1 : 0) + (overdue.isOverdue ? 1 : 0);
+                if (extraCards >= 2) return 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6';
+                if (extraCards === 1) return 'grid-cols-2 md:grid-cols-3 xl:grid-cols-5';
+                return 'grid-cols-2 md:grid-cols-4';
+            })()}`}>
                 <SummaryCard title="Total Prestado" value={formatMoney(credit.amount)} />
                 <SummaryCard title="Intereses a pagar" value={formatMoney(expectedInterest)} />
                 <SummaryCard title="Total Pagado" value={formatMoney(totalPaid)} />
                 <SummaryCard title="Saldo Pendiente" value={formatMoney(credit.remainingBalance)} />
+
+                {overdue.isOverdue && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 shadow-sm flex flex-col justify-center">
+                        <p className="text-sm font-medium text-red-700">Vencido</p>
+                        <p className="text-2xl font-bold text-red-600">{formatMoney(overdue.montoVencido)}</p>
+                        <p className="text-xs text-rose-500 mt-0.5">{overdue.cuotasVencidas} cuota(s) atrasada(s)</p>
+                    </div>
+                )}
 
                 {credit.status === 'paid' && (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 shadow-sm flex flex-col justify-center">
@@ -376,7 +391,12 @@ export default function CreditDetailPage() {
                     <span><strong>Interés:</strong> {credit.interestRate}%</span>
                     <span><strong>Frecuencia:</strong> {frequencyLabels[credit.paymentFrequency as PaymentFrequency] || credit.paymentFrequency}</span>
                     <span><strong>Próximo vencimiento:</strong> {nextDue ? formatDate(nextDue.dueDate) : '-'}</span>
-                    <span><strong>Estado:</strong> {credit.status}</span>
+                    <span><strong>Estado:</strong> {
+                        credit.status === 'cancelled' ? 'Cancelado'
+                            : credit.status === 'paid' ? 'Completado'
+                                : overdue.isOverdue || credit.status === 'overdue' ? 'En mora'
+                                    : 'Activo'
+                    }</span>
                     {(credit.status === 'paid' && credit.completionDate) && (
                         <span><strong>Finalización:</strong> {formatDate(credit.completionDate)}</span>
                     )}
@@ -397,7 +417,19 @@ export default function CreditDetailPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {credit.paymentSchedule.map((p: any, idx: number) => (
+                                {credit.paymentSchedule.map((p: any, idx: number) => {
+                                    const isRowOverdue = p.status !== 'paid'
+                                        && Number(p.scheduledAmount) > Number(p.paidAmount)
+                                        && isOverdueBogota(p.dueDate);
+                                    const rowStatus: PaymentSchedule['status'] = p.status === 'paid' ? 'paid'
+                                        : isRowOverdue ? 'overdue'
+                                        : Number(p.paidAmount) > 0 ? 'partial'
+                                        : 'pending';
+                                    const rowStatusLabel = rowStatus === 'paid' ? 'Pagada'
+                                        : rowStatus === 'overdue' ? 'Vencida'
+                                        : rowStatus === 'partial' ? 'Parcial'
+                                        : 'Pendiente';
+                                    return (
                                     <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-white'}>
                                         <td className="px-3 py-2 text-gray-900">{p.installmentNumber}</td>
                                         <td className="px-3 py-2 text-gray-900 capitalize hidden sm:table-cell">{getDayOfWeek(p.dueDate)}</td>
@@ -408,13 +440,11 @@ export default function CreditDetailPage() {
                                             <button
                                                 onClick={() => p.status !== 'paid' && setQuickPaySchedule(p)}
                                                 disabled={p.status === 'paid'}
-                                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${p.status === 'paid'
-                                                    ? statusColors.paid
-                                                    : 'text-gray-600 bg-slate-50'
+                                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusColors[rowStatus]
                                                     } ${p.status !== 'paid' ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}
                                             >
-                                                {renderStatusIcon(p.status === 'paid' ? 'paid' : 'pending')}
-                                                {p.status === 'paid' ? 'paid' : 'pending'}
+                                                {renderStatusIcon(rowStatus)}
+                                                {rowStatusLabel}
                                             </button>
                                             {user?.role === 'super_admin' && Number(p.paidAmount) > 0 && (
                                                 <button
@@ -430,7 +460,8 @@ export default function CreditDetailPage() {
                                             )}
                                         </td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                                 {credit.paymentSchedule.length === 0 && (
                                     <tr>
                                         <td className="px-3 py-3 text-primary-600" colSpan={6}>Sin cuotas registradas</td>

@@ -8,7 +8,8 @@ import { useAuthStore } from '../store/authStore';
 import { getBusinesses } from '../api/business.api';
 import { useBusinessStore } from '../store/businessStore';
 import { Credit } from '../types';
-import { formatDate, isOverdueBogota } from '../utils/dates';
+import { formatDate } from '../utils/dates';
+import { getOverdueInfo } from '../utils/overdue';
 import { PaymentFrequency } from '../types';
 
 const frequencyLabels: Record<PaymentFrequency, string> = {
@@ -84,6 +85,9 @@ export default function CreditsPage() {
             const nextB = b.paymentSchedule?.find((p: any) => p.status !== 'paid');
             aValue = nextA ? new Date((nextA as any).dueDate).getTime() : 0;
             bValue = nextB ? new Date((nextB as any).dueDate).getTime() : 0;
+        } else if (sortConfig.key === 'montoVencido') {
+            aValue = getOverdueInfo(a.paymentSchedule).montoVencido;
+            bValue = getOverdueInfo(b.paymentSchedule).montoVencido;
         }
 
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -187,6 +191,9 @@ export default function CreditsPage() {
                                 <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('remainingBalance')}>
                                     Saldo <SortIcon columnKey="remainingBalance" />
                                 </th>
+                                <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('montoVencido')}>
+                                    En mora <SortIcon columnKey="montoVencido" />
+                                </th>
                                 <th className="px-4 py-3 cursor-pointer hover:text-primary-700 select-none" onClick={() => requestSort('status')}>
                                     Estado <SortIcon columnKey="status" />
                                 </th>
@@ -204,14 +211,14 @@ export default function CreditsPage() {
                         <tbody className="divide-y">
                             {isLoading && (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-6 text-center text-primary-600">
+                                    <td colSpan={9} className="px-4 py-6 text-center text-primary-600">
                                         Cargando...
                                     </td>
                                 </tr>
                             )}
                             {!isLoading && credits?.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-6 text-center text-primary-600">
+                                    <td colSpan={9} className="px-4 py-6 text-center text-primary-600">
                                         No hay créditos registrados
                                     </td>
                                 </tr>
@@ -221,7 +228,8 @@ export default function CreditsPage() {
                                     ? credit.paymentSchedule.find((p: any) => p.status !== 'paid')
                                     : null;
 
-                                const isOverdue = credit.status === 'overdue' || (credit.paymentSchedule && credit.paymentSchedule.some((p: any) => p.status === 'pending' && isOverdueBogota(p.dueDate)));
+                                const { montoVencido, cuotasVencidas, isOverdue: overdueByAmount } = getOverdueInfo(credit.paymentSchedule);
+                                const isOverdue = credit.status === 'overdue' || overdueByAmount;
 
                                 let displayStatus = 'Activo';
                                 let statusColor = 'bg-emerald-100 text-emerald-800';
@@ -259,6 +267,16 @@ export default function CreditsPage() {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-primary-900">${Number(credit.remainingBalance).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</td>
+                                        <td className="px-4 py-3">
+                                            {montoVencido > 0 ? (
+                                                <>
+                                                    <div className="text-red-600 font-semibold">${Math.ceil(montoVencido).toLocaleString('es-CO')}</div>
+                                                    <div className="text-xs text-gray-500">{cuotasVencidas} cuota(s)</div>
+                                                </>
+                                            ) : (
+                                                <span className="text-gray-400">-</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
                                                 {displayStatus}

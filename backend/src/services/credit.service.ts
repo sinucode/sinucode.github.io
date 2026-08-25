@@ -695,7 +695,7 @@ export class CreditService {
                     OR: [
                         { status: 'overdue' },
                         { paymentSchedule: { some: { status: 'overdue' } } },
-                        { paymentSchedule: { some: { dueDate: { lt: startOfBogotaToday }, status: 'pending' } } }
+                        { paymentSchedule: { some: { dueDate: { lt: startOfBogotaToday }, status: { in: ['pending', 'partial', 'overdue'] } } } }
                     ]
                 }
             ];
