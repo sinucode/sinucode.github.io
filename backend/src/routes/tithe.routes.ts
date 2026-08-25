@@ -18,6 +18,7 @@ const payValidators = [
     body('businessId').isUUID().withMessage('businessId inválido'),
     body('creditIds').isArray({ min: 1 }).withMessage('Debe seleccionar al menos un crédito'),
     body('creditIds.*').isUUID().withMessage('creditId inválido'),
+    body('accountId').optional({ nullable: true, checkFalsy: true }).isUUID().withMessage('La cuenta seleccionada es inválida'),
 ];
 
 // GET /api/tithe/summary?businessId=X

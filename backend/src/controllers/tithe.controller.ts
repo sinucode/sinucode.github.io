@@ -3,10 +3,10 @@ import { validationResult } from 'express-validator';
 import { UserRole } from '@prisma/client';
 import { titheService } from '../services/tithe.service';
 
-const statusFor = (message: string) =>
+const statusFor = (message: string, code?: string) =>
     message.includes('Super Admin') || message.includes('permiso') ? 403
         : message.includes('no encontrado') ? 404
-            : message.includes('Fondos insuficientes') ? 409
+            : message.includes('Fondos insuficientes') || code === 'INSUFFICIENT_ACCOUNT_BALANCE' ? 409
                 : 400;
 
 export const getTitheSummary = async (req: Request, res: Response) => {
@@ -35,6 +35,7 @@ export const payTithe = async (req: Request, res: Response) => {
         const result = await titheService.payTithe({
             businessId: req.body.businessId,
             creditIds: req.body.creditIds,
+            accountId: req.body.accountId,
             userId,
             role,
             ipAddress,
@@ -42,6 +43,10 @@ export const payTithe = async (req: Request, res: Response) => {
         return res.status(201).json(result);
     } catch (error: any) {
         const message = error.message || 'Error al pagar el diezmo';
-        return res.status(statusFor(message)).json({ error: message });
+        return res.status(statusFor(message, error.code)).json({
+            error: message,
+            ...(error.code && { code: error.code }),
+            ...(error.details && { details: error.details }),
+        });
     }
 };

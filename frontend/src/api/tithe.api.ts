@@ -39,7 +39,7 @@ export const getTitheSummary = async (businessId: string): Promise<TitheSummary>
     return res.data;
 };
 
-export const payTithe = async (businessId: string, creditIds: string[]): Promise<PayTitheResult> => {
-    const res = await api.post('/tithe/pay', { businessId, creditIds });
+export const payTithe = async (businessId: string, creditIds: string[], accountId?: string): Promise<PayTitheResult> => {
+    const res = await api.post('/tithe/pay', { businessId, creditIds, accountId: accountId || undefined });
     return res.data;
 };

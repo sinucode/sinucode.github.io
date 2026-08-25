@@ -57,7 +57,7 @@ export class CashService {
     }
 
     /** Resuelve la cuenta a usar: la dada (si es válida y del negocio) o la cuenta por defecto. */
-    private async resolveAccountId(businessId: string, accountId?: string): Promise<string | null> {
+    async resolveAccountId(businessId: string, accountId?: string): Promise<string | null> {
         if (accountId) {
             const acc = await prisma.paymentAccount.findFirst({ where: { id: accountId, businessId, active: true }, select: { id: true } });
             if (acc) return acc.id;

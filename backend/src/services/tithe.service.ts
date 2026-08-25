@@ -1,5 +1,7 @@
 import { Prisma, UserRole } from '@prisma/client';
 import prisma from '../config/database';
+import { cashService } from './cash.service';
+import { accountService } from './account.service';
 
 const TITHE_RATE = 0.10; // 10% del diezmo
 
@@ -90,13 +92,18 @@ export class TitheService {
      * Aprueba y paga el diezmo de los créditos seleccionados: descuenta de la
      * caja, marca los créditos como diezmo pagado y registra el lote.
      */
-    async payTithe(params: { businessId: string; creditIds: string[]; userId: string; role: UserRole; ipAddress?: string }) {
-        const { businessId, creditIds, userId, role, ipAddress } = params;
+    async payTithe(params: { businessId: string; creditIds: string[]; accountId?: string; userId: string; role: UserRole; ipAddress?: string }) {
+        const { businessId, creditIds, accountId, userId, role, ipAddress } = params;
         this.ensureSuperAdmin(role);
 
         if (!Array.isArray(creditIds) || creditIds.length === 0) {
             throw new Error('Debe seleccionar al menos un crédito');
         }
+
+        // Resolver la cuenta de origen (la enviada, si es válida, si no la cuenta por defecto)
+        const effectiveAccountId = await cashService.resolveAccountId(businessId, accountId);
+        const { accounts: accList } = await accountService.getBalances(businessId, userId, role);
+        const account = accList.find(a => a.id === effectiveAccountId);
 
         return prisma.$transaction(async (tx) => {
             const business = await tx.business.findUnique({
@@ -148,7 +155,25 @@ export class TitheService {
                 );
             }
 
+            if (account && account.balance < titheAmount - 0.01) {
+                const err: any = new Error(
+                    `Saldo insuficiente en la cuenta "${account.name}". ` +
+                    `Disponible: $${Math.ceil(account.balance).toLocaleString('es-CO')}, ` +
+                    `diezmo a pagar: $${Math.ceil(titheAmount).toLocaleString('es-CO')}`
+                );
+                err.code    = 'INSUFFICIENT_ACCOUNT_BALANCE';
+                err.details = {
+                    accountId:   effectiveAccountId,
+                    accountName: account.name,
+                    available:   account.balance,
+                    required:    titheAmount,
+                    scope:       'account',
+                };
+                throw err;
+            }
+
             const newBalance = new Prisma.Decimal(currentBalance).minus(titheAmount);
+            const accountLabel = account ? ` | Cuenta: ${account.name}` : '';
 
             // Registrar el lote de diezmo
             const tithePayment = await tx.tithePayment.create({
@@ -169,8 +194,9 @@ export class TitheService {
                         type: 'tithe',
                         amount: new Prisma.Decimal(titheAmount),
                         balanceAfter: newBalance,
-                        description: `Diezmo de rentabilidad - ${validIds.length} crédito(s) | Base: $${totalProfit.toLocaleString('es-CO')}`,
-                        paymentMethod: 'efectivo',
+                        description: `Diezmo de rentabilidad - ${validIds.length} crédito(s) | Base: $${totalProfit.toLocaleString('es-CO')}${accountLabel}`,
+                        paymentMethod: account?.name || 'efectivo',
+                        accountId: effectiveAccountId,
                         createdById: userId,
                     },
                 }),
@@ -187,10 +213,10 @@ export class TitheService {
                         userId,
                         businessId,
                         action: 'PAY_TITHE',
-                        description: `Pagó diezmo de $${titheAmount.toLocaleString('es-CO')} sobre rentabilidad de $${totalProfit.toLocaleString('es-CO')} (${validIds.length} créditos)`,
+                        description: `Pagó diezmo de $${titheAmount.toLocaleString('es-CO')} sobre rentabilidad de $${totalProfit.toLocaleString('es-CO')} (${validIds.length} créditos)${accountLabel}`,
                         entityType: 'TithePayment',
                         entityId: tithePayment.id,
-                        newValues: { titheAmount, totalProfit, creditIds: validIds },
+                        newValues: { titheAmount, totalProfit, creditIds: validIds, accountId: effectiveAccountId, accountName: account?.name },
                         ipAddress,
                     },
                 }),
